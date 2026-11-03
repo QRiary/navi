@@ -67,8 +67,8 @@ Matrix positions that are used but have no key on the drawing go to a separate l
 ## Getting started
 
 ```
-git clone <this repository>
-cd <folder>
+git clone https://github.com/greeendevalde/navi.git
+cd navi
 npm install
 npm run app
 ```
