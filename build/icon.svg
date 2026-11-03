@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    NAVI icon. Source of build/icon.png and build/icon.ico (npm run icon).
+    Motif — “Serial Experiments Lain”: power lines and a utility pole (like the “wires” background in the app),
+    the letter N with CRT scan lines (like the letter C of CARRIER) and a shadow of red dots.
+    For small sizes (16–32) the script adds the class small: fine details (.detail) are hidden,
+    the letter and the shadow get solid fills — otherwise the shortcut would be a blur.
+  -->
+  <style>
+    .small .detail { display: none; }
+    .small .face { fill: #ededed; }
+    .small .shadow { fill: #c8002a; }
+  </style>
+  <defs>
+    <clipPath id="frame">
+      <rect x="8" y="8" width="496" height="496" rx="88" />
+    </clipPath>
+    <radialGradient id="bg" cx="50%" cy="38%" r="75%">
+      <stop offset="0" stop-color="#151515" />
+      <stop offset="1" stop-color="#030303" />
+    </radialGradient>
+    <!-- Scan lines on the letter -->
+    <pattern id="scan" width="8" height="6" patternUnits="userSpaceOnUse">
+      <rect width="8" height="6" fill="#ededed" />
+      <rect y="4" width="8" height="2" fill="#b9b9b9" />
+    </pattern>
+    <!-- Scan lines over the whole screen -->
+    <pattern id="crt" width="8" height="4" patternUnits="userSpaceOnUse">
+      <rect y="3" width="8" height="1" fill="#000" opacity="0.45" />
+    </pattern>
+    <!-- Shadow of red dots -->
+    <pattern id="dots" width="14" height="14" patternUnits="userSpaceOnUse">
+      <rect width="14" height="14" fill="#170306" />
+      <circle cx="4" cy="4" r="3.4" fill="#d1002a" />
+      <circle cx="11" cy="10" r="2.4" fill="#9c0020" />
+    </pattern>
+    <!-- Letter N: two stems and a diagonal -->
+    <path id="letter" d="M112 112 H188 L308 302 V112 H384 V400 H308 L188 210 V400 H112 Z" />
+  </defs>
+
+  <g id="art" clip-path="url(#frame)">
+    <rect x="8" y="8" width="496" height="496" fill="url(#bg)" />
+
+    <!-- Wires and pole -->
+    <g class="detail" fill="none" stroke="#3c3c3c" stroke-linecap="round">
+      <path d="M8 58 Q200 126 430 64 T504 70" stroke-width="3" />
+      <path d="M8 88 Q200 162 424 96 T504 104" stroke-width="3" />
+      <path d="M8 118 Q210 198 420 128 T504 138" stroke-width="3" />
+    </g>
+    <g class="detail" fill="#2f2f2f">
+      <rect x="448" y="8" width="14" height="496" />
+      <rect x="418" y="56" width="80" height="9" />
+      <rect x="424" y="90" width="68" height="8" />
+      <rect x="422" y="50" width="7" height="9" />
+      <rect x="486" y="50" width="7" height="9" />
+    </g>
+
+    <!-- Letter shadow -->
+    <use class="shadow" href="#letter" transform="translate(20 20)" fill="url(#dots)" />
+    <!-- Letter -->
+    <use class="face" href="#letter" fill="url(#scan)" />
+    <use class="detail" href="#letter" fill="none" stroke="#ffffff" stroke-width="2" stroke-opacity="0.35" />
+
+    <!-- CRT scan lines over everything -->
+    <rect class="detail" x="8" y="8" width="496" height="496" fill="url(#crt)" />
+  </g>
+  <rect x="9" y="9" width="494" height="494" rx="87" fill="none" stroke="#2a2a2a" stroke-width="2" />
+</svg>

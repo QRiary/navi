@@ -1,0 +1,28 @@
+# Dependencies and build output
+node_modules/
+dist/
+release/
+coverage/
+
+# Secrets — NEVER commit
+.env
+.env.*
+
+# Service files
+*.log
+__pycache__/
+.DS_Store
+Thumbs.db
+.vscode/*
+.idea/
+
+# Personal (not for the shared repository)
+CLAUDE.local.md
+.claude/
+# The owner's old lighting remote (lives next to the project, not part of it)
+dilemma_light.py
+
+# Firmware files
+*.uf2
+*.hex
+*.bin

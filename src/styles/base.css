@@ -1,0 +1,223 @@
+/* Base styles: reset, typography, buttons. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--app-background);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:not([class]) {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-decoration-color: var(--text-label);
+  text-underline-offset: 3px;
+}
+
+a:not([class]):hover {
+  text-decoration-color: var(--text-primary);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+code,
+kbd,
+output {
+  font-family: var(--font-mono);
+}
+
+code {
+  font-size: 0.92em;
+  color: var(--text-primary);
+}
+
+kbd {
+  font-size: var(--fs-2xs);
+  padding: 1px 5px;
+  border: var(--border);
+  color: var(--text-label);
+}
+
+::selection {
+  background: var(--text-primary);
+  color: var(--app-background);
+}
+
+:focus-visible {
+  outline: 1px solid var(--text-primary);
+  outline-offset: 2px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+/* Uppercase label with letter spacing — the main “system” element of the style */
+.cell-label,
+.kicker {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  letter-spacing: var(--label-spacing);
+  text-transform: uppercase;
+  color: var(--text-label);
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────── */
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border: var(--panel-border-width) solid transparent;
+  border-radius: var(--panel-radius);
+  color: var(--text-secondary);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.icon-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--border-color);
+  background: var(--hover-background);
+}
+
+.icon-btn.is-on {
+  color: var(--text-primary);
+  border-color: var(--border-color);
+  background: var(--accent-soft);
+}
+
+.icon-btn.is-danger {
+  color: var(--danger-color);
+  border-color: var(--danger-color);
+}
+
+.icon-btn--lg {
+  width: 40px;
+  height: 40px;
+}
+
+/* Regular button: a framed rectangle */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border: var(--border);
+  border-radius: var(--panel-radius);
+  background: var(--cell-background);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  white-space: nowrap;
+  transition: all var(--dur) var(--ease);
+}
+
+.btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--text-label);
+}
+
+.btn--primary {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--accent-color);
+  color: var(--accent-contrast);
+}
+
+.btn kbd {
+  border-color: currentColor;
+  color: inherit;
+  opacity: 0.6;
+}
+
+.btn--ghost {
+  background: transparent;
+}
+
+.btn--danger,
+.btn--danger:hover:not(:disabled) {
+  border-color: var(--danger-color);
+  color: var(--danger-color);
+}
+
+.text-btn {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+  color: var(--text-label);
+}
+
+.text-btn:hover {
+  color: var(--text-primary);
+}

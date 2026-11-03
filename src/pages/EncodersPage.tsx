@@ -1,0 +1,260 @@
+/**
+ * ENCODERS SECTION: what each encoder does on each layer (clockwise / counter-clockwise),
+ * quick presets, copying to other layers, the encoder press (if it is in the matrix).
+ * Whether actions work “right away” depends on the encoder map in the firmware (ENCODER_MAP_ENABLE + VIA).
+ */
+import { useMemo, useState } from 'react';
+import { Copy } from 'lucide-react';
+import { tryParseQmk } from '../core/keycodes/codec';
+import { keyLabel } from '../core/keycodes/labels';
+import { featureStatus } from '../core/features/registry';
+import { copyEncoderToLayers, setEncoder, resizeEncoders } from '../core/project/ops';
+import { hardwareFacts } from '../lib/hardwareFacts';
+import { useActive, useLabelContext } from '../lib/projectContext';
+import { href, navigate } from '../lib/router';
+import { useEditorStore } from '../store/editorStore';
+import { useProjectStore, useSpec } from '../store/projectStore';
+import { StatusChip } from '../components/inspector/KeyInspector';
+import { getLanguage, t } from '../i18n';
+
+const PRESETS: { name: () => string; ccw: string; cw: string }[] = [
+  { name: () => t('volume', 'громкость'), ccw: 'KC_VOLD', cw: 'KC_VOLU' },
+  { name: () => t('mouse wheel', 'колесо мыши'), ccw: 'MS_WHLD', cw: 'MS_WHLU' },
+  { name: () => t('horizontal wheel', 'колесо вбок'), ccw: 'MS_WHLL', cw: 'MS_WHLR' },
+  { name: () => t('tracks', 'треки'), ccw: 'KC_MPRV', cw: 'KC_MNXT' },
+  { name: () => t('screen brightness', 'яркость экрана'), ccw: 'KC_BRID', cw: 'KC_BRIU' },
+  { name: () => t('arrows ←→', 'стрелки ←→'), ccw: 'KC_LEFT', cw: 'KC_RGHT' },
+  { name: () => t('arrows ↑↓', 'стрелки ↑↓'), ccw: 'KC_UP', cw: 'KC_DOWN' },
+  { name: () => t('undo / redo', 'отмена / повтор'), ccw: 'C(KC_Z)', cw: 'C(KC_Y)' },
+  { name: () => t('tabs', 'вкладки'), ccw: 'C(S(KC_TAB))', cw: 'C(KC_TAB)' },
+  { name: () => t('zoom', 'масштаб'), ccw: 'C(KC_MINS)', cw: 'C(KC_EQL)' },
+  { name: () => t('RGB effect', 'эффект RGB'), ccw: 'RM_PREV', cw: 'RM_NEXT' },
+  { name: () => t('RGB brightness', 'яркость RGB'), ccw: 'RM_VALD', cw: 'RM_VALU' },
+];
+
+function CodeCell({ value, onSet }: { value: number; onSet: (v: number) => void }) {
+  const spec = useSpec();
+  const labelCtx = useLabelContext();
+  const [editing, setEditing] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  if (!labelCtx) return null;
+  const l = keyLabel(spec, value, labelCtx);
+  if (editing !== null) {
+    return (
+      <form
+        className={`expr-input ${error ? 'is-error' : ''}`}
+        onSubmit={(e) => {
+          e.preventDefault();
+          const r = tryParseQmk(spec, editing);
+          if ('error' in r) return setError(r.error);
+          onSet(r.value);
+          setEditing(null);
+          setError(null);
+        }}
+      >
+        <input autoFocus value={editing} onChange={(e) => setEditing(e.target.value)} onBlur={() => setEditing(null)} onKeyDown={(e) => e.key === 'Escape' && setEditing(null)} spellCheck={false} />
+        <span className="expr-result">{error ?? 'enter'}</span>
+      </form>
+    );
+  }
+  return (
+    <button className="kc-tile" style={{ minHeight: 34, cursor: 'text' }} onClick={() => setEditing(l.qmk)} title={l.description ?? l.qmk}>
+      <span className="kc-tile-label">{l.kind === 'transparent' ? '▽' : l.main || '∅'}</span>
+      <span className="kc-tile-name">{l.qmk}</span>
+    </button>
+  );
+}
+
+export function EncodersPage() {
+  const active = useActive();
+  const spec = useSpec();
+  const labelCtx = useLabelContext();
+  const apply = useProjectStore((s) => s.apply);
+  const setEncoderTarget = useEditorStore((s) => s.setEncoderTarget);
+  const setLayer = useEditorStore((s) => s.setLayer);
+  const [presetEnc, setPresetEnc] = useState(0);
+  const [presetLayer, setPresetLayer] = useState(0);
+
+  const count = useMemo(() => {
+    if (!active) return 0;
+    const fromHw = active.project.hardware.encoders.count ?? 0;
+    const fromGeo = Math.max(-1, ...active.geometry.encoders.map((e) => e.index)) + 1;
+    const fromKm = Math.max(0, ...active.keymap.layers.map((l) => l.encoders.length));
+    return Math.max(fromHw, fromGeo, fromKm);
+  }, [active]);
+
+  if (!active || !labelCtx) return null;
+  const { project, keymap, geometry } = active;
+  const lang = getLanguage();
+  const hw = hardwareFacts(project);
+  const mapStatus = featureStatus('encoder_map', project.firmware.flags, hw);
+  const encStatus = featureStatus('encoder', project.firmware.flags, hw);
+  const cols = project.hardware.matrix.cols;
+
+  if (count === 0) {
+    return (
+      <div className="empty-state">
+        <p>{t('No encoders in this project. Set the number of encoders in “Hardware” and place them on the layout.', 'В проекте нет энкодеров. Укажите их число в разделе «Железо» и поставьте на схему.')}</p>
+        <a className="btn" href={href({ section: 'hardware', tab: 'profile' })}>
+          {t('hardware profile', 'профиль железа')}
+        </a>
+      </div>
+    );
+  }
+
+  const set = (layer: number, enc: number, dir: 'cw' | 'ccw', v: number) => apply((p) => setEncoder(p, keymap.id, layer, enc, dir, v), `E${enc} ${dir}`);
+
+  return (
+    <div className="page">
+      <div className="notice">
+        <span>
+          <strong>{t('Encoder map', 'Карта энкодеров')}</strong> <StatusChip state={mapStatus.state} likely={mapStatus.likely} text={lang === 'ru' ? mapStatus.reason.ru : mapStatus.reason.en} /> ·{' '}
+          {t('Encoders', 'Энкодеры')} <StatusChip state={encStatus.state} likely={encStatus.likely} text={lang === 'ru' ? encStatus.reason.ru : encStatus.reason.en} />
+          <br />
+          {mapStatus.state === 'available'
+            ? t('Actions below can be written to the keyboard over VIA right away (bottom bar → “to keyboard”).', 'Действия ниже можно сразу записать в клавиатуру по VIA (внизу → «в клавиатуру»).')
+            : t('Without an encoder map in the firmware, these actions go only into your own firmware build (keymap.c → encoder_map).', 'Без карты энкодеров в прошивке эти действия попадут только в вашу сборку (keymap.c → encoder_map).')}
+        </span>
+      </div>
+      <div className="panel-box">
+        <div className="rows">
+          <div className="row" style={{ ['--row-cols' as string]: `120px repeat(${count}, minmax(0, 1fr))` }}>
+            <span className="kicker">{t('layer', 'слой')}</span>
+            {Array.from({ length: count }, (_, e) => {
+              const g = geometry.encoders.find((x) => x.index === e);
+              return (
+                <span key={e} className="kicker">
+                  E{e} {g ? `· ${g.half}` : ''} — ↺ {t('ccw', 'против')} / ↻ {t('cw', 'по час.')}
+                </span>
+              );
+            })}
+          </div>
+          {keymap.layers.map((l, li) => (
+            <div key={l.id} className="row" style={{ ['--row-cols' as string]: `120px repeat(${count}, minmax(0, 1fr))` }}>
+              <span>
+                <span className="num">L{li}</span> {l.name}
+              </span>
+              {Array.from({ length: count }, (_, e) => {
+                const a = l.encoders[e] ?? { ccw: li === 0 ? 0 : 1, cw: li === 0 ? 0 : 1 };
+                return (
+                  <div key={e} className="field-row" style={{ flexWrap: 'nowrap' }}>
+                    <CodeCell value={a.ccw} onSet={(v) => set(li, e, 'ccw', v)} />
+                    <CodeCell value={a.cw} onSet={(v) => set(li, e, 'cw', v)} />
+                    <button
+                      className="icon-btn"
+                      title={t('Copy to all other layers', 'Скопировать на все остальные слои')}
+                      aria-label={t('Copy to other layers', 'На другие слои')}
+                      onClick={() =>
+                        apply(
+                          (p) =>
+                            copyEncoderToLayers(
+                              p,
+                              keymap.id,
+                              li,
+                              e,
+                              keymap.layers.map((_, i) => i).filter((i) => i !== li),
+                            ),
+                          t('copy encoder', 'копия энкодера'),
+                        )
+                      }
+                    >
+                      <Copy size={14} strokeWidth={1.5} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <section className="section">
+        <div className="section-head">
+          <h2>{t('quick presets', 'быстрые наборы')}</h2>
+          <div className="field-row">
+            <select className="select" value={presetEnc} onChange={(e) => setPresetEnc(Number(e.target.value))} aria-label={t('Encoder', 'Энкодер')}>
+              {Array.from({ length: count }, (_, e) => (
+                <option key={e} value={e}>
+                  E{e}
+                </option>
+              ))}
+            </select>
+            <select className="select" value={presetLayer} onChange={(e) => setPresetLayer(Number(e.target.value))} aria-label={t('Layer', 'Слой')}>
+              {keymap.layers.map((l, i) => (
+                <option key={l.id} value={i}>
+                  L{i} · {l.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="chips">
+          {PRESETS.map((p) => (
+            <button
+              key={p.ccw + p.cw}
+              className="chip"
+              onClick={() => {
+                const ccw = tryParseQmk(spec, p.ccw);
+                const cw = tryParseQmk(spec, p.cw);
+                if ('value' in ccw && 'value' in cw) {
+                  apply((pr) => setEncoder(setEncoder(pr, keymap.id, presetLayer, presetEnc, 'ccw', ccw.value), keymap.id, presetLayer, presetEnc, 'cw', cw.value), `E${presetEnc}: ${p.name()}`);
+                }
+              }}
+            >
+              {p.name()} <span className="kicker">{p.ccw} / {p.cw}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="section-head">
+          <h2>{t('encoder press', 'нажатие энкодера')}</h2>
+        </div>
+        <div className="panel-box rows">
+          {Array.from({ length: count }, (_, e) => {
+            const g = geometry.encoders.find((x) => x.index === e);
+            const pos = g?.pressMatrix;
+            return (
+              <div key={e} className="row" style={{ ['--row-cols' as string]: '60px minmax(0,1fr) auto' }}>
+                <span className="num">E{e}</span>
+                <span className="field-hint">
+                  {pos
+                    ? `${t('matrix', 'матрица')} [${pos[0]},${pos[1]}] · L0: ${keyLabel(spec, keymap.layers[0].keys[pos[0] * cols + pos[1]], labelCtx).qmk}`
+                    : t('The press is not linked to a matrix position (unknown or no button). Link it in “Hardware → geometry”.', 'Нажатие не связано с позицией матрицы (неизвестно или кнопки нет). Свяжите в «Железо → геометрия».')}
+                </span>
+                {pos && (
+                  <button
+                    className="btn"
+                    onClick={() => {
+                      const key = geometry.keys.find((k) => k.matrix && k.matrix[0] === pos[0] && k.matrix[1] === pos[1]);
+                      setLayer(0);
+                      if (key) useEditorStore.getState().select([key.id], 'replace');
+                      navigate({ section: 'keyboard' });
+                    }}
+                  >
+                    {t('edit', 'изменить')}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+      <div className="field-row" style={{ marginTop: 'var(--gap)' }}>
+        <button
+          className="btn"
+          onClick={() => {
+            setEncoderTarget({ index: 0, dir: 'cw' });
+            navigate({ section: 'keyboard' });
+          }}
+        >
+          {t('assign on the layout (catalog)', 'назначать на схеме (каталог)')}
+        </button>
+        <button className="btn btn--ghost" onClick={() => apply((p) => ({ ...p, keymaps: p.keymaps.map((k) => (k.id === keymap.id ? resizeEncoders(k, count) : k)) }), t('encoder slots', 'слоты энкодеров'))}>
+          {t('fill missing slots', 'дополнить пустые места')}
+        </button>
+      </div>
+    </div>
+  );
+}

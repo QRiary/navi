@@ -1,0 +1,76 @@
+/*
+ * DESIGN TOKENS — CSS variables.
+ *
+ * Below are fallback values (the MONO palette). On start the app
+ * overwrites them from the config (Settings → Config); the "vars" section
+ * of the config can override any of them.
+ * Computed by src/theme/applyTheme.ts.
+ */
+:root {
+  /* Colors */
+  --app-background: #050505;
+  --panel-background: #0c0c0c;
+  --cell-background: #080808;
+  --hover-background: #151515;
+  --border-color: #262626;
+  --text-primary: #e8e8e8;
+  --text-secondary: #9a9a9a;
+  --text-label: #6a6a6a;
+  --accent-color: #e8e8e8;
+  --accent-contrast: #050505;
+  --accent-soft: rgba(232, 232, 232, 0.08);
+  --meter-from: #6ec6ff;
+  --meter-to: #7fe3a8;
+  --meter-gradient: linear-gradient(90deg, var(--meter-from), var(--meter-to));
+  --danger-color: #ff5d6c;
+  --glow-shadow: none;
+
+  /* Shape */
+  --panel-radius: 0px;
+  --cover-radius: 0px;
+  --panel-border-width: 1px;
+  --border: var(--panel-border-width) solid var(--border-color);
+
+  /* Density and sizes */
+  --space: 1;
+  --row-height: 52px;
+  --card-min-width: 172px;
+  --sidebar-width: 264px;
+  --right-panel-width: 320px;
+  --gap: calc(10px * var(--space));
+  --pad: calc(22px * var(--space));
+
+  /* Effects */
+  --panel-blur: 0px;
+  --cover-filter: grayscale(1) contrast(1.08);
+  --scanline-opacity: 0.135;
+  --noise-opacity: 0.03;
+  --vignette-strength: 0.6;
+
+  /* Typography */
+  --font-ui: 'JetBrains Mono Variable', 'Cascadia Mono', Consolas, monospace;
+  --font-mono: 'JetBrains Mono Variable', 'Cascadia Mono', Consolas, monospace;
+  --font-pixel: 'Silkscreen', 'JetBrains Mono Variable', monospace;
+  --font-scale: 1;
+  --fs-2xs: calc(10px * var(--font-scale));
+  --fs-xs: calc(11px * var(--font-scale));
+  --fs-sm: calc(12.5px * var(--font-scale));
+  --fs-md: calc(14px * var(--font-scale));
+  --fs-lg: calc(16px * var(--font-scale));
+  --fs-xl: calc(22px * var(--font-scale));
+  --label-spacing: 0.28em;
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --dur: 140ms;
+
+  color-scheme: dark;
+}
+
+:root[data-scheme='light'] {
+  color-scheme: light;
+}
+
+:root[data-motion='reduced'] {
+  --dur: 0ms;
+}

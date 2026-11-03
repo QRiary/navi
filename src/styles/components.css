@@ -1,0 +1,354 @@
+/* COMPONENTS (from the CARRIER player): logo, status line, badges, notifications, notes, slider. */
+
+/* ── ASCII logo ("brand": { "logo": "ascii" }) ─────────────────────── */
+
+.ascii-logo {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: pre;
+  color: var(--text-label);
+  user-select: none;
+  overflow: hidden;
+}
+
+.ascii-logo--sm {
+  font-size: calc(11px * var(--font-scale));
+}
+
+.ascii-logo--lg {
+  font-size: calc(clamp(6px, 2.3vw, 15px) * var(--font-scale));
+}
+
+/* Solid blocks are bright, shadow lines are dimmed: a “stepped” outline */
+.ascii-fill {
+  color: var(--text-primary);
+}
+
+/* Line-only fonts (Calvin S) — all in the main color */
+.ascii-logo--line .ascii-edge {
+  color: var(--text-primary);
+}
+
+.text-logo {
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+
+.text-logo--lg {
+  font-size: var(--fs-xl);
+}
+
+/* ── Status line ───────────────────────────────────────────────────── */
+
+.status-line {
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  scrollbar-width: none;
+  font-size: var(--fs-2xs);
+  white-space: nowrap;
+}
+
+.status-line::-webkit-scrollbar {
+  display: none;
+}
+
+.sl-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-left: var(--border);
+  line-height: 1.6;
+}
+
+.sl-item:first-child {
+  padding-left: 2px;
+  border-left: 0;
+}
+
+.sl-key {
+  letter-spacing: var(--label-spacing);
+  text-transform: uppercase;
+  color: var(--text-label);
+}
+
+.sl-val {
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.sl-state {
+  letter-spacing: var(--label-spacing);
+  text-transform: uppercase;
+  color: var(--text-label);
+}
+
+.sl-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--text-label);
+}
+
+.sl-state--playing {
+  color: var(--text-primary);
+}
+
+.sl-state--playing .sl-dot {
+  background: var(--meter-gradient);
+}
+
+:root[data-motion='full'] .sl-state--playing .sl-dot {
+  animation: blink 1.2s steps(1) infinite;
+}
+
+.sl-state--paused .sl-dot {
+  background: var(--text-secondary);
+}
+
+.sl-state--error {
+  color: var(--danger-color);
+}
+
+.sl-state--error .sl-dot {
+  background: var(--danger-color);
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* ── Pixel logo ("brand": { "logo": "pixel" }) ─────────────────────── */
+
+.logo {
+  display: inline-grid;
+  font-family: var(--font-pixel);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.logo--sm {
+  font-size: calc(26px * var(--font-scale));
+}
+
+.logo--md {
+  font-size: calc(40px * var(--font-scale));
+}
+
+.logo--lg {
+  font-size: calc(clamp(40px, 7vw, 76px) * var(--font-scale));
+}
+
+.logo-shadow,
+.logo-face {
+  grid-area: 1 / 1;
+}
+
+/* Outline shifted down-right — the “step” */
+.logo-shadow {
+  color: transparent;
+  -webkit-text-stroke: max(1px, 0.025em) var(--text-secondary);
+  transform: translate(0.07em, 0.07em);
+}
+
+/* Face: light, with thin vertical raster lines */
+.logo-face {
+  color: transparent;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--text-primary) 0 0.085em,
+    color-mix(in srgb, var(--text-primary) 72%, var(--app-background)) 0.085em 0.11em
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-stroke: max(1px, 0.02em) var(--app-background);
+  paint-order: stroke fill;
+}
+
+/* ── Badges ────────────────────────────────────────────────────────── */
+
+/* Badge: “needs firmware”, “approx”, “unsaved” */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 5px;
+  flex: none;
+  border: var(--panel-border-width) solid var(--text-label);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.badge--ok {
+  border-color: var(--meter-to);
+  color: var(--meter-to);
+}
+
+.badge--info {
+  border-color: var(--meter-from);
+  color: var(--meter-from);
+}
+
+.badge--warn {
+  border-color: var(--danger-color);
+  color: var(--danger-color);
+}
+
+.badge--dim {
+  border-style: dashed;
+  color: var(--text-label);
+}
+
+.system-label {
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.1em;
+  color: var(--text-label);
+  text-transform: lowercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.system-label::before {
+  content: '// ';
+}
+
+/* ── Notifications ─────────────────────────────────────────────────── */
+
+.toasts {
+  position: fixed;
+  left: 50%;
+  bottom: 130px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast {
+  padding: 8px 14px;
+  border: var(--panel-border-width) solid var(--text-label);
+  background: var(--panel-background);
+  font-size: var(--fs-xs);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+}
+
+.toast-prompt {
+  color: var(--text-label);
+}
+
+.toast--error {
+  border-color: var(--danger-color);
+  color: var(--danger-color);
+}
+
+@media (max-width: 900px) {
+  .toasts {
+    bottom: 150px;
+  }
+}
+
+/* ── Note ──────────────────────────────────────────────────────────── */
+
+.notice {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 0 0 var(--gap);
+  padding: 10px 14px;
+  border: var(--panel-border-width) dashed var(--border-color);
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.notice svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--text-label);
+}
+
+.notice strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* ── Slider (like in the player): gradient scale, thin thumb ──────── */
+
+.slider {
+  --track: 6px;
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 1;
+  min-width: 0;
+  height: 16px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.slider::-webkit-slider-runnable-track {
+  height: var(--track);
+  background:
+    var(--meter-gradient) 0 0 / var(--fill) 100% no-repeat,
+    var(--hover-background);
+}
+
+.slider::-moz-range-track {
+  height: var(--track);
+  background:
+    var(--meter-gradient) 0 0 / var(--fill) 100% no-repeat,
+    var(--hover-background);
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 4px;
+  height: 14px;
+  margin-top: calc((var(--track) - 14px) / 2);
+  border-radius: 0;
+  background: var(--text-primary);
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.slider::-moz-range-thumb {
+  width: 4px;
+  height: 14px;
+  border: 0;
+  border-radius: 0;
+  background: var(--text-primary);
+  opacity: 0;
+}
+
+.slider:hover::-webkit-slider-thumb,
+.slider:focus-visible::-webkit-slider-thumb {
+  opacity: 1;
+}
+
+.slider:hover::-moz-range-thumb,
+.slider:focus-visible::-moz-range-thumb {
+  opacity: 1;
+}

@@ -1,0 +1,90 @@
+/**
+ * Firmware → features. Two different things:
+ *  • “what is in the firmware now” — facts about the firmware on the keyboard (from the keyboard,
+ *    from the sources or set by you). The “works / needs firmware” marks depend on it.
+ *  • “what to turn on in your build” — rules.mk flags for your own firmware.
+ * Features your keymap needs (tap dance, combos, keycodes…) are marked.
+ */
+import { useMemo } from 'react';
+import { FEATURES, featureStatus, type FeatureId, type FlagState } from '../../core/features/registry';
+import { requiredFeatures } from '../../core/features/required';
+import { activeKeymap } from '../../core/project/ops';
+import { hardwareFacts } from '../../lib/hardwareFacts';
+import { useProjectStore, useSpec } from '../../store/projectStore';
+import { StatusChip } from '../inspector/KeyInspector';
+import { getLanguage, t } from '../../i18n';
+
+export function FeaturesTab() {
+  const project = useProjectStore((s) => s.project);
+  const apply = useProjectStore((s) => s.apply);
+  const spec = useSpec();
+  const lang = getLanguage();
+  const need = useMemo(() => (project ? requiredFeatures(project, activeKeymap(project), spec) : new Map<FeatureId, string>()), [project, spec]);
+  if (!project) return null;
+  const hw = hardwareFacts(project);
+
+  const setFlag = (f: FeatureId, state: FlagState | '') =>
+    apply((p) => {
+      const flags = { ...p.firmware.flags };
+      if (state === '') delete flags[f];
+      else flags[f] = { state, evidence: 'declared' };
+      return { ...p, firmware: { ...p.firmware, flags } };
+    }, t('firmware fact', 'факт о прошивке'));
+  const setBuild = (f: FeatureId, on: boolean | null) =>
+    apply((p) => {
+      const buildFeatures = { ...p.firmware.buildFeatures };
+      if (on === null) delete buildFeatures[f];
+      else buildFeatures[f] = on;
+      return { ...p, firmware: { ...p.firmware, buildFeatures } };
+    }, t('build feature', 'функция сборки'));
+
+  return (
+    <div className="page">
+      <p className="page-lead">
+        {t(
+          '“Now” = the firmware that is on the keyboard (badge shows where it is known from). “Your build” = what goes into rules.mk of your keymap. Features your keymap needs are enabled in the build automatically.',
+          '«Сейчас» — прошивка, которая стоит на клавиатуре (значок — откуда это известно). «Ваша сборка» — что попадёт в rules.mk вашего keymap. Функции, которые нужны раскладке, в сборке включаются сами.',
+        )}
+      </p>
+      <div className="panel-box rows">
+        <div className="row kicker" style={{ ['--row-cols' as string]: 'minmax(0,1.4fr) 130px 150px 90px minmax(0,1fr)' }}>
+          <span>{t('feature', 'функция')}</span>
+          <span>{t('now', 'сейчас')}</span>
+          <span>{t('known from', 'откуда известно')}</span>
+          <span>{t('your build', 'ваша сборка')}</span>
+          <span>{t('needed by', 'нужно для')}</span>
+        </div>
+        {FEATURES.map((f) => {
+          const flag = project.firmware.flags[f.id];
+          const st = featureStatus(f.id, project.firmware.flags, hw);
+          const build = project.firmware.buildFeatures[f.id];
+          const needed = need.get(f.id);
+          return (
+            <div key={f.id} className="row" style={{ ['--row-cols' as string]: 'minmax(0,1.4fr) 130px 150px 90px minmax(0,1fr)' }} title={lang === 'ru' ? f.description.ru : f.description.en}>
+              <span>
+                {lang === 'ru' ? f.title.ru : f.title.en} {f.rules && <span className="kicker">{f.rules}</span>}
+              </span>
+              <select className="select" value={flag?.state ?? ''} onChange={(e) => setFlag(f.id, e.target.value as FlagState | '')} aria-label={t('Now', 'Сейчас')}>
+                <option value="">{f.defaultOn ? t('default (on)', 'по умолч. (вкл)') : t('unknown', 'неизвестно')}</option>
+                <option value="on">{t('on', 'есть')}</option>
+                <option value="off">{t('off', 'нет')}</option>
+                <option value="unknown">{t('unknown', 'неизвестно')}</option>
+              </select>
+              <span>
+                <StatusChip state={st.state} likely={st.likely} text={lang === 'ru' ? st.reason.ru : st.reason.en} /> {flag && <span className="kicker">{flag.evidence}</span>}
+              </span>
+              {f.rules ? (
+                <button className={`toggle ${build || needed ? 'is-on' : ''}`} disabled={!!needed} onClick={() => setBuild(f.id, build ? null : true)} title={needed ? t('Required by your project', 'Нужно вашему проекту') : undefined}>
+                  {build || needed ? 'on' : 'off'}
+                </button>
+              ) : (
+                <span className="kicker">—</span>
+              )}
+              <span className="field-hint">{needed ?? ''}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

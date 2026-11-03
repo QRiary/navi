@@ -1,0 +1,360 @@
+{
+ "source": {
+  "repo": "qmk/qmk_firmware",
+  "commit": "180f394b489c238cb231c2bf8b080262155e03c0",
+  "commitDate": "2026-10-16T12:35:38+01:00",
+  "path": "quantum/rgb_matrix/animations"
+ },
+ "effects": [
+  {
+   "id": "SOLID_COLOR",
+   "enable": null,
+   "file": "solid_color_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "ALPHAS_MODS",
+   "enable": "ENABLE_RGB_MATRIX_ALPHAS_MODS",
+   "file": "alpha_mods_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "GRADIENT_UP_DOWN",
+   "enable": "ENABLE_RGB_MATRIX_GRADIENT_UP_DOWN",
+   "file": "gradient_up_down_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "GRADIENT_LEFT_RIGHT",
+   "enable": "ENABLE_RGB_MATRIX_GRADIENT_LEFT_RIGHT",
+   "file": "gradient_left_right_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "BREATHING",
+   "enable": "ENABLE_RGB_MATRIX_BREATHING",
+   "file": "breathing_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "BAND_SAT",
+   "enable": "ENABLE_RGB_MATRIX_BAND_SAT",
+   "file": "colorband_sat_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "BAND_VAL",
+   "enable": "ENABLE_RGB_MATRIX_BAND_VAL",
+   "file": "colorband_val_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "BAND_PINWHEEL_SAT",
+   "enable": "ENABLE_RGB_MATRIX_BAND_PINWHEEL_SAT",
+   "file": "colorband_pinwheel_sat_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "BAND_PINWHEEL_VAL",
+   "enable": "ENABLE_RGB_MATRIX_BAND_PINWHEEL_VAL",
+   "file": "colorband_pinwheel_val_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "BAND_SPIRAL_SAT",
+   "enable": "ENABLE_RGB_MATRIX_BAND_SPIRAL_SAT",
+   "file": "colorband_spiral_sat_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "BAND_SPIRAL_VAL",
+   "enable": "ENABLE_RGB_MATRIX_BAND_SPIRAL_VAL",
+   "file": "colorband_spiral_val_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "CYCLE_ALL",
+   "enable": "ENABLE_RGB_MATRIX_CYCLE_ALL",
+   "file": "cycle_all_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "CYCLE_LEFT_RIGHT",
+   "enable": "ENABLE_RGB_MATRIX_CYCLE_LEFT_RIGHT",
+   "file": "cycle_left_right_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "CYCLE_UP_DOWN",
+   "enable": "ENABLE_RGB_MATRIX_CYCLE_UP_DOWN",
+   "file": "cycle_up_down_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "RAINBOW_MOVING_CHEVRON",
+   "enable": "ENABLE_RGB_MATRIX_RAINBOW_MOVING_CHEVRON",
+   "file": "rainbow_moving_chevron_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "CYCLE_OUT_IN",
+   "enable": "ENABLE_RGB_MATRIX_CYCLE_OUT_IN",
+   "file": "cycle_out_in_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "CYCLE_OUT_IN_DUAL",
+   "enable": "ENABLE_RGB_MATRIX_CYCLE_OUT_IN_DUAL",
+   "file": "cycle_out_in_dual_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "CYCLE_PINWHEEL",
+   "enable": "ENABLE_RGB_MATRIX_CYCLE_PINWHEEL",
+   "file": "cycle_pinwheel_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "CYCLE_SPIRAL",
+   "enable": "ENABLE_RGB_MATRIX_CYCLE_SPIRAL",
+   "file": "cycle_spiral_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "DUAL_BEACON",
+   "enable": "ENABLE_RGB_MATRIX_DUAL_BEACON",
+   "file": "dual_beacon_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "RAINBOW_BEACON",
+   "enable": "ENABLE_RGB_MATRIX_RAINBOW_BEACON",
+   "file": "rainbow_beacon_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "RAINBOW_PINWHEELS",
+   "enable": "ENABLE_RGB_MATRIX_RAINBOW_PINWHEELS",
+   "file": "rainbow_pinwheels_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "FLOWER_BLOOMING",
+   "enable": "ENABLE_RGB_MATRIX_FLOWER_BLOOMING",
+   "file": "flower_blooming_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "RAINDROPS",
+   "enable": "ENABLE_RGB_MATRIX_RAINDROPS",
+   "file": "raindrops_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "JELLYBEAN_RAINDROPS",
+   "enable": "ENABLE_RGB_MATRIX_JELLYBEAN_RAINDROPS",
+   "file": "jellybean_raindrops_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "HUE_BREATHING",
+   "enable": "ENABLE_RGB_MATRIX_HUE_BREATHING",
+   "file": "hue_breathing_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "HUE_PENDULUM",
+   "enable": "ENABLE_RGB_MATRIX_HUE_PENDULUM",
+   "file": "hue_pendulum_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "HUE_WAVE",
+   "enable": "ENABLE_RGB_MATRIX_HUE_WAVE",
+   "file": "hue_wave_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "PIXEL_RAIN",
+   "enable": "ENABLE_RGB_MATRIX_PIXEL_RAIN",
+   "file": "pixel_rain_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "PIXEL_FLOW",
+   "enable": "ENABLE_RGB_MATRIX_PIXEL_FLOW",
+   "file": "pixel_flow_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "PIXEL_FRACTAL",
+   "enable": "ENABLE_RGB_MATRIX_PIXEL_FRACTAL",
+   "file": "pixel_fractal_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "TYPING_HEATMAP",
+   "enable": "ENABLE_RGB_MATRIX_TYPING_HEATMAP",
+   "file": "typing_heatmap_anim.h",
+   "framebuffer": true,
+   "reactive": false
+  },
+  {
+   "id": "DIGITAL_RAIN",
+   "enable": "ENABLE_RGB_MATRIX_DIGITAL_RAIN",
+   "file": "digital_rain_anim.h",
+   "framebuffer": true,
+   "reactive": false
+  },
+  {
+   "id": "SOLID_REACTIVE_SIMPLE",
+   "enable": "ENABLE_RGB_MATRIX_SOLID_REACTIVE_SIMPLE",
+   "file": "solid_reactive_simple_anim.h",
+   "framebuffer": false,
+   "reactive": true
+  },
+  {
+   "id": "SOLID_REACTIVE",
+   "enable": "ENABLE_RGB_MATRIX_SOLID_REACTIVE",
+   "file": "solid_reactive_anim.h",
+   "framebuffer": false,
+   "reactive": true
+  },
+  {
+   "id": "SOLID_REACTIVE_WIDE",
+   "enable": "ENABLE_RGB_MATRIX_SOLID_REACTIVE_WIDE",
+   "file": "solid_reactive_wide.h",
+   "framebuffer": false,
+   "reactive": true
+  },
+  {
+   "id": "SOLID_REACTIVE_MULTIWIDE",
+   "enable": "ENABLE_RGB_MATRIX_SOLID_REACTIVE_MULTIWIDE",
+   "file": "solid_reactive_wide.h",
+   "framebuffer": false,
+   "reactive": true
+  },
+  {
+   "id": "SOLID_REACTIVE_CROSS",
+   "enable": "ENABLE_RGB_MATRIX_SOLID_REACTIVE_CROSS",
+   "file": "solid_reactive_cross.h",
+   "framebuffer": false,
+   "reactive": true
+  },
+  {
+   "id": "SOLID_REACTIVE_MULTICROSS",
+   "enable": "ENABLE_RGB_MATRIX_SOLID_REACTIVE_MULTICROSS",
+   "file": "solid_reactive_cross.h",
+   "framebuffer": false,
+   "reactive": true
+  },
+  {
+   "id": "SOLID_REACTIVE_NEXUS",
+   "enable": "ENABLE_RGB_MATRIX_SOLID_REACTIVE_NEXUS",
+   "file": "solid_reactive_nexus.h",
+   "framebuffer": false,
+   "reactive": true
+  },
+  {
+   "id": "SOLID_REACTIVE_MULTINEXUS",
+   "enable": "ENABLE_RGB_MATRIX_SOLID_REACTIVE_MULTINEXUS",
+   "file": "solid_reactive_nexus.h",
+   "framebuffer": false,
+   "reactive": true
+  },
+  {
+   "id": "SPLASH",
+   "enable": "ENABLE_RGB_MATRIX_SPLASH",
+   "file": "splash_anim.h",
+   "framebuffer": false,
+   "reactive": true
+  },
+  {
+   "id": "MULTISPLASH",
+   "enable": "ENABLE_RGB_MATRIX_MULTISPLASH",
+   "file": "splash_anim.h",
+   "framebuffer": false,
+   "reactive": true
+  },
+  {
+   "id": "SOLID_SPLASH",
+   "enable": "ENABLE_RGB_MATRIX_SOLID_SPLASH",
+   "file": "solid_splash_anim.h",
+   "framebuffer": false,
+   "reactive": true
+  },
+  {
+   "id": "SOLID_MULTISPLASH",
+   "enable": "ENABLE_RGB_MATRIX_SOLID_MULTISPLASH",
+   "file": "solid_splash_anim.h",
+   "framebuffer": false,
+   "reactive": true
+  },
+  {
+   "id": "STARLIGHT_SMOOTH",
+   "enable": "ENABLE_RGB_MATRIX_STARLIGHT_SMOOTH",
+   "file": "starlight_smooth_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "STARLIGHT",
+   "enable": "ENABLE_RGB_MATRIX_STARLIGHT",
+   "file": "starlight_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "STARLIGHT_DUAL_SAT",
+   "enable": "ENABLE_RGB_MATRIX_STARLIGHT_DUAL_SAT",
+   "file": "starlight_dual_sat_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "STARLIGHT_DUAL_HUE",
+   "enable": "ENABLE_RGB_MATRIX_STARLIGHT_DUAL_HUE",
+   "file": "starlight_dual_hue_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  },
+  {
+   "id": "RIVERFLOW",
+   "enable": "ENABLE_RGB_MATRIX_RIVERFLOW",
+   "file": "riverflow_anim.h",
+   "framebuffer": false,
+   "reactive": false
+  }
+ ]
+}

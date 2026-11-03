@@ -1,0 +1,54 @@
+{
+ "source": {
+  "repo": "qmk/qmk_firmware",
+  "commit": "180f394b489c238cb231c2bf8b080262155e03c0",
+  "commitDate": "2026-10-16T12:35:38+01:00",
+  "path": "quantum/rgblight/rgblight_modes.h"
+ },
+ "modes": [
+  {
+   "id": "STATIC_LIGHT",
+   "kind": "single_static"
+  },
+  {
+   "id": "BREATHING",
+   "kind": "multi_dynamic"
+  },
+  {
+   "id": "RAINBOW_MOOD",
+   "kind": "multi_dynamic"
+  },
+  {
+   "id": "RAINBOW_SWIRL",
+   "kind": "multi_dynamic"
+  },
+  {
+   "id": "SNAKE",
+   "kind": "multi_dynamic"
+  },
+  {
+   "id": "KNIGHT",
+   "kind": "multi_dynamic"
+  },
+  {
+   "id": "CHRISTMAS",
+   "kind": "single_dynamic"
+  },
+  {
+   "id": "STATIC_GRADIENT",
+   "kind": "multi_static"
+  },
+  {
+   "id": "RGB_TEST",
+   "kind": "single_dynamic"
+  },
+  {
+   "id": "ALTERNATING",
+   "kind": "single_dynamic"
+  },
+  {
+   "id": "TWINKLE",
+   "kind": "multi_dynamic"
+  }
+ ]
+}

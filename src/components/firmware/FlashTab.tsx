@@ -1,0 +1,296 @@
+/**
+ * Firmware → flash: the firmware archive (built and imported, an older one can be restored),
+ * finding the keyboard in bootloader mode, writing:
+ *  • UF2 (RP2040 etc.) — copying to the bootloader drive, with a chip family check;
+ *  • the rest — the official `qmk flash <file>`.
+ * Before the first flash — a backup of the current firmware from the RP2040 bootloader drive (CURRENT.UF2):
+ * it is the only way to restore the seller's firmware later.
+ * “Done” is shown only when the keyboard appears over USB again (the project's VID:PID).
+ */
+import { useEffect, useRef, useState } from 'react';
+import { Archive, Download, HardDrive, RefreshCw, Trash2, Upload, Zap } from 'lucide-react';
+import { navi, type FirmwareInfo, type Uf2Drive } from '../../desktop/bridge';
+import { useDeviceStore } from '../../store/deviceStore';
+import { useProjectStore } from '../../store/projectStore';
+import { useQmkStore } from '../../store/qmkStore';
+import { useSettingsStore } from '../../store/settingsStore';
+import { toast } from '../../store/toastStore';
+import { BootloaderHelp } from '../device/BootloaderHelp';
+import { BuildLog } from './BuildLog';
+import { locale, t } from '../../i18n';
+
+const ICON = { size: 14, strokeWidth: 1.5 };
+
+type FlashStep = { phase: 'idle' } | { phase: 'flashing'; detail: string } | { phase: 'waiting'; since: number } | { phase: 'done'; ok: boolean; text: string };
+
+function mb(bytes: number) {
+  return `${(bytes / 1024 / 1024).toFixed(bytes >= 1024 * 1024 ? 0 : 2)} MB`;
+}
+
+function familyName(f: number | null | undefined) {
+  if (f === undefined || f === null) return '—';
+  const known: Record<number, string> = { 0xe48bff56: 'RP2040', 0xe48bff57: 'RP2350 abs', 0xe48bff59: 'RP2350 ARM-S', 0xe48bff5a: 'RP2350 RISC-V', 0xe48bff5b: 'RP2350 ARM-NS', 0xada52840: 'nRF52840', 0x57755a57: 'STM32F4' };
+  return known[f >>> 0] ?? `0x${(f >>> 0).toString(16)}`;
+}
+
+export function FlashTab() {
+  const project = useProjectStore((s) => s.project);
+  const firmware = useQmkStore((s) => s.firmware);
+  const refreshFirmware = useQmkStore((s) => s.refreshFirmware);
+  const scan = useQmkStore((s) => s.scan);
+  const scanDevices = useQmkStore((s) => s.scanDevices);
+  const job = useQmkStore((s) => s.job);
+  const qmkSettings = useSettingsStore((s) => s.settings.qmk);
+  const refreshDevices = useDeviceStore((s) => s.refresh);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [polling, setPolling] = useState(false);
+  const [step, setStep] = useState<FlashStep>({ phase: 'idle' });
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [confirmUnverified, setConfirmUnverified] = useState(false);
+  const [backingUp, setBackingUp] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    void refreshFirmware();
+    void scanDevices();
+  }, [refreshFirmware, scanDevices]);
+  useEffect(() => {
+    if (!selected && firmware[0]) setSelected(firmware[0].id);
+  }, [firmware, selected]);
+  useEffect(() => navi?.flash.onProgress((p) => setProgress(p)), []);
+  // While waiting for the bootloader — look every 2 seconds.
+  useEffect(() => {
+    if (!polling) return;
+    pollRef.current = setInterval(() => void scanDevices(), 2000);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [polling, scanDevices]);
+
+  if (!navi) return <p className="field-hint">{t('Flashing needs the desktop app.', 'Для прошивки нужно настольное приложение.')}</p>;
+  const fw = firmware.find((f) => f.id === selected) ?? null;
+  const expect = project?.device ?? (project?.hardware.usb.vid && project.hardware.usb.pid ? { vid: project.hardware.usb.vid, pid: project.hardware.usb.pid } : null);
+
+  /** After flashing: wait until the keyboard appears over USB again (up to 40 s). */
+  const waitForKeyboard = async () => {
+    const since = Date.now();
+    setStep({ phase: 'waiting', since });
+    while (Date.now() - since < 40000) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const s = await navi!.flash.scan();
+      const back = expect ? s.usb.find((u) => Number.parseInt(u.vid, 16) === expect.vid && Number.parseInt(u.pid, 16) === expect.pid) : null;
+      const stillBoot = s.bootloaders.length > 0 || s.uf2Drives.length > 0;
+      if (back) {
+        await refreshDevices();
+        setStep({ phase: 'done', ok: true, text: t(`Done: the keyboard is back (USB ${back.vid}:${back.pid}).`, `Готово: клавиатура снова на связи (USB ${back.vid}:${back.pid}).`) });
+        toast(t('Firmware flashed — keyboard is back', 'Прошито — клавиатура снова на связи'));
+        return;
+      }
+      if (!expect && !stillBoot && Date.now() - since > 6000) {
+        setStep({ phase: 'done', ok: true, text: t('The bootloader is gone (the board restarted). The keyboard USB ID is not known to the project, so the result is not confirmed — check that the keyboard types.', 'Загрузчик пропал (плата перезапустилась). USB ID клавиатуры проекту не известен — результат не подтверждён, проверьте, что клавиатура печатает.') });
+        return;
+      }
+    }
+    setStep({
+      phase: 'done',
+      ok: false,
+      text: t('The keyboard did not come back within 40 s. If a new USB ID was expected, check by typing; otherwise enter the bootloader again and flash a previous firmware from the archive.', 'Клавиатура не вернулась за 40 с. Если ожидался другой USB ID — проверьте, печатает ли она; иначе снова войдите в загрузчик и прошейте прежнюю прошивку из архива.'),
+    });
+  };
+
+  const flashUf2 = async (drive: Uf2Drive) => {
+    if (!fw) return;
+    const check = await navi!.flash.checkUf2(fw.id, drive.root);
+    if (!check.ok) {
+      toast(check.reason === 'not-uf2' ? t('This file is not a UF2 firmware', 'Этот файл — не прошивка UF2') : t(`Chip family mismatch: file ${familyName(check.desc.uf2Family)}, board ${drive.boardId}`, `Не то семейство чипа: файл ${familyName(check.desc.uf2Family)}, плата ${drive.boardId}`), 'error');
+      return;
+    }
+    if (check.unverified && !confirmUnverified) {
+      setConfirmUnverified(true);
+      toast(t('Unknown board — press “flash” again to confirm', 'Неизвестная плата — нажмите «прошить» ещё раз для подтверждения'));
+      return;
+    }
+    setConfirmUnverified(false);
+    setPolling(false);
+    setStep({ phase: 'flashing', detail: drive.root });
+    try {
+      const res = await navi!.flash.uf2(fw.id, drive.root, { allowUnverified: check.unverified });
+      if (!res.driveGone) {
+        setStep({ phase: 'done', ok: false, text: t(`The file was ${res.copied ? 'copied' : 'not fully copied'}, but the bootloader drive is still there — the board did not accept the firmware. ${res.copyError ?? ''}`, `Файл ${res.copied ? 'скопирован' : 'скопирован не полностью'}, но диск загрузчика остался — плата не приняла прошивку. ${res.copyError ?? ''}`) });
+        return;
+      }
+      await waitForKeyboard();
+    } catch (err) {
+      setStep({ phase: 'done', ok: false, text: (err as Error).message });
+    }
+  };
+
+  const flashQmk = async (bootloader?: string) => {
+    if (!fw) return;
+    setPolling(false);
+    setStep({ phase: 'flashing', detail: 'qmk flash' });
+    try {
+      const res = await navi!.flash.qmk({ home: qmkSettings.home, msys: qmkSettings.msys }, fw.id, bootloader);
+      if (res.code !== 0) {
+        setStep({ phase: 'done', ok: false, text: t(`qmk flash failed (exit code ${res.code}) — see the log.`, `qmk flash не удался (код ${res.code}) — см. лог.`) });
+        return;
+      }
+      await waitForKeyboard();
+    } catch (err) {
+      setStep({ phase: 'done', ok: false, text: (err as Error).message });
+    }
+  };
+
+  /** Back up the board's current firmware to the archive (read-only from the bootloader drive). */
+  const backup = async (drive: Uf2Drive) => {
+    setBackingUp(drive.root);
+    setProgress(null);
+    try {
+      const info = await navi!.flash.backupUf2(drive.root);
+      await refreshFirmware();
+      const size = mb(info.flash ? info.flash.end - info.flash.start : info.size);
+      toast(t(`Saved: ${info.file} (${size} of flash)`, `Сохранено: ${info.file} (${size} памяти платы)`));
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    } finally {
+      setBackingUp(null);
+    }
+  };
+
+  const busy = step.phase === 'flashing' || step.phase === 'waiting' || backingUp !== null;
+  const hasBackup = (d: Uf2Drive) => firmware.some((f) => f.source === 'backup' && f.boardId === d.boardId);
+
+  return (
+    <div className="page">
+      <div className="grid-2">
+        <section className="panel-box">
+          <div className="panel-box-head">
+            <span className="cell-label">{t('firmware archive', 'архив прошивок')}</span>
+            <div className="field-row">
+              <button className="btn" onClick={() => void navi!.firmware.import().then((f) => f && (setSelected(f.id), refreshFirmware()))}>
+                <Upload {...ICON} /> {t('import file…', 'добавить файл…')}
+              </button>
+              <button className="btn" onClick={() => void navi!.openPath('firmware')}>
+                {t('folder', 'папка')}
+              </button>
+            </div>
+          </div>
+          <div className="rows" style={{ maxHeight: 340, overflowY: 'auto' }}>
+            {firmware.map((f: FirmwareInfo) => (
+              <div key={f.id} className={`row ${f.id === selected ? 'is-active' : ''}`} style={{ ['--row-cols' as string]: 'minmax(0,1fr) auto' }}>
+                <button style={{ textAlign: 'left' }} onClick={() => setSelected(f.id)}>
+                  <strong>{f.file}</strong> <span className="badge badge--dim">{f.format}</span> {f.format === 'uf2' && <span className="kicker">{familyName(f.uf2Family)}</span>}
+                  <br />
+                  <span className="kicker">
+                    {new Date(f.createdAt).toLocaleString(locale())} · {f.source === 'build' ? `${t('build', 'сборка')} ${f.keyboard}:${f.keymap}` : f.source === 'backup' ? `${t('copy from the board', 'копия с платы')} ${f.boardId ?? ''}${f.flash ? ` · ${mb(f.flash.end - f.flash.start)}` : ''}` : t('imported', 'импорт')} · {Math.round(f.size / 1024)} KB · sha {f.sha256.slice(0, 8)}
+                  </span>
+                </button>
+                <div className="row-actions">
+                  <button className="icon-btn" aria-label={t('Save as', 'Сохранить как')} title={t('Save as…', 'Сохранить как…')} onClick={() => void navi!.firmware.export(f.id)}>
+                    <Download {...ICON} />
+                  </button>
+                  <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => void navi!.firmware.remove(f.id).then(refreshFirmware)}>
+                    <Trash2 {...ICON} />
+                  </button>
+                </div>
+              </div>
+            ))}
+            {firmware.length === 0 && (
+              <div className="row" style={{ ['--row-cols' as string]: '1fr' }}>
+                <span className="field-hint">{t('No firmware yet: build one or add a .uf2/.hex/.bin file (for example, the original firmware from the seller — keep it as a backup!).', 'Прошивок пока нет: соберите или добавьте файл .uf2/.hex/.bin (например, родную прошивку от продавца — сохраните её как запасную!).')}</span>
+              </div>
+            )}
+          </div>
+        </section>
+        <section className="panel-box">
+          <div className="panel-box-head">
+            <span className="cell-label">{t('keyboard in bootloader mode', 'клавиатура в режиме загрузчика')}</span>
+            <div className="field-row">
+              <label className="checkbox">
+                <input type="checkbox" checked={polling} onChange={(e) => setPolling(e.target.checked)} /> {t('wait', 'ждать')}
+              </label>
+              <button className="btn" onClick={() => void scanDevices()}>
+                <RefreshCw {...ICON} /> {t('search', 'искать')}
+              </button>
+            </div>
+          </div>
+          <div className="panel-box-body field">
+            {scan?.uf2Drives.map((d) => (
+              <div key={d.root} className="field">
+                <div className="row" style={{ ['--row-cols' as string]: '24px minmax(0,1fr) auto auto' }}>
+                  <HardDrive {...ICON} />
+                  <span>
+                    <strong>{d.root}</strong> · {d.boardId || d.model} <span className="kicker">UF2</span>
+                  </span>
+                  <button className="btn" disabled={busy} title={t('Copy the whole flash memory of the board (CURRENT.UF2) into the archive. Nothing is written to the board.', 'Скопировать всю память платы (CURRENT.UF2) в архив. На плату ничего не пишется.')} onClick={() => void backup(d)}>
+                    <Archive {...ICON} /> {backingUp === d.root ? t('saving…', 'сохраняю…') : t('save current firmware', 'сохранить текущую прошивку')}
+                  </button>
+                  <button className={`btn btn--primary ${confirmUnverified ? 'btn--danger' : ''}`} disabled={!fw || fw.format !== 'uf2' || busy} onClick={() => void flashUf2(d)}>
+                    <Zap {...ICON} /> {confirmUnverified ? t('flash anyway', 'всё равно прошить') : t('flash', 'прошить')}
+                  </button>
+                </div>
+                {!hasBackup(d) && (
+                  <p className="field-hint">
+                    {t('First save the current firmware: it is the only way back to the firmware the keyboard came with (the seller’s source is unknown).', 'Сначала сохраните текущую прошивку: это единственный способ вернуть ту, что стояла с завода (исходников продавца нет).')}
+                  </p>
+                )}
+                {backingUp === d.root && progress && (
+                  <div className="progress">
+                    <i style={{ width: `${Math.round((progress.done / Math.max(1, progress.total)) * 100)}%` }} />
+                  </div>
+                )}
+              </div>
+            ))}
+            {scan?.bootloaders
+              .filter((b) => b.type !== 'rp2040')
+              .map((b) => (
+                <div key={`${b.vid}:${b.pid}`} className="row" style={{ ['--row-cols' as string]: '24px minmax(0,1fr) auto' }}>
+                  <Zap {...ICON} />
+                  <span>
+                    <strong>{b.name}</strong> · {b.vid}:{b.pid} <span className="kicker">{b.type}</span>
+                  </span>
+                  <button className="btn btn--primary" disabled={!fw || busy || fw.format === 'uf2'} onClick={() => void flashQmk(b.type)}>
+                    qmk flash
+                  </button>
+                </div>
+              ))}
+            {scan && scan.uf2Drives.length === 0 && scan.bootloaders.filter((b) => b.type !== 'rp2040').length === 0 && (
+              <p className="field-hint">{t('No keyboard in bootloader mode. See below how to enter it, then press “search” (or check “wait”).', 'Клавиатуры в режиме загрузчика нет. Ниже — как войти в него; затем «искать» (или отметьте «ждать»).')}</p>
+            )}
+            {scan && <span className="kicker">{t('checked', 'проверено')}: {new Date(scan.scannedAt).toLocaleTimeString()}</span>}
+            {step.phase === 'flashing' && (
+              <div className="field">
+                <span className="kicker">
+                  {t('flashing', 'прошивка')} · {step.detail}
+                </span>
+                {progress && (
+                  <div className="progress">
+                    <i style={{ width: `${Math.round((progress.done / Math.max(1, progress.total)) * 100)}%` }} />
+                  </div>
+                )}
+              </div>
+            )}
+            {step.phase === 'waiting' && <span className="kicker">{t('waiting for the keyboard to come back…', 'жду, пока клавиатура вернётся…')}</span>}
+            {step.phase === 'done' && (
+              <div className="notice" style={{ borderColor: step.ok ? 'var(--meter-to)' : 'var(--danger-color)' }}>
+                <span>{step.text}</span>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+      {fw && fw.format !== 'uf2' && (
+        <p className="field-hint">{t('Non-UF2 firmware is flashed by the official “qmk flash” (needs QMK MSYS / CLI); it waits for the bootloader itself.', 'Прошивки не-UF2 записывает официальный «qmk flash» (нужен QMK MSYS / CLI); он сам ждёт загрузчик.')}</p>
+      )}
+      {fw && fw.format !== 'uf2' && (
+        <button className="btn" disabled={busy} onClick={() => void flashQmk()}>
+          qmk flash {fw.file}
+        </button>
+      )}
+      <div style={{ marginTop: 'var(--gap)' }}>
+        <BootloaderHelp />
+      </div>
+      {job?.kind === 'flash' && <BuildLog />}
+    </div>
+  );
+}

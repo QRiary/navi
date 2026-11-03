@@ -1,0 +1,86 @@
+{
+  "name": "navi-keyboard",
+  "productName": "NAVI",
+  "description": "QMK keyboard configurator and flasher: keymap on a drawing of your keyboard, layers, encoders, macros, tap dance, combos, VIA, pure QMK builds",
+  "keywords": [
+    "qmk",
+    "keyboard",
+    "keymap",
+    "via",
+    "firmware",
+    "configurator",
+    "electron"
+  ],
+  "author": "DanteAE86",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "postinstall": "node node_modules/electron/install.js",
+    "app": "vite build && electron .",
+    "app:dev": "node scripts/dev-app.mjs",
+    "device:probe": "vite build && electron . --probe-device",
+    "gen:qmk": "node scripts/gen-qmk-data.mjs",
+    "icon": "electron scripts/make-icon.cjs",
+    "dist": "npm run build && electron-builder --win"
+  },
+  "build": {
+    "appId": "local.navi.keyboard",
+    "productName": "NAVI",
+    "electronDist": "node_modules/electron/dist",
+    "electronLanguages": [
+      "en-US",
+      "ru"
+    ],
+    "compression": "maximum",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "!electron/**/*.test.*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "NAVI"
+    }
+  },
+  "devDependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource/silkscreen": "^5.3.0",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/w3c-web-hid": "^1.0.7",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3",
+    "figlet": "^1.12.0",
+    "hjson": "^3.2.2",
+    "lucide-react": "^1.58.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5",
+    "zustand": "^5.0.15"
+  }
+}

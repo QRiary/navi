@@ -1,0 +1,73 @@
+import { Cable, Cpu, FolderOpen, Keyboard, Layers, Lightbulb, ListVideo, Plus, RotateCw, Settings2, Shapes, Sparkles, type LucideIcon } from 'lucide-react';
+import { href, navigate, type Route, type Section } from '../../lib/router';
+import { useProjectStore } from '../../store/projectStore';
+import { useSettingsStore } from '../../store/settingsStore';
+import { useDeviceStore } from '../../store/deviceStore';
+import { Logo } from '../Logo';
+import { t } from '../../i18n';
+
+const NAV: { section: Section; label: () => string; icon: LucideIcon }[] = [
+  { section: 'keyboard', label: () => t('Keyboard', 'Клавиатура'), icon: Keyboard },
+  { section: 'layers', label: () => t('Layers', 'Слои'), icon: Layers },
+  { section: 'encoders', label: () => t('Encoders', 'Энкодеры'), icon: RotateCw },
+  { section: 'macros', label: () => t('Macros', 'Макросы'), icon: ListVideo },
+  { section: 'advanced', label: () => t('Advanced', 'Расширенное'), icon: Sparkles },
+  { section: 'lighting', label: () => t('Lighting', 'Подсветка'), icon: Lightbulb },
+  { section: 'hardware', label: () => t('Hardware', 'Железо'), icon: Shapes },
+  { section: 'firmware', label: () => t('Firmware', 'Прошивка'), icon: Cpu },
+  { section: 'device', label: () => t('Device', 'Устройство'), icon: Cable },
+  { section: 'projects', label: () => t('Projects', 'Проекты'), icon: FolderOpen },
+  { section: 'settings', label: () => t('Settings', 'Настройки'), icon: Settings2 },
+];
+
+export function Sidebar({ route }: { route: Route }) {
+  const tagline = useSettingsStore((s) => s.settings.brand.tagline);
+  const list = useProjectStore((s) => s.list);
+  const current = useProjectStore((s) => s.project?.id);
+  const open = useProjectStore((s) => s.open);
+  const deviceStatus = useDeviceStore((s) => s.status);
+
+  return (
+    <aside className="sidebar" aria-label={t('Sidebar', 'Боковая панель')}>
+      <a className="brand" href={href({ section: 'keyboard' })} aria-label="NAVI">
+        <Logo size="sm" />
+      </a>
+      <div className="cell-label side-label">navigation</div>
+      <nav className="side-nav" aria-label={t('Main navigation', 'Основная навигация')}>
+        {NAV.map(({ section, label, icon: Icon }, i) => {
+          const isActive = route.section === section;
+          const note = section === 'device' && (deviceStatus === 'connected' || deviceStatus === 'busy') ? 'on' : '';
+          return (
+            <a key={section} href={href({ section })} className={`side-link ${isActive ? 'is-active' : ''}`} aria-current={isActive ? 'page' : undefined} title={label()}>
+              <span className="side-link-num" aria-hidden="true">
+                {String(i + 1).padStart(2, '0')}
+              </span>
+              <Icon size={16} strokeWidth={1.5} className="side-link-icon" />
+              <span className="side-link-text">{label()}</span>
+              <span className="side-link-note">{note}</span>
+            </a>
+          );
+        })}
+      </nav>
+
+      <section className="side-projects" aria-label={t('Projects', 'Проекты')}>
+        <div className="side-projects-head">
+          <span className="cell-label">projects</span>
+          <button className="icon-btn" aria-label={t('New project', 'Новый проект')} title={t('New project', 'Новый проект')} onClick={() => navigate({ section: 'projects', tab: 'new' })}>
+            <Plus size={16} strokeWidth={1.5} />
+          </button>
+        </div>
+        <div className="side-projects-list">
+          {list.map((p) => (
+            <button key={p.id} className={`side-item ${p.id === current ? 'is-active' : ''}`} onClick={() => void open(p.id)} title={p.keyboard}>
+              <span className="side-item-title">{p.name}</span>
+              <span className="side-item-meta">{p.unsaved ? '●' : `${p.layers}L`}</span>
+            </button>
+          ))}
+          {list.length === 0 && <p className="side-hint">{t('no projects · “+” to create', 'нет проектов · «+» чтобы создать')}</p>}
+        </div>
+      </section>
+      <div className="side-foot">{tagline}</div>
+    </aside>
+  );
+}

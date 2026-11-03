@@ -1,0 +1,548 @@
+/**
+ * HARDWARE SECTION:
+ *  • geometry — drawing editor: move (with snapping), rotate, resize, add,
+ *    copy, mirror a half, assign matrix positions (in order or by pressing a key);
+ *  • profile — what is known about the keyboard and where from (from the keyboard, from the sources, by hand);
+ *  • variants — several geometries in a project, import from QMK / VIA / KLE.
+ * Key assignments are stored by matrix — the geometry can change without breaking the keymap.
+ */
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Copy, FlipHorizontal2, Plus, RotateCcw, RotateCw, Trash2, Wand2 } from 'lucide-react';
+import { KeyboardCanvas, type KeyView } from '../components/keyboard/KeyboardCanvas';
+import { checkGeometry, cloneGeometry, geometryBounds, keyCenter, mirrorKeys, rotatePoint } from '../core/layout/geometry';
+import { dilemma4x6Clone, gridGeometry } from '../core/layout/templates';
+import { addGeometry, addKey, moveKeys, patchProject, removeGeometry, removeKeys, resizeMatrix, setKeyMatrix, updateKeys } from '../core/project/ops';
+import { keyLabel } from '../core/keycodes/labels';
+import type { Geometry, HardwareProfile, KeyGeom, MatrixPos, Project } from '../core/project/types';
+import { importKle, importQmkLayout, importViaDefinition, detectFileKind, listQmkLayouts } from '../core/io/formats';
+import { JSON_FILTERS, openTextFile } from '../lib/files';
+import { hidFromCode } from '../lib/hidCodes';
+import { useActive, useLabelContext } from '../lib/projectContext';
+import { href } from '../lib/router';
+import { useDeviceStore } from '../store/deviceStore';
+import { useEditorStore } from '../store/editorStore';
+import { useProjectStore, useSpec } from '../store/projectStore';
+import { useSettingsStore } from '../store/settingsStore';
+import { toast } from '../store/toastStore';
+import { getLanguage, locale, t } from '../i18n';
+import { PinsTab } from '../components/hardware/PinsTab';
+
+const ICON = { size: 15, strokeWidth: 1.5 };
+
+type AssignMode = { kind: 'sequence'; next: MatrixPos; dir: 'cols' | 'rows' } | { kind: 'press' } | null;
+
+function GeometryEditor() {
+  const active = useActive();
+  const spec = useSpec();
+  const labelCtx = useLabelContext();
+  const apply = useProjectStore((s) => s.apply);
+  const editor = useEditorStore();
+  const snap = useSettingsStore((s) => s.settings.editor.snap);
+  const keySize = useSettingsStore((s) => s.settings.keyboard.keySize);
+  const deviceSnapshot = useDeviceStore((s) => s.snapshot);
+  const testerActive = useDeviceStore((s) => s.testerActive);
+  const startTester = useDeviceStore((s) => s.startTester);
+  const stopTester = useDeviceStore((s) => s.stopTester);
+  const [assign, setAssign] = useState<AssignMode>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+
+  const issues = useMemo(() => (active ? checkGeometry(active.geometry, active.project.hardware.matrix.rows, active.project.hardware.matrix.cols) : []), [active]);
+
+  const geoId = active?.geometry.id;
+  const assignTo = useCallback(
+    (key: KeyGeom, pos: MatrixPos) => {
+      if (!geoId) return;
+      apply((p) => setKeyMatrix(p, geoId, key.id, pos), t(`matrix [${pos[0]},${pos[1]}]`, `матрица [${pos[0]},${pos[1]}]`));
+    },
+    [apply, geoId],
+  );
+
+  // “Press a key”: the position comes from the matrix test (VIA) or from a normal key press through the layer 0 keymap.
+  useEffect(() => {
+    if (assign?.kind !== 'press' || !active) return;
+    const selected = active.geometry.keys.find((k) => k.id === editor.selection[0]);
+    if (!selected) return;
+    const onPressed = (pressed: Set<string>) => {
+      const first = [...pressed][0];
+      if (!first) return;
+      const [r, c] = first.split(',').map(Number);
+      assignTo(selected, [r, c]);
+      selectNext(selected);
+    };
+    if (!testerActive && deviceSnapshot) startTester((p) => onPressed(p));
+    const onKey = (e: KeyboardEvent) => {
+      if (!deviceSnapshot) return;
+      const code = hidFromCode(e.code);
+      if (code === null) return;
+      const cols = deviceSnapshot.cols;
+      const found = deviceSnapshot.keymap[0].map((v, i) => (v === code ? i : -1)).filter((i) => i >= 0);
+      if (found.length === 1) {
+        e.preventDefault();
+        assignTo(selected, [Math.floor(found[0] / cols), found[0] % cols]);
+        selectNext(selected);
+      } else if (found.length > 1) toast(t('This key code is on several positions — use the matrix tester', 'Такой код на нескольких позициях — нужен тест матрицы'), 'error');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [assign, editor.selection[0], active?.geometry, deviceSnapshot]);
+
+  useEffect(() => () => stopTester(), [stopTester]);
+
+  const selectNext = (from: KeyGeom) => {
+    if (!active) return;
+    const c = keyCenter(from);
+    const candidates = active.geometry.keys.filter((k) => k.id !== from.id).map((k) => ({ k, c: keyCenter(k) }));
+    const right = candidates.filter((x) => Math.abs(x.c.y - c.y) < 0.6 && x.c.x > c.x).sort((a, b) => a.c.x - b.c.x)[0];
+    if (right) editor.select([right.k.id], 'replace');
+  };
+
+  const keyView = useCallback(
+    (k: KeyGeom): KeyView => {
+      const v = active && k.matrix ? active.keymap.layers[0]?.keys[k.matrix[0] * active.project.hardware.matrix.cols + k.matrix[1]] : undefined;
+      const label = v !== undefined && labelCtx ? keyLabel(spec, v, labelCtx) : { main: k.matrix ? '' : '?', kind: 'none' as const, qmk: t('no matrix position', 'нет позиции матрицы') };
+      return {
+        label: { ...label, top: k.matrix ? `${k.matrix[0]},${k.matrix[1]}` : t('none', 'нет'), hold: undefined },
+        warn: !k.matrix || issues.some((i) => i.keyId === k.id && i.level === 'error'),
+        dim: false,
+        approx: !!k.approximate,
+        pressed: k.matrix ? editor.pressed.has(`${k.matrix[0]},${k.matrix[1]}`) : false,
+      };
+    },
+    [active, labelCtx, spec, issues, editor.pressed],
+  );
+
+  if (!active) return null;
+  const { project, geometry } = active;
+  const sel = geometry.keys.filter((k) => editor.selection.includes(k.id));
+  const ids = sel.map((k) => k.id);
+
+  const rotateSel = (d: number) => {
+    if (!sel.length) return;
+    const centers = sel.map(keyCenter);
+    const C = { x: centers.reduce((a, c) => a + c.x, 0) / centers.length, y: centers.reduce((a, c) => a + c.y, 0) / centers.length };
+    apply(
+      (p) =>
+        updateKeys(p, geometry.id, ids, (k) => {
+          const c2 = rotatePoint(keyCenter(k), C.x, C.y, d);
+          return { r: k.r + d, x: c2.x - k.w / 2, y: c2.y - k.h / 2, rx: c2.x, ry: c2.y };
+        }),
+      t('rotate', 'поворот'),
+      { coalesce: `rot:${ids.join(',')}` },
+    );
+  };
+
+  const addNewKey = () => {
+    const b = geometryBounds(geometry);
+    const base = sel[0];
+    const x = base ? base.x + base.w + 0.1 : b.x + b.w + 0.5;
+    const y = base ? base.y : b.y;
+    apply((p) => addKey(p, geometry.id, { matrix: null, x, y, w: 1, h: 1, r: 0, rx: x + 0.5, ry: y + 0.5, shape: 'rect', half: base?.half ?? 'center' }), t('add key', 'новая клавиша'));
+  };
+
+  const duplicateSel = () => {
+    if (!sel.length) return;
+    apply((p) => {
+      let next = p;
+      for (const k of sel) next = addKey(next, geometry.id, { ...k, matrix: null, x: k.x + 0.5, y: k.y + 0.5, rx: k.rx + 0.5, ry: k.ry + 0.5, label: undefined });
+      return next;
+    }, t('duplicate keys', 'копия клавиш'));
+  };
+
+  const mirrorSel = () => {
+    if (!sel.length) return;
+    const b = geometryBounds(geometry);
+    const axis = b.x + b.w / 2;
+    const mirrored = mirrorKeys(sel, axis, () => null, sel[0].half === 'left' ? 'right' : sel[0].half === 'right' ? 'left' : 'center');
+    apply((p) => ({ ...p, geometries: p.geometries.map((g) => (g.id === geometry.id ? { ...g, keys: [...g.keys, ...mirrored] } : g)) }), t('mirror keys', 'зеркальная копия'));
+    toast(t('Mirrored copies have no matrix position yet — assign them', 'У зеркальных копий пока нет позиций матрицы — назначьте их'));
+  };
+
+  const onSelect = (newIds: string[], mode: 'replace' | 'toggle' | 'add') => {
+    if (assign?.kind === 'sequence' && newIds.length === 1 && mode === 'replace') {
+      const key = geometry.keys.find((k) => k.id === newIds[0]);
+      if (key) {
+        assignTo(key, assign.next);
+        const { rows, cols } = project.hardware.matrix;
+        let [r, c] = assign.next;
+        if (assign.dir === 'cols') {
+          c++;
+          if (c >= cols) {
+            c = 0;
+            r = (r + 1) % rows;
+          }
+        } else {
+          r++;
+          if (r >= rows) {
+            r = 0;
+            c = (c + 1) % cols;
+          }
+        }
+        setAssign({ ...assign, next: [r, c] });
+      }
+    }
+    editor.select(newIds, mode);
+  };
+
+  return (
+    <div className="editor" style={{ gridTemplateRows: 'auto minmax(220px, 1fr) auto' }}>
+      <div className="editor-bar">
+        <button className="btn" onClick={addNewKey}>
+          <Plus {...ICON} /> {t('key', 'клавиша')}
+        </button>
+        <button className="btn" disabled={!sel.length} onClick={duplicateSel}>
+          <Copy {...ICON} /> {t('copy', 'копия')}
+        </button>
+        <button className="btn" disabled={!sel.length} onClick={mirrorSel} title={t('Mirrored copy to the other half', 'Зеркальная копия на другую половину')}>
+          <FlipHorizontal2 {...ICON} /> {t('mirror', 'зеркало')}
+        </button>
+        <button className="icon-btn" disabled={!sel.length} onClick={() => rotateSel(-5)} aria-label={t('Rotate −5°', 'Повернуть −5°')} title="−5°">
+          <RotateCcw {...ICON} />
+        </button>
+        <button className="icon-btn" disabled={!sel.length} onClick={() => rotateSel(5)} aria-label={t('Rotate +5°', 'Повернуть +5°')} title="+5°">
+          <RotateCw {...ICON} />
+        </button>
+        <button className="btn" disabled={!sel.length} onClick={() => apply((p) => removeKeys(p, geometry.id, ids), t('delete keys', 'удаление клавиш'))}>
+          <Trash2 {...ICON} /> {t('delete', 'удалить')}
+        </button>
+        <span className="deck-sep" />
+        <div className="seg" role="group" aria-label={t('Assign matrix', 'Назначение матрицы')}>
+          <button className={!assign ? 'is-on' : ''} onClick={() => setAssign(null)}>
+            {t('move', 'двигать')}
+          </button>
+          <button className={assign?.kind === 'sequence' ? 'is-on' : ''} onClick={() => setAssign({ kind: 'sequence', next: [0, 0], dir: 'cols' })} title={t('Click keys in order: [0,0], [0,1] …', 'Щёлкайте клавиши по порядку: [0,0], [0,1] …')}>
+            {t('matrix in order', 'матрица по порядку')}
+          </button>
+          <button className={assign?.kind === 'press' ? 'is-on' : ''} disabled={!deviceSnapshot} onClick={() => setAssign({ kind: 'press' })} title={t('Select a key on the layout, then press it on the keyboard', 'Выберите клавишу на схеме и нажмите её на клавиатуре')}>
+            <Wand2 size={13} strokeWidth={1.5} /> {t('by pressing', 'нажатием')}
+          </button>
+        </div>
+        {assign?.kind === 'sequence' && (
+          <span className="kicker">
+            {t('next', 'следующая')}: [{assign.next[0]},{assign.next[1]}]{' '}
+            <button className="text-btn" onClick={() => setAssign({ ...assign, dir: assign.dir === 'cols' ? 'rows' : 'cols' })}>
+              {assign.dir === 'cols' ? t('→ by columns', '→ по столбцам') : t('↓ by rows', '↓ по строкам')}
+            </button>
+          </span>
+        )}
+        {assign?.kind === 'press' && <span className="kicker">{t('select a key on the layout, then press it on the keyboard', 'выберите клавишу на схеме и нажмите её на клавиатуре')}</span>}
+        <span className="spacer" />
+        <span className="kicker">
+          {t('snap', 'шаг')} {snap || t('off', 'нет')}u
+        </span>
+      </div>
+      <KeyboardCanvas
+        geometry={geometry}
+        keyView={keyView}
+        selection={editor.selection}
+        onSelect={onSelect}
+        zoom={zoom}
+        pan={pan}
+        onViewChange={(z, p) => {
+          setZoom(z);
+          setPan(p);
+        }}
+        keySize={keySize}
+        showMatrix={false}
+        geometryEdit={assign ? undefined : { snap, onMove: (moveIds, dx, dy) => apply((p) => moveKeys(p, geometry.id, moveIds, dx, dy), t('move keys', 'перемещение клавиш')) }}
+        ariaLabel={t('Geometry editor', 'Редактор геометрии')}
+        overlay={
+          <div className="kb-legend" aria-hidden="true">
+            <span>
+              <i className="lg-trns" />
+              {t('approximate place', 'примерное место')}
+            </span>
+            <span>
+              <i className="lg-warn" />
+              {t('no / wrong matrix', 'нет / неверная матрица')}
+            </span>
+          </div>
+        }
+      />
+      {issues.length > 0 && (
+        <div style={{ padding: '6px var(--pad)', borderTop: 'var(--border)', maxHeight: 90, overflowY: 'auto' }}>
+          {issues.slice(0, 6).map((i, n) => (
+            <div key={n} className={`issue issue--${i.level}`} style={{ marginBottom: 2 }}>
+              <span className="issue-where">{i.level}</span>
+              {getLanguage() === 'ru' ? i.message.ru : i.message.en}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProfileTab({ project }: { project: Project }) {
+  const apply = useProjectStore((s) => s.apply);
+  const hw = project.hardware;
+  const [rows, setRows] = useState(hw.matrix.rows);
+  const [cols, setCols] = useState(hw.matrix.cols);
+  const set = (patch: Partial<HardwareProfile>, label: string) => apply((p) => patchProject(p, { hardware: { ...p.hardware, ...patch } }), label, { coalesce: `hw:${label}` });
+  const text = (key: keyof HardwareProfile, label: string, ph = '') => (
+    <label className="field">
+      <span className="field-label">{label}</span>
+      <input className="input" value={(hw[key] as string | null) ?? ''} placeholder={ph} onChange={(e) => set({ [key]: e.target.value || (key === 'processor' || key === 'bootloader' ? null : '') } as Partial<HardwareProfile>, String(key))} />
+    </label>
+  );
+  const hex = (n: number | null) => (n === null ? '' : `0x${n.toString(16).toUpperCase().padStart(4, '0')}`);
+  const parseHex = (s: string) => (/^0x[0-9a-f]{1,4}$/i.test(s) ? Number.parseInt(s, 16) : null);
+  return (
+    <div className="page">
+      <p className="page-lead">
+        {t(
+          'What is known about the keyboard. Facts read from the keyboard are marked “device”; guesses — “heuristic”. Unknown fields stay empty: nothing is invented.',
+          'Что известно о клавиатуре. Факты, прочитанные с клавиатуры, помечены «device», догадки — «heuristic». Неизвестное остаётся пустым: ничего не придумывается.',
+        )}
+      </p>
+      <div className="grid-2">
+        <section className="panel-box">
+          <div className="panel-box-head">
+            <span className="cell-label">{t('model', 'модель')}</span>
+          </div>
+          <div className="panel-box-body field">
+            {text('name', t('name', 'название'))}
+            {text('manufacturer', t('manufacturer', 'производитель'))}
+            <div className="field-row">
+              <label className="field">
+                <span className="field-label">USB VID</span>
+                <input className="input" defaultValue={hex(hw.usb.vid)} placeholder="0xAFC5" onBlur={(e) => set({ usb: { ...hw.usb, vid: parseHex(e.target.value) } }, 'vid')} />
+              </label>
+              <label className="field">
+                <span className="field-label">USB PID</span>
+                <input className="input" defaultValue={hex(hw.usb.pid)} placeholder="0xBFC5" onBlur={(e) => set({ usb: { ...hw.usb, pid: parseHex(e.target.value) } }, 'pid')} />
+              </label>
+            </div>
+            {text('processor', t('microcontroller', 'микроконтроллер'), 'RP2040 / STM32F411 / atmega32u4')}
+            {text('bootloader', t('bootloader (QMK name)', 'загрузчик (имя в QMK)'), 'rp2040 / stm32-dfu / caterina')}
+          </div>
+        </section>
+        <section className="panel-box">
+          <div className="panel-box-head">
+            <span className="cell-label">{t('matrix and halves', 'матрица и половины')}</span>
+          </div>
+          <div className="panel-box-body field">
+            <div className="field-row">
+              <label className="field-hint">
+                {t('rows', 'строк')} <input className="input input--num" type="number" min={1} max={32} value={rows} onChange={(e) => setRows(Number(e.target.value))} />
+              </label>
+              <label className="field-hint">
+                {t('cols', 'столбцов')} <input className="input input--num" type="number" min={1} max={32} value={cols} onChange={(e) => setCols(Number(e.target.value))} />
+              </label>
+              <button className="btn" disabled={rows === hw.matrix.rows && cols === hw.matrix.cols} onClick={() => apply((p) => resizeMatrix(p, rows, cols), t('resize matrix', 'размер матрицы'))}>
+                {t('apply', 'применить')}
+              </button>
+            </div>
+            <span className="field-hint">{t('Keymaps keep values by (row, col); positions outside the new size are dropped.', 'Назначения сохраняются по (строка, столбец); позиции вне нового размера пропадают.')}</span>
+            <label className="checkbox">
+              <input type="checkbox" checked={hw.split.enabled} onChange={(e) => set({ split: { ...hw.split, enabled: e.target.checked } }, 'split')} /> {t('split keyboard', 'сплит (две половины)')}
+            </label>
+            <label className="field">
+              <span className="field-label">{t('link between halves', 'связь между половинами')}</span>
+              <select className="select" value={hw.split.transport} onChange={(e) => set({ split: { ...hw.split, transport: e.target.value as HardwareProfile['split']['transport'] } }, 'transport')}>
+                <option value="unknown">{t('unknown', 'неизвестно')}</option>
+                <option value="serial">{t('serial (TRRS/TRS cable)', 'serial (кабель TRRS/TRS)')}</option>
+                <option value="i2c">I²C</option>
+                <option value="wireless">{t('wireless', 'беспроводная')}</option>
+                <option value="none">{t('none', 'нет')}</option>
+              </select>
+            </label>
+          </div>
+        </section>
+        <section className="panel-box">
+          <div className="panel-box-head">
+            <span className="cell-label">{t('controls and lighting', 'органы управления и подсветка')}</span>
+          </div>
+          <div className="panel-box-body field">
+            <div className="field-row">
+              <label className="field-hint">
+                {t('encoders', 'энкодеров')}{' '}
+                <input className="input input--num" type="number" min={0} max={32} value={hw.encoders.count ?? ''} placeholder="?" onChange={(e) => set({ encoders: { ...hw.encoders, count: e.target.value === '' ? null : Number(e.target.value) } }, 'encoders')} />
+              </label>
+              <select className="select" value={hw.encoders.withPress === null ? '' : hw.encoders.withPress ? 'yes' : 'no'} onChange={(e) => set({ encoders: { ...hw.encoders, withPress: e.target.value === '' ? null : e.target.value === 'yes' } }, 'press')} aria-label={t('Encoder button', 'Кнопка энкодера')}>
+                <option value="">{t('button: unknown', 'кнопка: неизвестно')}</option>
+                <option value="yes">{t('with button', 'с кнопкой')}</option>
+                <option value="no">{t('no button', 'без кнопки')}</option>
+              </select>
+            </div>
+            <label className="field">
+              <span className="field-label">{t('lighting', 'подсветка')}</span>
+              <select className="select" value={hw.lighting.kind} onChange={(e) => set({ lighting: { ...hw.lighting, kind: e.target.value as HardwareProfile['lighting']['kind'] } }, 'lighting')}>
+                <option value="unknown">{t('unknown', 'неизвестно')}</option>
+                <option value="rgb_matrix">RGB Matrix</option>
+                <option value="rgblight">RGB Light</option>
+                <option value="led_matrix">LED Matrix</option>
+                <option value="backlight">Backlight</option>
+                <option value="none">{t('none', 'нет')}</option>
+              </select>
+            </label>
+            <label className="field">
+              <span className="field-label">{t('pointing device', 'указатель (трекпад, трекбол)')}</span>
+              <select className="select" value={hw.pointing.kind} onChange={(e) => set({ pointing: { ...hw.pointing, kind: e.target.value as HardwareProfile['pointing']['kind'] } }, 'pointing')}>
+                <option value="unknown">{t('unknown', 'неизвестно')}</option>
+                <option value="none">{t('none', 'нет')}</option>
+                <option value="cirque">Cirque trackpad</option>
+                <option value="trackball">{t('trackball', 'трекбол')}</option>
+                <option value="trackpoint">trackpoint</option>
+                <option value="other">{t('other', 'другое')}</option>
+              </select>
+            </label>
+            <label className="field">
+              <span className="field-label">{t('other hardware', 'другое железо')}</span>
+              <textarea className="textarea" value={hw.extras} onChange={(e) => set({ extras: e.target.value }, 'extras')} />
+            </label>
+          </div>
+        </section>
+        <section className="panel-box">
+          <div className="panel-box-head">
+            <span className="cell-label">{t('facts and sources', 'факты и источники')}</span>
+          </div>
+          <div className="panel-box-body field">
+            <div className="layer-stack">
+              {hw.facts.map((f, i) => (
+                <div key={i} className="layer-stack-row" style={{ gridTemplateColumns: 'minmax(80px,auto) minmax(0,1fr) auto' }} title={f.note}>
+                  <code>{f.key}</code>
+                  <span>{f.value}</span>
+                  <span className={`badge ${f.evidence === 'device' ? 'badge--ok' : f.evidence === 'heuristic' ? 'badge--dim' : 'badge--info'}`}>{f.evidence}</span>
+                </div>
+              ))}
+              {hw.facts.length === 0 && <div className="layer-stack-row">{t('No recorded facts yet.', 'Записанных фактов пока нет.')}</div>}
+            </div>
+            <label className="field">
+              <span className="field-label">{t('notes', 'заметки')}</span>
+              <textarea className="textarea" value={hw.notes} onChange={(e) => set({ notes: e.target.value }, 'notes')} />
+            </label>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function VariantsTab({ project }: { project: Project }) {
+  const apply = useProjectStore((s) => s.apply);
+  const [msg, setMsg] = useState<string[]>([]);
+  const importVariant = async () => {
+    const file = await openTextFile(JSON_FILTERS);
+    if (!file) return;
+    try {
+      const json = JSON.parse(file.text);
+      const kind = detectFileKind(json);
+      let g: Geometry | null = null;
+      const notes: string[] = [];
+      if (kind === 'via-definition') {
+        const r = importViaDefinition(json);
+        g = r.geometry;
+        notes.push(...r.issues.map((i) => i.message));
+      } else if (kind === 'kle') {
+        const r = importKle(json, file.name);
+        g = r.geometry;
+        notes.push(...r.issues.map((i) => i.message));
+      } else if (kind === 'qmk-info') {
+        const layout = listQmkLayouts(json)[0];
+        const r = importQmkLayout(json, layout);
+        g = r.geometry;
+        notes.push(...r.issues.map((i) => i.message));
+      } else notes.push(t('Expected a QMK keyboard.json / info.json, a VIA definition or KLE data.', 'Ожидался QMK keyboard.json / info.json, определение VIA или данные KLE.'));
+      if (g) {
+        const { rows, cols } = project.hardware.matrix;
+        const outside = g.keys.filter((k) => k.matrix && (k.matrix[0] >= rows || k.matrix[1] >= cols)).length;
+        if (outside) notes.push(t(`${outside} keys are outside the project matrix ${rows}×${cols} (matrix positions cleared).`, `${outside} клавиш вне матрицы проекта ${rows}×${cols} (позиции сброшены).`));
+        g.keys = g.keys.map((k) => (k.matrix && (k.matrix[0] >= rows || k.matrix[1] >= cols) ? { ...k, matrix: null } : k));
+        const geo = g;
+        apply((p) => addGeometry(p, geo), t('import geometry', 'импорт геометрии'));
+        toast(t('Geometry variant added and activated', 'Вариант геометрии добавлен и выбран'));
+      }
+      setMsg(notes);
+    } catch (err) {
+      setMsg([(err as Error).message]);
+    }
+  };
+  return (
+    <div className="page">
+      <p className="page-lead">{t('One keyboard can have several geometry variants (e.g. approximate and measured). Keymaps are shared — they are stored by matrix position.', 'У клавиатуры может быть несколько вариантов геометрии (например, примерная и измеренная). Раскладки общие — они хранятся по позициям матрицы.')}</p>
+      <div className="panel-box rows">
+        {project.geometries.map((g) => (
+          <div key={g.id} className={`row ${g.id === project.activeGeometryId ? 'is-active' : ''}`} style={{ ['--row-cols' as string]: 'minmax(0,1fr) 140px 90px auto' }}>
+            <input className="input" value={g.name} onChange={(e) => apply((p) => ({ ...p, geometries: p.geometries.map((x) => (x.id === g.id ? { ...x, name: e.target.value } : x)) }), t('rename geometry', 'имя геометрии'), { coalesce: `gname:${g.id}` })} aria-label={t('Name', 'Имя')} />
+            <span className="kicker">
+              {g.source.kind}
+              {g.source.ref ? ` · ${g.source.ref}` : ''}
+            </span>
+            <span className="kicker">
+              {g.keys.length} {t('keys', 'кл.')}
+            </span>
+            <div className="row-actions">
+              <button className="btn" disabled={g.id === project.activeGeometryId} onClick={() => apply((p) => patchProject(p, { activeGeometryId: g.id }), t('select geometry', 'выбор геометрии'))}>
+                {t('use', 'выбрать')}
+              </button>
+              <button className="icon-btn" aria-label={t('Duplicate', 'Копия')} onClick={() => apply((p) => addGeometry(p, cloneGeometry(g, `${g.name} copy`)), t('duplicate geometry', 'копия геометрии'))}>
+                <Copy size={14} strokeWidth={1.5} />
+              </button>
+              <button className="icon-btn" disabled={project.geometries.length <= 1} aria-label={t('Delete', 'Удалить')} onClick={() => apply((p) => removeGeometry(p, g.id), t('delete geometry', 'удаление геометрии'))}>
+                <Trash2 size={14} strokeWidth={1.5} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="field-row">
+        <button className="btn btn--primary" onClick={() => void importVariant()}>
+          {t('import geometry (QMK / VIA / KLE)…', 'импорт геометрии (QMK / VIA / KLE)…')}
+        </button>
+        <button className="btn" onClick={() => apply((p) => addGeometry(p, gridGeometry(p.hardware.matrix.rows, p.hardware.matrix.cols, p.hardware.split.enabled)), t('grid geometry', 'сетка'))}>
+          {t('add a matrix grid', 'добавить сетку по матрице')}
+        </button>
+        {project.hardware.matrix.rows === 10 && project.hardware.matrix.cols === 6 && (
+          <button className="btn" onClick={() => apply((p) => addGeometry(p, dilemma4x6Clone()), t('Dilemma template', 'шаблон Dilemma'))}>
+            {t('add Dilemma 4x6 template', 'добавить шаблон Dilemma 4x6')}
+          </button>
+        )}
+      </div>
+      {msg.length > 0 && (
+        <ul className="issue-list">
+          {msg.map((m, i) => (
+            <li key={i} className="issue issue--warning">
+              {m}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="field-hint">{new Date(project.updatedAt).toLocaleString(locale())}</p>
+    </div>
+  );
+}
+
+export function HardwarePage({ tab }: { tab?: string }) {
+  const project = useProjectStore((s) => s.project);
+  const current = tab === 'profile' || tab === 'variants' || tab === 'pins' ? tab : 'geometry';
+  if (!project) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div className="tabs" role="tablist" style={{ margin: 0, padding: '0 var(--pad)' }}>
+        <a className={`tab ${current === 'geometry' ? 'is-active' : ''}`} href={href({ section: 'hardware' })}>
+          {t('geometry', 'геометрия')}
+        </a>
+        <a className={`tab ${current === 'profile' ? 'is-active' : ''}`} href={href({ section: 'hardware', tab: 'profile' })}>
+          {t('hardware profile', 'профиль железа')}
+        </a>
+        <a className={`tab ${current === 'variants' ? 'is-active' : ''}`} href={href({ section: 'hardware', tab: 'variants' })}>
+          {t('geometry variants', 'варианты геометрии')}
+        </a>
+        <a className={`tab ${current === 'pins' ? 'is-active' : ''}`} href={href({ section: 'hardware', tab: 'pins' })}>
+          {t('board pins (firmware)', 'выводы платы (прошивка)')}
+        </a>
+      </div>
+      <div style={{ flex: 1, minHeight: 0 }}>
+        {current === 'geometry' ? (
+          <GeometryEditor />
+        ) : (
+          <div className="page-scroll" style={{ height: '100%' }}>
+            <div className="page-wrap">{current === 'profile' ? <ProfileTab project={project} /> : current === 'pins' ? <PinsTab project={project} /> : <VariantsTab project={project} />}</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
