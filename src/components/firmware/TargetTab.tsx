@@ -12,6 +12,13 @@ import { toast } from '../../store/toastStore';
 import { OwnTarget } from './OwnTarget';
 import { t } from '../../i18n';
 
+/** `file` relative to `dir` when it is inside it (either slash style), else unchanged. */
+function relativeTo(dir: string, file: string): string {
+  const d = dir.replace(/\\/g, '/').replace(/\/+$/, '');
+  const f = file.replace(/\\/g, '/');
+  return f.toLowerCase().startsWith(`${d.toLowerCase()}/`) ? f.slice(d.length + 1) : file;
+}
+
 export function TargetTab() {
   const project = useProjectStore((s) => s.project);
   const apply = useProjectStore((s) => s.apply);
@@ -21,6 +28,9 @@ export function TargetTab() {
   const keymapSources = useQmkStore((s) => s.keymapSources);
   const loadKeyboards = useQmkStore((s) => s.loadKeyboards);
   const loadSources = useQmkStore((s) => s.loadSources);
+  const trust = useQmkStore((s) => s.trust);
+  const grantTrust = useQmkStore((s) => s.grantTrust);
+  const revokeTrust = useQmkStore((s) => s.revokeTrust);
   const error = useQmkStore((s) => s.error);
   const [query, setQuery] = useState(project?.firmware.keyboard ?? '');
   const [keymap, setKeymap] = useState(project?.firmware.keymap ?? 'navi');
@@ -123,6 +133,49 @@ export function TargetTab() {
               )}
               {keymapSources?.exists ? t(' — the folder exists (files will be compared before writing).', ' — папка уже есть (файлы сравниваются перед записью).') : t(' — a new folder.', ' — новая папка.')}
             </p>
+            {trust && (
+              <>
+                {trust.issues.length === 0 ? (
+                  <p className="field-hint">
+                    {t("The folder's files pass NAVI's safety check — it builds without trust.", 'Файлы папки проходят проверку безопасности NAVI — она собирается без доверия.')}
+                    {trust.trusted && (
+                      <>
+                        {' '}
+                        <span className="badge badge--ok">{t('trusted', 'доверенная')}</span>{' '}
+                        <button className="btn" onClick={() => void revokeTrust(trust.dir)}>
+                          {t('revoke trust', 'отозвать доверие')}
+                        </button>
+                      </>
+                    )}
+                  </p>
+                ) : trust.trusted ? (
+                  <p className="field-hint">
+                    <span className="badge badge--ok">{t('trusted', 'доверенная')}</span> {t("make runs this folder's own code", 'make запускает собственный код этой папки')}{' '}
+                    <button className="btn" onClick={() => void revokeTrust(trust.dir)}>
+                      {t('revoke trust', 'отозвать доверие')}
+                    </button>
+                  </p>
+                ) : (
+                  <>
+                    <div className="notice" style={{ borderColor: 'var(--danger-color)', display: 'block' }}>
+                      <p>{t("NAVI won't build this folder: these files contain code it can't check as safe (make would run it on this computer):", 'NAVI не будет собирать эту папку: в этих файлах есть код, который нельзя проверить как безопасный (make запустил бы его на этом компьютере):')}</p>
+                      {trust.issues.slice(0, 5).map((i) => (
+                        <div key={i.file}>
+                          <code>{relativeTo(trust.dir, i.file)}</code> — {i.reason}
+                        </div>
+                      ))}
+                      {trust.issues.length > 5 && <div>{t(`…and ${trust.issues.length - 5} more`, `…и ещё ${trust.issues.length - 5}`)}</div>}
+                    </div>
+                    <div>
+                      <button className="btn" onClick={() => void grantTrust(trust.dir)}>
+                        {t('trust this folder…', 'доверять этой папке…')}
+                      </button>
+                    </div>
+                    <p className="field-hint">{t('Trust only a folder whose code you know. NAVI keeps the trust on this computer only; you can revoke it.', 'Доверяйте только папке, код которой вы знаете. NAVI хранит доверие только на этом компьютере; его можно отозвать.')}</p>
+                  </>
+                )}
+              </>
+            )}
           </div>
         </section>
         <section className="panel-box">

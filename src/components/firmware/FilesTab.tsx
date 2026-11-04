@@ -18,6 +18,15 @@ import { CustomLines } from './CustomLines';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
+/** Which own-lines panel belongs to a generated file (navi.h has none). */
+const CUSTOM_FILE_OF: Record<string, 'keymap.c' | 'rules.mk' | 'config.h'> = {
+  'keymap.c': 'keymap.c',
+  'rules.mk': 'rules.mk',
+  'config.h': 'config.h',
+  'navi_rules.mk': 'rules.mk',
+  'navi_config.h': 'config.h',
+};
+
 export function useGenerated() {
   const project = useProjectStore((s) => s.project);
   const spec = useSpec();
@@ -39,7 +48,7 @@ export function FilesTab() {
   const sources = useQmkStore((s) => s.sources);
   const loadSources = useQmkStore((s) => s.loadSources);
   const generated = useGenerated();
-  const [file, setFile] = useState<'keymap.c' | 'rules.mk' | 'config.h'>('keymap.c');
+  const [selected, setFile] = useState('keymap.c');
   const [confirm, setConfirm] = useState(false);
   const [writing, setWriting] = useState(false);
   const lang = getLanguage();
@@ -49,7 +58,12 @@ export function FilesTab() {
   }, [project, env, sources, loadSources]);
 
   if (!project || !generated) return null;
-  const current = generated.files.find((f) => f.name === file)!;
+  // The selected file may be gone after a mode switch: fall back to keymap.c.
+  const current = generated.files.find((f) => f.name === selected) ?? generated.files.find((f) => f.name === 'keymap.c') ?? generated.files[0]!;
+  const file = current.name;
+  const pipeline = project.firmware.pipeline;
+  const pipelineOn = pipeline?.enabled === true;
+  const customFile = CUSTOM_FILE_OF[file] ?? null;
   const onDisk = keymapSources?.files.find((f) => f.name === file)?.text ?? null;
   const diff = onDisk !== null ? diffLines(onDisk, current.text) : null;
   const changedFiles = generated.files.filter((f) => (keymapSources?.files.find((x) => x.name === f.name)?.text ?? null) !== f.text);
@@ -59,7 +73,7 @@ export function FilesTab() {
   const canWrite = !!navi && !!env?.homeValid && !!project.firmware.keyboard && errors.length === 0 && !matrixMismatch;
   const via = viaInBuild(project);
   // Errors of the current file's own lines are already shown in the “own lines” panel.
-  const otherIssues = generated.issues.filter((i) => !i.where.startsWith(`${file} · own`));
+  const otherIssues = generated.issues.filter((i) => !(customFile && i.where.startsWith(`${customFile} · own`)));
 
   const write = async () => {
     if (!navi || !env?.home || !project.firmware.keyboard) return;
@@ -83,6 +97,38 @@ export function FilesTab() {
           <label className="checkbox" title={t('Off — pure QMK: everything is in these files, changes need a new build and flashing. On — VIA: the keymap can also be changed over USB without flashing.', 'Выкл. — чистый QMK: всё в этих файлах, изменения — новой сборкой и прошивкой. Вкл. — VIA: раскладку можно менять и по USB без перепрошивки.')}>
             <input type="checkbox" checked={via} onChange={(e) => apply((p) => ({ ...p, firmware: { ...p.firmware, buildFeatures: { ...p.firmware.buildFeatures, via: e.target.checked } } }), 'VIA')} /> VIA <span className="kicker">{via ? t('on', 'вкл.') : t('off — pure QMK', 'выкл. — чистый QMK')}</span>
           </label>
+          <label
+            className="checkbox"
+            style={{ whiteSpace: 'nowrap' }}
+            title={t(
+              "Off — NAVI's hooks (process_record_user, combos, tap dance…) are written into keymap.c as usual. On — they become *_navi functions that your own code calls, and NAVI also writes navi.h, navi_rules.mk and navi_config.h. Your rules.mk and config.h must include navi_rules.mk / navi_config.h once.",
+              'Выкл. — хуки NAVI (process_record_user, комбо, tap dance…) пишутся в keymap.c как обычно. Вкл. — они становятся функциями *_navi, которые вызывает ваш код; NAVI также пишет navi.h, navi_rules.mk и navi_config.h. Ваши rules.mk и config.h должны один раз подключить navi_rules.mk / navi_config.h.',
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={pipelineOn}
+              onChange={(e) => apply((p) => ({ ...p, firmware: { ...p.firmware, pipeline: { headers: p.firmware.pipeline?.headers ?? [], enabled: e.target.checked } } }), t('own pipeline', 'свой pipeline'))}
+            />{' '}
+            {t('own pipeline', 'свой pipeline')} {!pipelineOn && <span className="kicker">{t('off', 'выкл.')}</span>}
+          </label>
+          {pipelineOn && <span className="kicker" style={{ flexBasis: '100%' }}>{t('NAVI writes keymap.c, navi.h, navi_rules.mk, navi_config.h — your rules.mk / config.h stay yours', 'NAVI пишет keymap.c, navi.h, navi_rules.mk, navi_config.h — ваши rules.mk / config.h остаются вашими')}</span>}
+          {pipelineOn && (
+            <label className="field-row">
+              <span className="field-label">{t('headers at the top of keymap.c', 'заголовки в начале keymap.c')}</span>
+              <input
+                key={(pipeline?.headers ?? []).join(' ')}
+                className="input"
+                defaultValue={(pipeline?.headers ?? []).join(' ')}
+                placeholder="my_keycodes.h"
+                spellCheck={false}
+                onBlur={(e) => {
+                  const headers = e.target.value.split(/\s+/).filter(Boolean).slice(0, 20);
+                  if (headers.join(' ') !== (pipeline?.headers ?? []).join(' ')) apply((p) => ({ ...p, firmware: { ...p.firmware, pipeline: { enabled: p.firmware.pipeline?.enabled ?? true, headers } } }), t('pipeline headers', 'заголовки pipeline'));
+                }}
+              />
+            </label>
+          )}
           <span className="kicker">
             {project.firmware.keyboard ? `${keymapSources ? `${rootName} · ` : ''}keyboards/${project.firmware.keyboard}/keymaps/${project.firmware.keymap}/` : t('no target chosen (tab “keyboard”)', 'target не выбран (вкладка «клавиатура»)')}
           </span>
@@ -115,7 +161,7 @@ export function FilesTab() {
             return `+${d.added} −${d.removed}`;
           })();
           return (
-            <button key={f.name} className={`tab ${file === f.name ? 'is-active' : ''}`} onClick={() => setFile(f.name as typeof file)}>
+            <button key={f.name} className={`tab ${file === f.name ? 'is-active' : ''}`} onClick={() => setFile(f.name)}>
               <FileCode2 size={12} strokeWidth={1.5} /> {f.name} <span className="kicker">{st}</span>
             </button>
           );
@@ -141,7 +187,7 @@ export function FilesTab() {
           {current.text}
         </pre>
       )}
-      <CustomLines file={file} generatedSymbols={generated.symbols} />
+      {customFile && <CustomLines file={customFile} generatedSymbols={generated.symbols} />}
       {otherIssues.length > 0 && (
         <ul className="issue-list" style={{ marginTop: 8 }}>
           {otherIssues.map((i, n) => (
@@ -169,6 +215,7 @@ export function FilesTab() {
                   </li>
                 ))}
               </ul>
+              {pipelineOn && <p className="field-hint">{t("rules.mk and config.h are yours: NAVI doesn't touch them.", 'rules.mk и config.h ваши: NAVI их не трогает.')}</p>}
               <p className="field-hint">{t('Other files in the folder are not touched.', 'Другие файлы в папке не трогаются.')}</p>
             </div>
             <div className="modal-foot">
