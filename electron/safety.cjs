@@ -89,13 +89,16 @@ function allowedBuildOption(name, value) {
   return allowedMakeVar(name) && name !== 'SRC' && name !== 'INTROSPECTION_KEYMAP_C' && typeof value === 'string' && MAKE_VALUE_RE.test(value);
 }
 
+// Own pipeline's include of navi_rules.mk next to the makefile; copy of NAVI_RULES_INCLUDE_RE in customCode.ts.
+const NAVI_RULES_INCLUDE_RE = /^include\s+\$\(dir\s+\$\(lastword\s+\$\(MAKEFILE_LIST\)\)\)navi_rules\.mk$/;
+
 function unsafeSource(name, text) {
   if (/\0/.test(text)) return 'binary data';
   if (name === 'rules.mk' || name.endsWith('.mk')) {
     for (const line of text.split(/\r?\n/)) {
       if (line.startsWith('\t')) return 'make recipe line';
       const code = line.replace(/#.*/, '').trim();
-      if (!code) continue;
+      if (!code || NAVI_RULES_INCLUDE_RE.test(code)) continue;
       const m = /^([A-Za-z_][A-Za-z0-9_]*)\s*(\+=|:=|\?=|=)\s*(.*)$/.exec(code);
       if (!m) return `not an assignment: ${code.slice(0, 40)}`;
       if (!allowedMakeVar(m[1])) return `make variable not allowed: ${m[1]}`;

@@ -76,6 +76,10 @@ describe('project storage', () => {
 describe('sources before writing to qmk_firmware', () => {
   it('rules.mk: only flags and drivers, nothing executable', () => {
     expect(unsafeSource('rules.mk', '# NAVI\nVIA_ENABLE = yes\nCONSOLE_ENABLE = yes\nSRC += extra.c\n')).toBeNull();
+    expect(unsafeSource('rules.mk', 'include $(dir $(lastword $(MAKEFILE_LIST)))navi_rules.mk\nVIA_ENABLE = no\n')).toBeNull();
+    for (const bad of ['include $(dir $(lastword $(MAKEFILE_LIST)))navi_rules.mk $(shell x)', 'include $(dir $(lastword $(MAKEFILE_LIST)))../navi_rules.mk']) {
+      expect(unsafeSource('rules.mk', bad), bad).not.toBeNull();
+    }
     for (const bad of ['X_ENABLE = $(shell calc)', 'X_ENABLE != calc', '\tcalc', 'all: ; calc', 'CC = powershell -enc AAAA', 'SHELL = cmd', 'include x.mk', 'SRC += ../x.c', 'X_ENABLE = yes\\#$(shell x)']) {
       expect(unsafeSource('rules.mk', bad), bad).not.toBeNull();
     }
