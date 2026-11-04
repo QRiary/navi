@@ -16,7 +16,7 @@ export interface QmkState {
   env: QmkEnvironment | null;
   detecting: boolean;
   keyboards: string[] | null;
-  sources: { keyboard: string; raw: KeyboardSources; info: KeyboardSourceInfo } | null;
+  sources: { keyboard: string; keymap: string; raw: KeyboardSources; info: KeyboardSourceInfo } | null;
   keymapSources: KeymapSources | null;
   job: { id: number | null; kind: string; running: boolean; startedAt: number } | null;
   log: LogLine[];
@@ -27,6 +27,7 @@ export interface QmkState {
 
   detect(): Promise<void>;
   home(): string | null;
+  userspace(): string | null;
   loadKeyboards(): Promise<void>;
   loadSources(keyboard: string, keymap: string): Promise<void>;
   compile(keyboard: string, keymap: string, env?: Record<string, string>, parallel?: number): Promise<CompileResult | null>;
@@ -95,6 +96,10 @@ export const useQmkStore = create<QmkState>()((set, get) => {
       return env?.homeValid ? env.home : null;
     },
 
+    userspace() {
+      return get().env?.userspace ?? null;
+    },
+
     async loadKeyboards() {
       const home = get().home();
       if (!navi || !home) return;
@@ -109,13 +114,14 @@ export const useQmkStore = create<QmkState>()((set, get) => {
       const home = get().home();
       if (!navi || !home) return;
       try {
-        const raw = await navi.qmk.readKeyboard(home, keyboard);
-        const km = await navi.qmk.readKeymap(home, keyboard, keymap);
+        const userspace = get().userspace();
+        const raw = await navi.qmk.readKeyboard(home, userspace, keyboard);
+        const km = await navi.qmk.readKeymap(home, userspace, keyboard, keymap);
         const info = analyzeKeyboard(
           raw.files,
           km.files.map((f) => ({ path: f.name, text: f.text })),
         );
-        set({ sources: { keyboard, raw, info }, keymapSources: km, error: null });
+        set({ sources: { keyboard, keymap, raw, info }, keymapSources: km, error: null });
       } catch (err) {
         set({ sources: null, keymapSources: null, error: (err as Error).message });
       }
@@ -128,12 +134,20 @@ export const useQmkStore = create<QmkState>()((set, get) => {
       const extra = `${parallel ? ` -j ${parallel}` : ''}${Object.entries(env ?? {}).map(([k, v]) => ` -e ${k}=${v}`).join('')}`;
       set({ log: [{ stream: 'app', text: `$ qmk compile -kb ${keyboard} -km ${keymap}${extra}` }], lastCompile: null, error: null, job: { id: null, kind: 'compile', running: true, startedAt: Date.now() } });
       try {
-        const res = await navi.qmk.compile(qmkSettings(), { home, keyboard, keymap, env, parallel });
+        // The build must use the folder the user sees (the main process checks it against NAVI's lookup and QMK's dry run).
+        const s = get().sources;
+        if (!get().keymapSources || s?.keyboard !== keyboard || s.keymap !== keymap) await get().loadSources(keyboard, keymap);
+        const keymapDir = get().keymapSources?.dir;
+        if (!keymapDir) throw new Error(get().error ?? 'Could not resolve the keymap folder');
+        const res = await navi.qmk.compile(qmkSettings(), { home, userspace: get().userspace(), keyboard, keymap, keymapDir, env, parallel });
         set({ lastCompile: res, job: { ...(get().job ?? { kind: 'compile', startedAt: Date.now() }), id: res.job, running: false } });
         await get().refreshFirmware();
         return res;
       } catch (err) {
-        set({ error: (err as Error).message, job: null });
+        const message = (err as Error).message;
+        // A refused build: show the folder as it is now, so the next build is a choice made on what's on screen.
+        await get().loadSources(keyboard, keymap);
+        set({ error: message, job: null });
         return null;
       }
     },

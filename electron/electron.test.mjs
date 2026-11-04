@@ -178,8 +178,8 @@ describe('firmware', () => {
 
   it('the build file is found from the qmk compile output', () => {
     fs.writeFileSync(path.join(tmp, 'a_b_navi.uf2'), 'x');
-    expect(findBuiltFirmware(tmp, 'a/b', 'navi', 'Copying a_b_navi.uf2 to qmk_firmware folder')).toBe(path.join(tmp, 'a_b_navi.uf2'));
-    expect(findBuiltFirmware(tmp, 'a/b', 'other', '')).toBeNull();
+    expect(findBuiltFirmware({ home: tmp, userspace: null, kb: 'a/b', km: 'navi', output: 'Copying a_b_navi.uf2 to qmk_firmware folder', before: {} })).toBe(path.join(tmp, 'a_b_navi.uf2'));
+    expect(findBuiltFirmware({ home: tmp, userspace: null, kb: 'a/b', km: 'other', output: '', before: {} })).toBeNull();
   });
 
   it('UF2 is parsed over all blocks: addresses, size, family; a broken file — null', () => {

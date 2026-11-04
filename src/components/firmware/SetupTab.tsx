@@ -58,6 +58,16 @@ export function SetupTab() {
                     <span style={{ color: 'var(--danger-color)' }}>{t('not found', 'не найдена')}</span>
                   )}
                 </dd>
+                <dt>QMK userspace</dt>
+                <dd>
+                  {env.userspace ? (
+                    <>
+                      {env.userspace} <span className="badge badge--ok">ok</span>
+                    </>
+                  ) : (
+                    <span className="kicker">{t('none', 'нет')}</span>
+                  )}
+                </dd>
                 {env.git && (
                   <>
                     <dt>{t('version', 'версия')}</dt>

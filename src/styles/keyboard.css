@@ -642,6 +642,11 @@
   color: var(--text-secondary);
 }
 
+/* Folder paths in hints (\\wsl.localhost\...) are long and have no spaces. */
+.field-hint code {
+  overflow-wrap: anywhere;
+}
+
 .input,
 .select {
   height: 30px;

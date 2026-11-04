@@ -31,7 +31,7 @@ export function OwnTarget() {
   useEffect(() => {
     if (!navi || !env?.homeValid || !target) return setExisting(null);
     navi.qmk
-      .readKeyboard(env.home!, target)
+      .readKeyboard(env.home!, env.userspace, target)
       .then((src) => setExisting(Object.fromEntries(src.files.filter((f) => f.path.startsWith(`${target}/`) && !f.path.slice(target.length + 1).includes('/')).map((f) => [f.path.split('/').pop()!, f.text]))))
       .catch(() => setExisting({}));
   }, [env, target]);

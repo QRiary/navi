@@ -104,6 +104,24 @@ function parseQmkConfig(output, key) {
   return value && value !== 'None' ? value : null;
 }
 
+/** A value from `qmk env` output (`KEY="value"` lines, maybe after a shell banner), or null when absent or empty. */
+function parseQmkEnv(output, key) {
+  const line = output.split(/\r?\n/).find((l) => l.startsWith(`${key}=`));
+  if (!line) return null;
+  const value = line.slice(key.length + 1).trim().replace(/^"(.*)"$/, '$1').trim();
+  return value || null;
+}
+
+/** An External Userspace: a folder whose qmk.json has `userspace_version`. Never throws. */
+function isUserspace(dir) {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(dir, 'qmk.json'), 'utf8'));
+    return !!j && typeof j === 'object' && 'userspace_version' in j;
+  } catch {
+    return false;
+  }
+}
+
 /** qmk config home: a Linux path from WSL becomes UNC, an MSYS path /c/... a drive path. */
 function homeFromConfig(value, r) {
   if (r?.kind === 'wsl' && value.startsWith('/')) return toWslUnc(r.distro, value);
@@ -133,6 +151,7 @@ async function detect(settings) {
     home: null,
     homeSource: null,
     homeValid: false,
+    userspace: null,
     git: null,
     wsl,
     errors: [],
@@ -165,6 +184,13 @@ async function detect(settings) {
     report.home = home;
     report.homeValid = isQmkHome(home);
     if (report.homeValid) {
+      const e = await runQmk(settings, ['env'], { timeoutMs: 60000 });
+      const us = parseQmkEnv(e.output, 'QMK_USERSPACE');
+      if (us) {
+        const local = homeFromConfig(us, r);
+        if (isUserspace(local)) report.userspace = local;
+        else report.errors.push(`qmk env names a userspace that is not valid (no qmk.json with userspace_version): ${local}`);
+      }
       const u = fromWslUnc(home);
       // Windows git on \\wsl.localhost trips safe.directory and is slow: ask git inside the distro.
       const gitExe = u ? 'wsl.exe' : findOnPath('git');
@@ -249,7 +275,7 @@ async function listKeyboards(home) {
 }
 
 /** Keyboard definition files along the folder chain (as QMK merges them) + every keymap along the path. */
-function readKeyboard(home, kb) {
+function readKeyboard(home, userspace, kb) {
   checkKb(kb);
   const root = path.join(home, 'keyboards');
   const parts = kb.split('/');
@@ -262,10 +288,12 @@ function readKeyboard(home, kb) {
       const text = readTextIfExists(path.join(dir, name));
       if (text !== null && text.length < MAX_SOURCE) files.push({ path: `${rel}/${name}`, text });
     }
-    const kmDir = path.join(dir, 'keymaps');
-    if (fs.existsSync(kmDir)) {
+    for (const [rootName, base] of [['firmware', root], ['userspace', userspace ? path.join(userspace, 'keyboards') : null]]) {
+      if (!base) continue;
+      const kmDir = joinInside(base, ...parts.slice(0, i), 'keymaps');
+      if (!fs.existsSync(kmDir)) continue;
       for (const e of fs.readdirSync(kmDir, { withFileTypes: true })) {
-        if (e.isDirectory()) keymaps.push({ name: e.name, at: rel, files: fs.readdirSync(path.join(kmDir, e.name)) });
+        if (e.isDirectory()) keymaps.push({ name: e.name, at: rel, root: rootName, files: fs.readdirSync(path.join(kmDir, e.name)) });
       }
     }
   }
@@ -273,21 +301,28 @@ function readKeyboard(home, kb) {
   return { files, keymaps };
 }
 
-/** Keymap folder: looked up along the chain (deepest first), otherwise a new one in the deepest folder. */
-function keymapDir(home, kb, km) {
+/**
+ * The keymap folder QMK builds (locate_keymap): qmk_firmware first, then the userspace; the first root with a match wins,
+ * inside a root the deepest keyboard folder. Only a folder with keymap.c or keymap.json counts.
+ * A new keymap goes to the userspace when there is one, otherwise to the deepest qmk_firmware folder.
+ */
+function keymapDir(home, userspace, kb, km) {
   checkKb(kb);
   checkKm(km);
-  const root = path.join(home, 'keyboards');
   const parts = kb.split('/');
-  for (let i = parts.length; i >= 1; i--) {
-    const dir = joinInside(root, ...parts.slice(0, i), 'keymaps', km);
-    if (fs.existsSync(dir)) return { dir, exists: true };
+  const roots = [['firmware', home], ...(userspace ? [['userspace', userspace]] : [])];
+  for (const [root, base] of roots) {
+    for (let i = parts.length; i >= 1; i--) {
+      const dir = joinInside(path.join(base, 'keyboards'), ...parts.slice(0, i), 'keymaps', km);
+      if (fs.existsSync(path.join(dir, 'keymap.c')) || fs.existsSync(path.join(dir, 'keymap.json'))) return { dir, exists: true, root };
+    }
   }
-  return { dir: joinInside(root, ...parts, 'keymaps', km), exists: false };
+  const [root, base] = userspace ? roots[1] : roots[0];
+  return { dir: joinInside(path.join(base, 'keyboards'), ...parts, 'keymaps', km), exists: false, root };
 }
 
-function readKeymap(home, kb, km) {
-  const { dir, exists } = keymapDir(home, kb, km);
+function readKeymap(home, userspace, kb, km) {
+  const { dir, exists, root } = keymapDir(home, userspace, kb, km);
   const files = [];
   if (exists) {
     for (const name of fs.readdirSync(dir)) {
@@ -296,7 +331,7 @@ function readKeymap(home, kb, km) {
       files.push({ name, text: fs.readFileSync(full, 'utf8') });
     }
   }
-  return { dir, exists, files };
+  return { dir, exists, root, files };
 }
 
 function backupFiles(dataDir, baseDir, names) {
@@ -315,8 +350,8 @@ function backupFiles(dataDir, baseDir, names) {
   return copied ? backup : null;
 }
 
-function writeKeymap(dataDir, home, kb, km, files) {
-  const { dir } = keymapDir(home, kb, km);
+function writeKeymap(dataDir, home, userspace, kb, km, files) {
+  const { dir } = keymapDir(home, userspace, kb, km);
   if (!Array.isArray(files) || files.length === 0) throw new Error('no files');
   for (const f of files) {
     if (!KEYMAP_FILES.has(f.name) || typeof f.text !== 'string' || f.text.length > MAX_SOURCE) throw new Error(`file is not allowed: ${f.name}`);
@@ -441,34 +476,105 @@ function firmwarePath(firmwareDir, id) {
   return joinInside(firmwareDir, id, meta.file);
 }
 
-/** Where QMK left the firmware: the line “Copying <file> to qmk_firmware folder” or by name. */
-function findBuiltFirmware(home, kb, km, output) {
-  const m = output.match(/Copying\s+([^\s]+\.(?:uf2|hex|bin))\s+to qmk_firmware folder/i);
-  const candidates = [];
-  if (m) candidates.push(path.join(home, m[1]));
+const FW_EXTS = ['.uf2', '.hex', '.bin'];
+
+/** Check what QMK would build against what NAVI shows. null = go, string = the reason to refuse. */
+function checkBuildFolder({ output, expected, shown, userspace, toLocal }) {
+  const line = String(output).split(/\r?\n/).find((l) => l.includes('Compiling keymap with'));
+  if (!line) {
+    // QMK marks its own error with ☒ (e.g. "☒ Invalid keymap argument." for a keymap folder it doesn't find).
+    const why = String(output).split(/\r?\n/).find((l) => l.startsWith('☒')) ?? String(output).slice(-300);
+    return `qmk compile -n did not print the build command, so the keymap folder cannot be checked: ${why.trim()}`;
+  }
+  const word = (name) => line.split(/\s+/).find((w) => w.startsWith(`${name}=`))?.slice(name.length + 1) || null;
+  const same = (a, b) => path.resolve(a) === path.resolve(b);
+  const us = word('QMK_USERSPACE');
+  const qmkUs = us ? toLocal(us) : null;
+  if ((qmkUs || userspace) && !(qmkUs && userspace && same(qmkUs, userspace))) {
+    return `QMK uses userspace ${qmkUs ?? 'none'}, NAVI uses ${userspace ?? 'none'}`;
+  }
+  const kmPath = word('MAIN_KEYMAP_PATH_1');
+  let qmkDir = null;
+  if (kmPath) qmkDir = toLocal(kmPath);
+  else if (expected.root !== 'firmware') return `QMK would build the keymap from qmk_firmware, NAVI expects ${expected.dir}`;
+  if (qmkDir && !same(qmkDir, expected.dir)) return `QMK would build ${qmkDir}, NAVI expects ${expected.dir}`;
+  if (!same(shown, expected.dir)) return `QMK would build ${expected.dir}, NAVI shows ${shown}`;
+  return null;
+}
+
+function nameBased(root, kb, km, sub) {
   const base = `${kb.replace(/\//g, '_')}_${km}`;
-  for (const ext of ['.uf2', '.hex', '.bin']) candidates.push(path.join(home, base + ext), path.join(home, '.build', base + ext));
-  for (const c of candidates) if (insideDir(home, c) && fs.existsSync(c)) return c;
+  return FW_EXTS.map((ext) => path.join(root, ...(sub ? [sub] : []), base + ext));
+}
+
+/** Modification times of the firmware files a build could leave, taken right before building. */
+function firmwareSnapshot(home, userspace, kb, km) {
+  const snap = {};
+  const files = [...nameBased(home, kb, km), ...nameBased(home, kb, km, '.build'), ...(userspace ? nameBased(userspace, kb, km) : [])];
+  for (const f of files) {
+    try {
+      snap[f] = fs.statSync(f).mtimeMs;
+    } catch {
+      /* absent */
+    }
+  }
+  return snap;
+}
+
+/** The firmware this build made: named in “Copying <file> to … folder”, or by name; unchanged since `before` → not ours. */
+function findBuiltFirmware({ home, userspace, kb, km, output, before = {} }) {
+  const named = (where) => output.match(new RegExp(`Copying\\s+([^\\s]+\\.(?:uf2|hex|bin))\\s+to ${where} folder`, 'i'))?.[1];
+  const list = [];
+  const u = userspace && named('userspace');
+  if (u) list.push([userspace, path.join(userspace, u)]);
+  const f = named('qmk_firmware');
+  if (f) list.push([home, path.join(home, f)]);
+  for (const c of [...nameBased(home, kb, km), ...nameBased(home, kb, km, '.build')]) list.push([home, c]);
+  if (userspace) for (const c of nameBased(userspace, kb, km)) list.push([userspace, c]);
+  for (const [root, c] of list) {
+    if (!insideDir(root, c)) continue;
+    let m;
+    try {
+      m = fs.statSync(c).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (before[c] === undefined || before[c] !== m) return c;
+  }
   return null;
 }
 
 // ── IPC ────────────────────────────────────────────────────────────────
+
+/** A userspace from the renderer: null, or a folder that really is a userspace. */
+function checkUserspace(userspace) {
+  if (userspace === null || userspace === undefined) return null;
+  validatePath(userspace);
+  if (!isUserspace(userspace)) throw new Error(`not a QMK userspace: ${userspace}`);
+  return userspace;
+}
 
 function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
   const send = (channel, payload) => getWindow()?.webContents.send(channel, payload);
 
   ipcMain.handle('navi:qmk:detect', (_e, settings) => detect(settings));
   ipcMain.handle('navi:qmk:list-keyboards', (_e, home) => listKeyboards(validatePath(home)));
-  ipcMain.handle('navi:qmk:read-keyboard', (_e, home, kb) => readKeyboard(validatePath(home), kb));
-  ipcMain.handle('navi:qmk:read-keymap', (_e, home, kb, km) => readKeymap(validatePath(home), kb, km));
-  ipcMain.handle('navi:qmk:write-keymap', (_e, home, kb, km, files) => writeKeymap(dataDir, validatePath(home), kb, km, files));
+  ipcMain.handle('navi:qmk:read-keyboard', (_e, home, userspace, kb) => readKeyboard(validatePath(home), checkUserspace(userspace), kb));
+  ipcMain.handle('navi:qmk:read-keymap', (_e, home, userspace, kb, km) => readKeymap(validatePath(home), checkUserspace(userspace), kb, km));
+  ipcMain.handle('navi:qmk:write-keymap', (_e, home, userspace, kb, km, files) => writeKeymap(dataDir, validatePath(home), checkUserspace(userspace), kb, km, files));
   ipcMain.handle('navi:qmk:write-keyboard', (_e, home, kb, files) => writeKeyboard(dataDir, validatePath(home), kb, files));
 
   /** Build: a real qmk compile. The result is copied into the firmware archive. */
-  ipcMain.handle('navi:qmk:compile', async (_e, settings, { home, keyboard, keymap, env, parallel }) => {
+  ipcMain.handle('navi:qmk:compile', async (_e, settings, { home, userspace: us, keyboard, keymap, keymapDir: shown, env, parallel }) => {
     validatePath(home);
+    const userspace = checkUserspace(us);
     checkKb(keyboard);
     checkKm(keymap);
+    // QMK must build the folder the user sees: ask it (dry run) before the real build.
+    const dry = await runQmk(settings, ['compile', '-n', '-kb', validateArg(keyboard), '-km', validateArg(keymap)], { cwd: home, timeoutMs: 60000 });
+    const r = await runner(settings);
+    const refusal = checkBuildFolder({ output: dry.output, expected: keymapDir(home, userspace, keyboard, keymap), shown: String(shown ?? ''), userspace, toLocal: (p) => homeFromConfig(p, r) });
+    if (refusal) throw new Error(refusal);
     const args = ['compile', '-kb', validateArg(keyboard), '-km', validateArg(keymap)];
     if (Number.isInteger(parallel) && parallel > 0 && parallel <= 64) args.push('-j', String(parallel));
     for (const [k, v] of Object.entries(env || {})) {
@@ -477,6 +583,7 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
     }
     let jobId = null;
     const started = Date.now();
+    const before = firmwareSnapshot(home, userspace, keyboard, keymap);
     const result = await runQmk(settings, args, {
       cwd: home,
       onJob: (id) => {
@@ -487,7 +594,7 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
     });
     let firmware = null;
     if (result.code === 0) {
-      const built = findBuiltFirmware(home, keyboard, keymap, result.output);
+      const built = findBuiltFirmware({ home, userspace, kb: keyboard, km: keymap, output: result.output, before });
       if (built) firmware = archiveFirmware(firmwareDir, built, { source: 'build', keyboard, keymap, durationMs: Date.now() - started });
     }
     const payload = { job: jobId, code: result.code, firmware, durationMs: Date.now() - started };
@@ -537,4 +644,4 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
   });
 }
 
-module.exports = { registerQmkIpc, chooseRunner, homeFromConfig, parseQmkConfig, runner, keyboardTargets, listKeyboards, readKeyboard, readKeymap, describeFirmware, scanUf2, archiveFirmware, listFirmware, firmwarePath, findBuiltFirmware, isQmkHome, BACKUP_MAX };
+module.exports = { registerQmkIpc, chooseRunner, homeFromConfig, parseQmkConfig, parseQmkEnv, isUserspace, keymapDir, writeKeymap, checkBuildFolder, firmwareSnapshot, runner, keyboardTargets, listKeyboards, readKeyboard, readKeymap, describeFirmware, scanUf2, archiveFirmware, listFirmware, firmwarePath, findBuiltFirmware, isQmkHome, BACKUP_MAX };
