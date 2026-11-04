@@ -40,6 +40,7 @@ export interface QmkEnvironment {
   home: string | null;
   homeSource: 'settings' | 'qmk-config' | 'default-folder' | null;
   homeValid: boolean;
+  userspace: string | null;
   git: { commit: string; date: string } | null;
   errors: string[];
 }
@@ -51,12 +52,13 @@ export interface SourceFile {
 
 export interface KeyboardSources {
   files: SourceFile[];
-  keymaps: { name: string; at: string; files: string[] }[];
+  keymaps: { name: string; at: string; root: 'firmware' | 'userspace'; files: string[] }[];
 }
 
 export interface KeymapSources {
   dir: string;
   exists: boolean;
+  root: 'firmware' | 'userspace';
   files: { name: string; text: string }[];
 }
 
@@ -151,11 +153,11 @@ export interface NaviBridge {
   qmk: {
     detect(settings: QmkSettings): Promise<QmkEnvironment>;
     listKeyboards(home: string): Promise<string[]>;
-    readKeyboard(home: string, kb: string): Promise<KeyboardSources>;
-    readKeymap(home: string, kb: string, km: string): Promise<KeymapSources>;
-    writeKeymap(home: string, kb: string, km: string, files: { name: string; text: string }[]): Promise<{ dir: string; backup: string | null }>;
+    readKeyboard(home: string, userspace: string | null, kb: string): Promise<KeyboardSources>;
+    readKeymap(home: string, userspace: string | null, kb: string, km: string): Promise<KeymapSources>;
+    writeKeymap(home: string, userspace: string | null, kb: string, km: string, files: { name: string; text: string }[]): Promise<{ dir: string; backup: string | null }>;
     writeKeyboard(home: string, kb: string, files: { name: string; text: string }[]): Promise<{ dir: string; backup: string | null }>;
-    compile(settings: QmkSettings, opts: { home: string; keyboard: string; keymap: string; env?: Record<string, string>; parallel?: number }): Promise<CompileResult>;
+    compile(settings: QmkSettings, opts: { home: string; userspace: string | null; keyboard: string; keymap: string; keymapDir: string; env?: Record<string, string>; parallel?: number }): Promise<CompileResult>;
     run(settings: QmkSettings, command: 'doctor' | 'version' | 'env'): Promise<{ job: number | null; code: number | null }>;
     cancel(job: number): Promise<boolean>;
     onStarted(cb: (e: { job: number; kind: string; args: string[] }) => void): () => void;

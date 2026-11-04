@@ -55,6 +55,7 @@ export function FilesTab() {
   const changedFiles = generated.files.filter((f) => (keymapSources?.files.find((x) => x.name === f.name)?.text ?? null) !== f.text);
   const errors = generated.issues.filter((i) => i.level === 'error');
   const matrixMismatch = sources?.info.matrix && (sources.info.matrix.rows !== project.hardware.matrix.rows || sources.info.matrix.cols !== project.hardware.matrix.cols);
+  const rootName = keymapSources?.root === 'userspace' ? 'userspace' : 'qmk_firmware';
   const canWrite = !!navi && !!env?.homeValid && !!project.firmware.keyboard && errors.length === 0 && !matrixMismatch;
   const via = viaInBuild(project);
   // Errors of the current file's own lines are already shown in the “own lines” panel.
@@ -64,7 +65,7 @@ export function FilesTab() {
     if (!navi || !env?.home || !project.firmware.keyboard) return;
     setWriting(true);
     try {
-      const res = await navi.qmk.writeKeymap(env.home, project.firmware.keyboard, project.firmware.keymap, generated.files.map((f) => ({ name: f.name, text: f.text })));
+      const res = await navi.qmk.writeKeymap(env.home, env.userspace, project.firmware.keyboard, project.firmware.keymap, generated.files.map((f) => ({ name: f.name, text: f.text })));
       toast(res.backup ? t(`Written. Backup: ${res.backup}`, `Записано. Резервная копия: ${res.backup}`) : t('Written (new keymap folder)', 'Записано (новая папка keymap)'));
       await loadSources(project.firmware.keyboard, project.firmware.keymap);
     } catch (err) {
@@ -83,7 +84,7 @@ export function FilesTab() {
             <input type="checkbox" checked={via} onChange={(e) => apply((p) => ({ ...p, firmware: { ...p.firmware, buildFeatures: { ...p.firmware.buildFeatures, via: e.target.checked } } }), 'VIA')} /> VIA <span className="kicker">{via ? t('on', 'вкл.') : t('off — pure QMK', 'выкл. — чистый QMK')}</span>
           </label>
           <span className="kicker">
-            {project.firmware.keyboard ? `keyboards/${project.firmware.keyboard}/keymaps/${project.firmware.keymap}/` : t('no target chosen (tab “keyboard”)', 'target не выбран (вкладка «клавиатура»)')}
+            {project.firmware.keyboard ? `${keymapSources ? `${rootName} · ` : ''}keyboards/${project.firmware.keyboard}/keymaps/${project.firmware.keymap}/` : t('no target chosen (tab “keyboard”)', 'target не выбран (вкладка «клавиатура»)')}
           </span>
         </div>
         <div className="toolbar-actions">
@@ -94,7 +95,7 @@ export function FilesTab() {
             <Download {...ICON} /> {t('save as…', 'сохранить как…')}
           </button>
           <button className="btn btn--primary" disabled={!canWrite || changedFiles.length === 0 || writing} onClick={() => setConfirm(true)}>
-            <Save {...ICON} /> {t('write to qmk_firmware', 'записать в qmk_firmware')}
+            <Save {...ICON} /> {t(`write to ${rootName}`, `записать в ${rootName}`)}
           </button>
         </div>
       </div>

@@ -48,7 +48,7 @@ build/           app icon (icon.svg is the source)
 | Reading QMK sources, build log, file diff | `src/core/qmk/sources.ts`, `buildLog.ts`, `textDiff.ts` |
 | Main process: window, `app://`, WebHID permissions, IPC | `electron/main.cjs`, bridge `electron/preload.cjs` ⇄ `src/desktop/bridge.ts` |
 | Projects on disk (draft, save, 50 versions, trash) | `electron/projects.cjs` ⇄ `src/platform/projectRepo.ts` (in a browser — localStorage) |
-| QMK CLI: finding MSYS/qmk, sources, writing the keymap with a backup, compile, firmware archive | `electron/qmk.cjs`, `electron/runner.cjs` (only validated arguments) |
+| QMK CLI: finding MSYS/qmk, sources, writing the keymap with a backup, compile, firmware archive; External Userspace: keymap lookup like QMK's `locate_keymap`, a `qmk compile -n` dry run refuses a build when QMK would use another folder, only firmware this build made is taken | `electron/qmk.cjs`, `electron/runner.cjs` (only validated arguments) |
 | Flashing: bootloaders from the QMK table, UF2 with chip family check, `CURRENT.UF2` backup, `qmk flash` | `electron/flash.cjs` |
 | WebHID transport, `--probe-device` mode | `src/device/webhid.ts`, `src/device/probeRun.ts` |
 | Stores: project + undo/redo + draft; device; QMK; settings | `src/store/projectStore.ts`, `deviceStore.ts`, `qmkStore.ts`, `settingsStore.ts` |

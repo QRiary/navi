@@ -29,8 +29,8 @@ export function TargetTab() {
     if (env?.homeValid && !keyboards) void loadKeyboards();
   }, [env, keyboards, loadKeyboards]);
   useEffect(() => {
-    if (project?.firmware.keyboard && env?.homeValid && sources?.keyboard !== project.firmware.keyboard) void loadSources(project.firmware.keyboard, project.firmware.keymap);
-  }, [project?.firmware.keyboard, project?.firmware.keymap, env, sources?.keyboard, loadSources]);
+    if (project?.firmware.keyboard && env?.homeValid && (sources?.keyboard !== project.firmware.keyboard || sources?.keymap !== project.firmware.keymap)) void loadSources(project.firmware.keyboard, project.firmware.keymap);
+  }, [project?.firmware.keyboard, project?.firmware.keymap, env, sources?.keyboard, sources?.keymap, loadSources]);
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -112,7 +112,15 @@ export function TargetTab() {
               />
             </label>
             <p className="field-hint">
-              {t('Your keymap lives in', 'Ваш keymap будет в')} <code>keyboards/{project.firmware.keyboard ?? '…'}/keymaps/{keymap}/</code>
+              {keymapSources ? (
+                <>
+                  {t('Builds from', 'Собирается из')} <code>{keymapSources.dir}</code> <span className="kicker">{keymapSources.root === 'userspace' ? 'userspace' : 'qmk_firmware'}</span>
+                </>
+              ) : (
+                <>
+                  {t('Your keymap lives in', 'Ваш keymap будет в')} <code>keyboards/{project.firmware.keyboard ?? '…'}/keymaps/{keymap}/</code>
+                </>
+              )}
               {keymapSources?.exists ? t(' — the folder exists (files will be compared before writing).', ' — папка уже есть (файлы сравниваются перед записью).') : t(' — a new folder.', ' — новая папка.')}
             </p>
           </div>
