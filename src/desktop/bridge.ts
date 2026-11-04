@@ -142,6 +142,20 @@ export interface Uf2Check {
   expected?: number[];
 }
 
+/** The linked file now; changed = its text differs from what NAVI last read from or wrote to it. */
+export interface LinkedFileState {
+  path: string;
+  exists: boolean;
+  text: string | null;
+  hash: string | null;
+  changed: boolean;
+}
+
+export type LinkWriteResult =
+  | { status: 'written'; path: string }
+  | { status: 'missing'; path: string }
+  | { status: 'conflict'; path: string; text: string; hash: string };
+
 export interface NaviBridge {
   platform: string;
   info(): Promise<NaviInfo>;
@@ -177,6 +191,23 @@ export interface NaviBridge {
     onStarted(cb: (e: { job: number; kind: string; args: string[] }) => void): () => void;
     onLog(cb: (e: LogEvent) => void): () => void;
     onDone(cb: (e: { job: number | null; code: number | null }) => void): () => void;
+  };
+  /** Projects linked to a file the user picked: the link is kept only in NAVI's local data (electron/links.cjs). */
+  links: {
+    /** null = the project is not linked. */
+    state(id: string): Promise<LinkedFileState | null>;
+    /** Open dialog; the token links the picked file to the project created from it (attach). */
+    open(): Promise<{ token: string; name: string; path: string; text: string } | null>;
+    attach(token: string, id: string): Promise<string>;
+    /** Save dialog: writes the text there and links the project; the path, or null when canceled. */
+    create(id: string, name: string, text: string): Promise<string | null>;
+    /** Open dialog: points the link to another file; the new state, or null when canceled. */
+    relink(id: string): Promise<LinkedFileState | null>;
+    /** The user saw this version of the file: it is the known one now. */
+    accept(id: string, hash: string): Promise<void>;
+    /** expectHash: the version the user saw and chose to overwrite. */
+    write(id: string, text: string, expectHash?: string): Promise<LinkWriteResult>;
+    unlink(id: string): Promise<void>;
   };
   /** Trusted keymap folders: kept only in NAVI's local data; a trusted folder's own C/make code is built as is. */
   trust: {
