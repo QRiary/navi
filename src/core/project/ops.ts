@@ -10,7 +10,7 @@ import { decode, encode, type Decoded } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
 import { newId } from '../layout/geometry';
 import { KC_NO, KC_TRNS, makeLayer } from './factory';
-import type { EncoderAction, Geometry, KeyGeom, Keymap, Layer, MatrixPos, Project } from './types';
+import type { EncoderAction, Geometry, HoldAction, KeyGeom, Keymap, Layer, MatrixPos, Project, TapHoldAction } from './types';
 
 // ── Access ────────────────────────────────────────────────────────────
 
@@ -166,8 +166,42 @@ export function remapLayerRef(spec: KeycodeSpec, value: number, mapping: (old: n
   return next ? encode(spec, next) : KC_NO;
 }
 
+/**
+ * Tap-hold keys with actions (tapHoldActions) after a layer move: slots are renumbered like any keycode, an LT
+ * stand-in follows its hold layer. One whose hold layer is gone (or whose hold key became KC_NO) is removed and its
+ * keys become the plain tap. Returns the kept actions and the new keycode of every old stand-in.
+ */
+function remapTapHoldActions(p: Project, spec: KeycodeSpec, mapping: (old: number) => number | null, fix: (v: number) => number) {
+  const replaced = new Map<number, number>();
+  const actions: TapHoldAction[] = [];
+  for (const a of p.tapHoldActions) {
+    if (replaced.has(a.keycode)) continue;
+    const tap = fix(a.tap);
+    let hold: HoldAction | null = a.hold;
+    let keycode = a.keycode;
+    if (a.hold.type === 'layer') {
+      const n = mapping(a.hold.layer);
+      const d = decode(spec, a.keycode);
+      if (n === null || n > 15 || d.kind !== 'layer-tap') hold = null;
+      else {
+        hold = { ...a.hold, layer: n };
+        keycode = encode(spec, { ...d, layer: n });
+      }
+    } else if (a.hold.type === 'key') {
+      const k = fix(a.hold.keycode);
+      hold = k === KC_NO ? null : { type: 'key', keycode: k };
+    }
+    replaced.set(a.keycode, hold ? keycode : tap);
+    if (hold) actions.push({ ...a, keycode, tap, hold });
+  }
+  return { actions, replaced };
+}
+
 function remapAllLayerRefs(p: Project, keymapId: string, spec: KeycodeSpec, mapping: (old: number) => number | null): Project {
-  const fix = (v: number) => remapLayerRef(spec, v, mapping);
+  const plainFix = (v: number) => remapLayerRef(spec, v, mapping);
+  const { actions: tapHoldActions, replaced } = remapTapHoldActions(p, spec, mapping, plainFix);
+  const kept = new Set(tapHoldActions.map((a) => a.keycode));
+  const fix = (v: number) => replaced.get(v) ?? plainFix(v);
   const keymaps = p.keymaps.map((k) =>
     k.id !== keymapId
       ? k
@@ -188,6 +222,7 @@ function remapAllLayerRefs(p: Project, keymapId: string, spec: KeycodeSpec, mapp
   // An alias follows its key: TG(2) stays the same layer after a reorder. An alias of a deleted layer goes away,
   // otherwise its label would land on every KC_NO (or on the plain tap key of an LT).
   const refsDeleted = (v: number) => {
+    if (replaced.has(v)) return !kept.has(replaced.get(v) ?? -1);
     const d = decode(spec, v);
     return (d.kind === 'layer' || d.kind === 'layer-tap' || d.kind === 'layer-mod') && mapping(d.layer) === null;
   };
@@ -196,7 +231,7 @@ function remapAllLayerRefs(p: Project, keymapId: string, spec: KeycodeSpec, mapp
   const tapHolds = p.tapHolds
     .filter((s) => !refsDeleted(s.keycode))
     .map((s) => ({ ...s, keycode: fix(s.keycode), ...(s.holdOnKeys ? { holdOnKeys: s.holdOnKeys.filter((k) => !refsDeleted(k)).map(fix) } : {}) }));
-  return touch({ ...p, keymaps, tapDances, combos, keyOverrides, keyAliases, tapHolds });
+  return touch({ ...p, keymaps, tapDances, combos, keyOverrides, keyAliases, tapHolds, tapHoldActions });
 }
 
 export function addLayer(p: Project, keymapId: string, name: string, at?: number): Project {

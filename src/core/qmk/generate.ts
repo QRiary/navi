@@ -10,7 +10,7 @@
  * Structure formats follow the current QMK sources (process_tap_dance.h, combo, key_override,
  * keymap_introspection.c: encoder_map must have as many layers as keymaps).
  */
-import { toQmk, type NameContext } from '../keycodes/codec';
+import { modsToConstExpr, toQmk, type NameContext } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
 import { FEATURE_BY_ID, type FeatureId } from '../features/registry';
 import { checkCombos, checkKeyOverrides, checkLeaderSequences, checkTapDances, checkUnicodeMap, leaderFunction, type AdvancedIssue } from '../features/advanced';
@@ -20,11 +20,12 @@ import { checkCustom, customBlock, CUSTOM_FILES, hasCustomCode, NAVI_HOOKS, PIPE
 import { requiredFeatures } from '../features/required';
 import { RGB_MATRIX_EFFECTS } from '../lighting/effects';
 import { effectiveMaxBrightness, rgbTargetDefaults } from '../lighting/buildDefaults';
-import type { Keymap, MacroStep, Project } from '../project/types';
+import type { HoldAction, Keymap, MacroStep, Project } from '../project/types';
 import { activeGeometry } from '../project/ops';
 import { checkKeyAliases } from '../project/aliases';
 import { checkTapHolds, effectiveTapHolds } from '../project/tapHolds';
-import { hasHoldKeys, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, lastPressedState, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessStub, quickTapHook, quickTapStub } from './tapHold';
+import { checkTapHoldActions, effectiveTapHoldActions } from '../project/tapHoldActions';
+import { hasHoldKeys, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, replayTracked, tapHoldsCode, type StandIn } from './tapHold';
 import { layoutMacro, renderLayers, textLayout } from './layoutText';
 
 export interface GeneratedFile {
@@ -176,12 +177,19 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const customs = project.customKeycodes;
   const customStart = spec.rangeByDefine.get('QK_USER')?.start ?? 0x7e40;
   const customName = (v: number) => (v >= customStart && v < customStart + customs.length ? customs[v - customStart].name : undefined);
-  const ctx: NameContext = {
+  // Tap-hold keys with actions: their stand-in MT / LT keycodes get the names NAVI_TH_n (#define'd below).
+  const thActions = effectiveTapHoldActions(spec, project);
+  const standInName = new Map(thActions.map((a, i) => [a.keycode, `NAVI_TH_${i}`]));
+  const rawCtx: NameContext = {
     layerName: (l) => layerIds[l],
     tapDanceName: (i) => project.tapDances.find((t) => t.index === i)?.name,
     customName,
   };
+  const ctx: NameContext = { ...rawCtx, customName: (v) => standInName.get(v) ?? customName(v) };
   const kc = (v: number) => toQmk(spec, v, ctx, { unicode: project.firmware.unicode });
+  const rawKc = (v: number) => toQmk(spec, v, rawCtx, { unicode: project.firmware.unicode });
+  const holdText = (h: HoldAction) =>
+    h.type === 'mods' ? modsToConstExpr(h.mods) : h.type === 'layer' ? `layer ${layerIds[h.layer] ?? h.layer}${h.mods ? ` + ${modsToConstExpr(h.mods)}` : ''}` : kc(h.keycode);
   const issues: AdvancedIssue[] = [
     ...checkTapDances(spec, project.tapDances),
     ...checkCombos(project, project.combos),
@@ -193,7 +201,9 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const aliases = checkKeyAliases(project, layerIds);
   issues.push(...aliases.issues);
   issues.push(...checkTapHolds(spec, project));
+  issues.push(...checkTapHoldActions(spec, project));
   const tapHold = planTapHolds(effectiveTapHolds(spec, project), kc);
+  const tracked = replayTracked(tapHold);
   // “Own pipeline”: the hooks get a _navi suffix, enums and prototypes go to navi.h, build settings to navi_*.
   const pipeline = project.firmware.pipeline?.enabled === true;
   const hookName = (qmk: keyof typeof NAVI_HOOKS) => (pipeline ? NAVI_HOOKS[qmk] : qmk);
@@ -301,6 +311,12 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     unicodeTable.forEach((u) => c.push(`    [${u.name}] = 0x${u.codepoint.toString(16).toUpperCase().padStart(4, '0')},`));
     c.push('};');
     c.push('');
+  }
+  if (thActions.length) {
+    decl.push('// Tap-hold keys with actions (NAVI key editor → Tap-hold): QMK decides tap or hold on these stand-in MT / LT');
+    decl.push('// keycodes as usual, keymap.c plays the actions (navi_tap_holds). Their base keys are never sent.');
+    thActions.forEach((a) => decl.push(`#define ${standInName.get(a.keycode)} ${rawKc(a.keycode)} // tap: ${commentText(kc(a.tap))} · hold: ${commentText(holdText(a.hold))}`));
+    decl.push('');
   }
   if (aliases.defines.length) {
     decl.push('// Key aliases (NAVI: Advanced → Aliases): names of keycodes for your own code. The keymap below uses the keycodes themselves.');
@@ -471,7 +487,9 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const quickTap = tapHold.quick.length > 0;
   const holdPress = tapHold.holdPress.length > 0;
   const permissive = tapHold.permissive.length > 0;
-  if (holdKeys) c.push(...lastPressedState(hookName('pre_process_record_user')));
+  const replay = tracked.length > 0;
+  const preProcess = holdKeys || replay;
+  if (preProcess) c.push(...preProcessHook(hookName('pre_process_record_user'), { lastPressed: holdKeys, replay, interrupters: holdKeys && tracked.some((h) => h.holdKeys.length > 0) }));
   if (quickTap) c.push(...quickTapHook(hookName('get_quick_tap_term'), tapHold));
   if (holdPress) c.push(...holdOnOtherKeyPressHook(hookName('get_hold_on_other_key_press'), tapHold));
   if (permissive) c.push(...permissiveHoldHook(hookName('get_permissive_hold'), tapHold));
@@ -496,9 +514,20 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push(...layerOnTopCallback(hookName('layer_state_set_user')));
   }
   const keysInCode = sendStringCustoms.length > 0 || macroHandledInCode;
-  if (keysInCode || layersOnTop) {
+  const tapHoldInCode = thActions.length > 0 || replay;
+  if (tapHoldInCode) {
+    const standIns: StandIn[] = thActions.map((a) => ({
+      name: standInName.get(a.keycode)!,
+      tap: kc(a.tap),
+      hold: a.hold.type === 'key' ? { type: 'key', key: kc(a.hold.keycode) } : a.hold.type === 'layer' ? { type: 'layer', mask: a.hold.mods ? modMask(a.hold.mods) : null } : { type: 'mods', mask: modMask(a.hold.mods) },
+    }));
+    c.push(...tapHoldsCode({ standIns, tracked, interrupters: tracked.some((h) => h.holdKeys.length > 0), layerOff: layersOnTop ? 'navi_layer_off' : 'layer_off' }));
+  }
+  const recordHook = keysInCode || layersOnTop || tapHoldInCode;
+  if (recordHook) {
     c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
     if (layersOnTop) c.push('    navi_layer_keys(keycode, record); // layer keys bring their layer to the top');
+    if (tapHoldInCode) c.push('    if (!navi_tap_holds(keycode, record)) return false; // tap-hold keys: actions and the replay fix');
   }
   if (keysInCode) {
     c.push('    if (!record->event.pressed) return true;');
@@ -517,7 +546,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     }
     c.push('    }');
   }
-  if (keysInCode || layersOnTop) {
+  if (recordHook) {
     c.push('    return true;');
     c.push('}');
     c.push('');
@@ -525,13 +554,13 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
 
   // Which hooks the project fills (in both modes the same conditions as above).
   const hookUsed: Record<keyof typeof NAVI_HOOKS, boolean> = {
-    process_record_user: keysInCode || layersOnTop,
+    process_record_user: recordHook,
     layer_state_set_user: layersOnTop,
     get_tapping_term: tappingTerms,
     get_quick_tap_term: quickTap,
     get_hold_on_other_key_press: holdPress,
     get_permissive_hold: permissive,
-    pre_process_record_user: holdKeys,
+    pre_process_record_user: preProcess,
     get_combo_term: comboTerms.length > 0,
     combo_should_trigger: comboLayers.length > 0,
     leader_end_user: leaders.length > 0,
@@ -675,8 +704,12 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (!pipeline && quickTap) generatedSymbols.add('get_quick_tap_term');
   if (!pipeline && holdPress) generatedSymbols.add('get_hold_on_other_key_press');
   if (!pipeline && permissive) generatedSymbols.add('get_permissive_hold');
-  if (!pipeline && holdKeys) generatedSymbols.add('pre_process_record_user');
-  if (!pipeline && (keysInCode || layersOnTop)) generatedSymbols.add('process_record_user');
+  if (!pipeline && preProcess) generatedSymbols.add('pre_process_record_user');
+  if (!pipeline && recordHook) generatedSymbols.add('process_record_user');
+  if (holdKeys) generatedSymbols.add('navi_last_pressed');
+  if (replay) for (const name of ['navi_down', 'navi_interrupted', 'navi_interrupter', 'navi_watch_presses', 'navi_held_tap', 'navi_forces_hold', 'navi_hold']) generatedSymbols.add(name);
+  if (tapHoldInCode) generatedSymbols.add('navi_tap_holds');
+  if (thActions.length) for (const name of ['navi_sending', 'navi_send', ...standInName.values()]) generatedSymbols.add(name);
   if (!pipeline && leaders.length) generatedSymbols.add('leader_end_user');
   if (!pipeline && layersOnTop) generatedSymbols.add('layer_state_set_user');
   if (pipeline || layersOnTop) for (const name of ['navi_layers_on', 'navi_layer_off']) generatedSymbols.add(name);
@@ -714,15 +747,16 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       {
         hook: 'process_record_user',
         call: 'if (!process_record_navi(keycode, record)) return false;',
-        why: keysInCode
-          ? { en: `custom keycodes and macros${layersOnTop ? '; layer keys bring their layer to the top' : ''}`, ru: `свои keycodes и макросы${layersOnTop ? '; клавиши слоёв поднимают свой слой наверх' : ''}` }
-          : { en: 'layer keys bring their layer to the top: it must see layer key releases', ru: 'клавиши слоёв поднимают свой слой наверх: она должна видеть отпускание клавиш слоёв' },
+        why: {
+          en: [keysInCode && 'custom keycodes and macros', tapHoldInCode && 'tap-hold keys (call it first: it plays their actions)', layersOnTop && 'layer keys bring their layer to the top: it must see layer key releases'].filter(Boolean).join('; '),
+          ru: [keysInCode && 'свои keycodes и макросы', tapHoldInCode && 'тап-холд клавиши (вызывайте её первой: она играет их действия)', layersOnTop && 'клавиши слоёв поднимают свой слой наверх: она должна видеть отпускание клавиш слоёв'].filter(Boolean).join('; '),
+        },
       },
       { hook: 'get_tapping_term', call: 'return get_tapping_term_navi(keycode, record);', why: { en: 'TAPPING_TERM_PER_KEY is on — without it the build fails', ru: 'включён TAPPING_TERM_PER_KEY — без неё сборка не пройдёт' } },
       { hook: 'get_quick_tap_term', call: 'return get_quick_tap_term_navi(keycode, record);', why: { en: 'QUICK_TAP_TERM_PER_KEY is on — without it the build still passes, but the per-key quick tap terms do nothing', ru: 'включён QUICK_TAP_TERM_PER_KEY — без неё сборка пройдёт, но quick tap по клавишам не сработает' } },
       { hook: 'get_hold_on_other_key_press', call: 'return get_hold_on_other_key_press_navi(keycode, record);', why: { en: 'HOLD_ON_OTHER_KEY_PRESS_PER_KEY is on — without it the build still passes, but the tap-hold modes and hold keys do nothing and HOLD_ON_OTHER_KEY_PRESS is ignored', ru: 'включён HOLD_ON_OTHER_KEY_PRESS_PER_KEY — без неё сборка пройдёт, но режимы тап-холд и клавиши удержания не сработают, а HOLD_ON_OTHER_KEY_PRESS будет проигнорирован' } },
       { hook: 'get_permissive_hold', call: 'return get_permissive_hold_navi(keycode, record);', why: { en: 'PERMISSIVE_HOLD_PER_KEY is on — without it the build still passes, but the balanced mode does nothing and PERMISSIVE_HOLD is ignored', ru: 'включён PERMISSIVE_HOLD_PER_KEY — без неё сборка пройдёт, но режим balanced не сработает, а PERMISSIVE_HOLD будет проигнорирован' } },
-      { hook: 'pre_process_record_user', call: 'return pre_process_record_navi(keycode, record);', why: { en: 'tap-hold “hold when pressed” keys need the key pressed last', ru: 'тап-холд «удержание при нажатии» нужна последняя нажатая клавиша' } },
+      { hook: 'pre_process_record_user', call: 'return pre_process_record_navi(keycode, record);', why: { en: 'tap-hold keys set to hold when another key is pressed need the real order of key presses', ru: 'тап-холд клавишам, которые удерживаются при нажатии другой клавиши, нужен настоящий порядок нажатий' } },
       { hook: 'get_combo_term', call: 'return get_combo_term_navi(combo_index, combo);', why: { en: 'COMBO_TERM_PER_COMBO is on — without it the build fails', ru: 'включён COMBO_TERM_PER_COMBO — без неё сборка не пройдёт' } },
       { hook: 'combo_should_trigger', call: 'return combo_should_trigger_navi(combo_index, combo, keycode, record);', why: { en: 'COMBO_SHOULD_TRIGGER is on — combo layer limits', ru: 'включён COMBO_SHOULD_TRIGGER — ограничения комбинаций по слоям' } },
       { hook: 'leader_end_user', call: 'leader_end_navi();', why: { en: 'leader sequences', ru: 'последовательности leader' } },

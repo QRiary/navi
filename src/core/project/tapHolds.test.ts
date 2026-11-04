@@ -40,8 +40,7 @@ describe('tap-hold settings: model', () => {
     const v6 = JSON.parse(serializeProject(base()));
     v6.schemaVersion = 6;
     delete v6.tapHolds;
-    expect(PROJECT_SCHEMA_VERSION).toBe(7);
-    expect(migrateProject(v6)).toMatchObject({ from: 6, data: { schemaVersion: 7, tapHolds: [] } });
+    expect(migrateProject(v6)).toMatchObject({ from: 6, data: { schemaVersion: PROJECT_SCHEMA_VERSION, tapHolds: [] } });
     const { project, issues } = validateProject(v6);
     expect(issues.filter((i) => i.level === 'error')).toEqual([]);
     expect(project?.tapHolds).toEqual([]);

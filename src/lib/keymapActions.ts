@@ -5,7 +5,8 @@
 import { keyCenter } from '../core/layout/geometry';
 import { KC_NO, KC_TRNS } from '../core/project/factory';
 import { activeGeometry, activeKeymap, posIndex, setEncoder, setKeycodeMap, setKeycodes, swapKeycodes } from '../core/project/ops';
-import type { KeyGeom, MatrixPos } from '../core/project/types';
+import type { HoldAction, KeyGeom, MatrixPos } from '../core/project/types';
+import { ensureTapHold, pruneTapHoldActions } from '../core/project/tapHoldActions';
 import { toQmk } from '../core/keycodes/codec';
 import { loadSpec } from '../core/keycodes/spec';
 import { t } from '../i18n';
@@ -42,7 +43,33 @@ export function assignToSelection(keycode: number): boolean {
     toast(t('Select a key on the keyboard first', 'Сначала выберите клавишу на схеме'));
     return false;
   }
-  useProjectStore.getState().apply((p) => setKeycodes(p, c.keymap.id, c.layer, positions, keycode), `${positions.length}× ${toQmk(spec, keycode)}`);
+  useProjectStore.getState().apply((p) => pruneTapHoldActions(setKeycodes(p, c.keymap.id, c.layer, positions, keycode)), `${positions.length}× ${toQmk(spec, keycode)}`);
+  return true;
+}
+
+/**
+ * Assign a tap-hold key (any tap, any hold) to the selected keys: plain MT / LT when QMK can say it, else a stand-in
+ * with its action (core/project/tapHoldActions.ts). Actions no key uses any more are dropped in the same step.
+ */
+export function assignTapHoldToSelection(tap: number, hold: HoldAction): boolean {
+  const c = ctx();
+  if (!c) return false;
+  const spec = loadSpec(c.project.firmware.keycodeSpec);
+  const positions = wired(c.selected);
+  if (c.editor.encoderTarget || positions.length === 0) {
+    toast(t('Select a key on the keyboard first', 'Сначала выберите клавишу на схеме'));
+    return false;
+  }
+  try {
+    ensureTapHold(spec, c.project, tap, hold); // the error, before an undo step is made
+  } catch (e) {
+    toast(e instanceof Error ? e.message : String(e));
+    return false;
+  }
+  useProjectStore.getState().apply((p) => {
+    const r = ensureTapHold(spec, p, tap, hold);
+    return pruneTapHoldActions(setKeycodes(r.project, c.keymap.id, c.layer, positions, r.keycode));
+  }, `${positions.length}× tap-hold ${toQmk(spec, tap)}`);
   return true;
 }
 

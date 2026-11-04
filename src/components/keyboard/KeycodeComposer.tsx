@@ -7,17 +7,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { decode, encode, KeycodeError, LAYER_FN_RANGES, toQmk, tryParseQmk, type Decoded, type LayerFn } from '../../core/keycodes/codec';
 import type { KeycodeSpec } from '../../core/keycodes/spec';
 import { preferredName } from '../../core/keycodes/codec';
-import type { Project } from '../../core/project/types';
+import type { HoldAction, Project } from '../../core/project/types';
+import { ensureTapHold, plainTapHold, tapHoldSlots } from '../../core/project/tapHoldActions';
+import { KeycodeField } from '../advanced/common';
 import { activeKeymap } from '../../core/project/ops';
 import { t } from '../../i18n';
 
-type Kind = 'basic' | 'mods' | 'mod-tap' | 'layer-tap' | 'layer' | 'layer-mod' | 'one-shot' | 'tap-dance' | 'unicode' | 'raw';
+type Kind = 'basic' | 'mods' | 'tap-hold' | 'layer' | 'layer-mod' | 'one-shot' | 'tap-dance' | 'unicode' | 'raw';
 
 const KIND_LABELS = (): Record<Kind, string> => ({
   basic: t('key', 'клавиша'),
   mods: t('mods+key', 'мод+клавиша'),
-  'mod-tap': 'mod-tap',
-  'layer-tap': 'layer-tap',
+  'tap-hold': t('tap-hold', 'тап-холд'),
   layer: t('layer', 'слой'),
   'layer-mod': 'LM',
   'one-shot': 'one-shot',
@@ -34,9 +35,8 @@ function kindOf(d: Decoded): Kind {
     case 'mods':
       return 'mods';
     case 'mod-tap':
-      return 'mod-tap';
     case 'layer-tap':
-      return 'layer-tap';
+      return 'tap-hold';
     case 'layer':
       return 'layer';
     case 'layer-mod':
@@ -123,14 +123,61 @@ export function LayerSelect({ project, value, max, onChange }: { project: Projec
   );
 }
 
+/** The two slots of a tap-hold key: tap = any keycode; hold = modifiers, a layer (+ modifiers) or any keycode. */
+function TapHoldSlots({ spec, project, tap, hold, onChange }: { spec: KeycodeSpec; project: Project; tap: number; hold: HoldAction; onChange: (tap: number, hold: HoldAction) => void }) {
+  const holdMods = hold.type === 'key' ? 0 : hold.mods;
+  const kinds: { type: HoldAction['type']; label: string; make: () => HoldAction }[] = [
+    { type: 'mods', label: t('modifiers', 'модификаторы'), make: () => ({ type: 'mods', mods: (holdMods & 0x0f) === 0 ? 0x01 : holdMods }) },
+    { type: 'layer', label: t('layer', 'слой'), make: () => ({ type: 'layer', layer: 1, mods: 0 }) },
+    { type: 'key', label: t('key', 'клавиша'), make: () => ({ type: 'key', keycode: 0x04 }) },
+  ];
+  return (
+    <>
+      <div className="field-row">
+        <span className="field-hint">{t('tap:', 'нажатие:')}</span>
+        {tap <= 0xff && <BasicKeySelect spec={spec} value={tap} label={t('Tap key', 'Клавиша нажатия')} onChange={(v) => onChange(v, hold)} />}
+        <KeycodeField value={tap} label={t('Tap: any keycode', 'Нажатие: любой keycode')} onChange={(v) => onChange(v, hold)} />
+      </div>
+      <div className="field-row">
+        <span className="field-hint">{t('hold:', 'удержание:')}</span>
+        <div className="seg" role="group" aria-label={t('Hold action', 'Действие удержания')}>
+          {kinds.map((k) => (
+            <button key={k.type} type="button" className={hold.type === k.type ? 'is-on' : ''} onClick={() => hold.type !== k.type && onChange(tap, k.make())}>
+              {k.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {hold.type === 'mods' && <ModsInput mods={hold.mods} onChange={(m) => onChange(tap, { type: 'mods', mods: m })} />}
+      {hold.type === 'layer' && (
+        <>
+          <div className="field-row">
+            <LayerSelect project={project} value={hold.layer} max={15} onChange={(l) => onChange(tap, { ...hold, layer: l })} />
+            <span className="field-hint">{t('+ modifiers (optional):', '+ модификаторы (необязательно):')}</span>
+          </div>
+          <ModsInput mods={hold.mods} onChange={(m) => onChange(tap, { ...hold, mods: (m & 0x0f) === 0 ? 0 : m })} />
+        </>
+      )}
+      {hold.type === 'key' && (
+        <div className="field-row">
+          <KeycodeField value={hold.keycode} label={t('Hold: any keycode', 'Удержание: любой keycode')} onChange={(v) => onChange(tap, { type: 'key', keycode: v })} />
+          <span className="field-hint">{t('held down while you hold', 'зажата, пока держите')}</span>
+        </div>
+      )}
+    </>
+  );
+}
+
 interface ComposerProps {
   spec: KeycodeSpec;
   project: Project;
   value: number;
   onChange: (value: number) => void;
+  /** Tap-hold keys QMK has no keycode for (a stand-in + generated code). Without it only plain MT / LT can be made. */
+  onTapHold?: (tap: number, hold: HoldAction) => void;
 }
 
-export function KeycodeComposer({ spec, project, value, onChange }: ComposerProps) {
+export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: ComposerProps) {
   const decoded = useMemo(() => decode(spec, value, { unicode: project.firmware.unicode }), [spec, value, project.firmware.unicode]);
   const [kind, setKind] = useState<Kind>(kindOf(decoded));
   const [error, setError] = useState<string | null>(null);
@@ -145,6 +192,20 @@ export function KeycodeComposer({ spec, project, value, onChange }: ComposerProp
   const mods = 'mods' in decoded ? decoded.mods : 0x01;
   const layer = 'layer' in decoded ? decoded.layer : 1;
   const fn: LayerFn = decoded.kind === 'layer' ? decoded.fn : 'MO';
+  const slots = tapHoldSlots(spec, project, value) ?? { tap: base, hold: { type: 'mods', mods } as HoldAction };
+
+  const commitTapHold = (tap: number, hold: HoldAction) => {
+    const plain = plainTapHold(spec, tap, hold);
+    try {
+      if (plain === null) ensureTapHold(spec, project, tap, hold); // the slot errors
+    } catch (err) {
+      return setError(err instanceof Error ? err.message : String(err));
+    }
+    if (plain !== null) onChange(plain);
+    else if (onTapHold) onTapHold(tap, hold);
+    else return setError(t('Here only what QMK’s MT / LT can say: a basic key tapped, modifiers or a layer 0–15 held.', 'Здесь только то, что умеют MT / LT в QMK: нажатие — обычная клавиша, удержание — модификаторы или слой 0–15.'));
+    setError(null);
+  };
 
   const commit = (d: Decoded) => {
     try {
@@ -163,10 +224,8 @@ export function KeycodeComposer({ spec, project, value, onChange }: ComposerProp
         return commit({ kind: 'basic', value: base });
       case 'mods':
         return commit({ kind: 'mods', mods, base });
-      case 'mod-tap':
-        return commit({ kind: 'mod-tap', mods, base });
-      case 'layer-tap':
-        return commit({ kind: 'layer-tap', layer: Math.min(layer, 15), base });
+      case 'tap-hold':
+        return commit({ kind: 'mod-tap', mods: (mods & 0x0f) === 0 ? 0x01 : mods, base: base >= 0x04 && base <= 0xe7 ? base : 0x04 });
       case 'layer':
         return commit({ kind: 'layer', fn, layer });
       case 'layer-mod':
@@ -205,30 +264,21 @@ export function KeycodeComposer({ spec, project, value, onChange }: ComposerProp
         ))}
       </div>
 
-      {(kind === 'basic' || kind === 'mods' || kind === 'mod-tap' || kind === 'layer-tap') && (
+      {(kind === 'basic' || kind === 'mods') && (
         <div className="field-row">
-          <span className="field-hint">{kind === 'mod-tap' || kind === 'layer-tap' ? t('tap:', 'нажатие:') : t('key:', 'клавиша:')}</span>
+          <span className="field-hint">{t('key:', 'клавиша:')}</span>
           <BasicKeySelect
             spec={spec}
             value={base}
             label={t('Key', 'Клавиша')}
             onChange={(b) =>
-              commit(
-                kind === 'basic'
-                  ? { kind: 'basic', value: b }
-                  : kind === 'mods'
-                    ? { kind: 'mods', mods, base: b }
-                    : kind === 'mod-tap'
-                      ? { kind: 'mod-tap', mods, base: b }
-                      : { kind: 'layer-tap', layer, base: b },
-              )
+              commit(kind === 'basic' ? { kind: 'basic', value: b } : { kind: 'mods', mods, base: b })
             }
           />
         </div>
       )}
-      {(kind === 'mods' || kind === 'mod-tap' || kind === 'one-shot' || kind === 'layer-mod') && (
+      {(kind === 'mods' || kind === 'one-shot' || kind === 'layer-mod') && (
         <>
-          {kind === 'mod-tap' && <span className="field-hint">{t('hold:', 'удержание:')}</span>}
           <ModsInput
             mods={mods}
             onChange={(m) =>
@@ -237,9 +287,7 @@ export function KeycodeComposer({ spec, project, value, onChange }: ComposerProp
                 : commit(
                     kind === 'mods'
                       ? { kind: 'mods', mods: m, base }
-                      : kind === 'mod-tap'
-                        ? { kind: 'mod-tap', mods: m, base }
-                        : kind === 'layer-mod'
+                      : kind === 'layer-mod'
                           ? { kind: 'layer-mod', layer, mods: m }
                           : { kind: 'one-shot-mod', mods: m },
                   )
@@ -247,10 +295,11 @@ export function KeycodeComposer({ spec, project, value, onChange }: ComposerProp
           />
         </>
       )}
-      {(kind === 'layer-tap' || kind === 'layer-mod') && (
+      {kind === 'tap-hold' && <TapHoldSlots spec={spec} project={project} tap={slots.tap} hold={slots.hold} onChange={commitTapHold} />}
+      {kind === 'layer-mod' && (
         <div className="field-row">
           <span className="field-hint">{t('hold → layer:', 'удержание → слой:')}</span>
-          <LayerSelect project={project} value={layer} max={15} onChange={(l) => commit(kind === 'layer-tap' ? { kind: 'layer-tap', layer: l, base } : { kind: 'layer-mod', layer: l, mods })} />
+          <LayerSelect project={project} value={layer} max={15} onChange={(l) => commit({ kind: 'layer-mod', layer: l, mods })} />
         </div>
       )}
       {kind === 'layer' && (

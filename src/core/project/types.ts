@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 7;
+export const PROJECT_SCHEMA_VERSION = 8;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -296,6 +296,25 @@ export interface TapHoldSetting {
   holdOnKeys?: number[];
 }
 
+/**
+ * What holding a tap-hold key does: modifiers (5 QMK MOD_* bits), a layer (0–15) with optional modifiers, or any
+ * keycode held down as long as the key is (core/project/tapHoldActions.ts).
+ */
+export type HoldAction = { type: 'mods'; mods: number } | { type: 'layer'; layer: number; mods: number } | { type: 'key'; keycode: number };
+
+/**
+ * A tap-hold key whose tap or hold QMK's MT() / LT() cannot express (a modded or custom key on tap, a layer with
+ * modifiers on hold …). Keys carry `keycode`, a stand-in MT / LT value with a base key no real key uses, so QMK's own
+ * tap-hold logic (and its per-key settings) decides; the generated keymap.c plays the real actions.
+ */
+export interface TapHoldAction {
+  id: string;
+  keycode: number;
+  /** Keycode played on tap (0 = nothing). */
+  tap: number;
+  hold: HoldAction;
+}
+
 // ── Lighting ──────────────────────────────────────────────────────────
 
 export interface LightingState {
@@ -380,6 +399,8 @@ export interface Project {
   keyAliases: KeyAlias[];
   /** Per-keycode tap-hold settings (since format 7). */
   tapHolds: TapHoldSetting[];
+  /** Tap-hold keys with any action in each slot, by their stand-in keycode (since format 8). */
+  tapHoldActions: TapHoldAction[];
   /** Sequences after the leader key (QK_LEAD) — leader_end_user in keymap.c. */
   leaderSequences: LeaderSequence[];
   /** Character table for UM(i)/UP(i,j) (UNICODEMAP): index = position in the list. */

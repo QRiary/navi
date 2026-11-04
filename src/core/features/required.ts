@@ -5,6 +5,7 @@
 import { keycodeNeeds, type Need } from '../keycodes/requirements';
 import type { KeycodeSpec } from '../keycodes/spec';
 import type { Keymap, Project } from '../project/types';
+import { effectiveTapHoldActions } from '../project/tapHoldActions';
 import type { FeatureId } from './registry';
 
 export function requiredFeatures(project: Project, keymap: Keymap, spec: KeycodeSpec): Map<FeatureId, string> {
@@ -18,6 +19,13 @@ export function requiredFeatures(project: Project, keymap: Keymap, spec: Keycode
     l.keys.forEach((v) => keycodeNeeds(spec, v, { unicode: project.firmware.unicode }).forEach((n) => add(pick(n), 'keymap')));
     l.encoders.forEach((e) => [e.cw, e.ccw].forEach((v) => keycodeNeeds(spec, v, { unicode: project.firmware.unicode }).forEach((n) => add(pick(n), 'encoders'))));
   });
+  // Tap-hold keys with actions: NAVI plays their slots with record->keycode, which QMK reads only with REPEAT_KEY_ENABLE
+  // (or COMBO_ENABLE); the slots' own keycodes need their features too.
+  const actions = effectiveTapHoldActions(spec, project);
+  if (actions.length) add('repeat_key', 'tap-hold keys with actions');
+  for (const a of actions) {
+    for (const v of [a.tap, a.hold.type === 'key' ? a.hold.keycode : 0]) keycodeNeeds(spec, v, { unicode: project.firmware.unicode }).forEach((n) => add(pick(n), 'tap-hold keys with actions'));
+  }
   if (project.tapDances.length) add('tap_dance', 'tap dance');
   if (project.combos.length) add('combo', 'combos');
   if (project.keyOverrides.length) add('key_override', 'key overrides');
