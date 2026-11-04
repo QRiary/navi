@@ -34,8 +34,11 @@
       <circle cx="4" cy="4" r="3.4" fill="#d1002a" />
       <circle cx="11" cy="10" r="2.4" fill="#9c0020" />
     </pattern>
-    <!-- Letter N: two stems and a diagonal -->
-    <path id="letter" d="M112 112 H188 L308 302 V112 H384 V400 H308 L188 210 V400 H112 Z" />
+    <!--
+      Letter N: two stems and a diagonal. The letter together with its shadow (+20, +20) is centered:
+      letter 110–382 × 102–390, shadow up to 402 × 410 — 102 px from the frame on the left and right, 94 at the top and bottom.
+    -->
+    <path id="letter" d="M110 102 H186 L306 292 V102 H382 V390 H306 L186 200 V390 H110 Z" />
   </defs>
 
   <g id="art" clip-path="url(#frame)">
