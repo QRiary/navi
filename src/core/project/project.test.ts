@@ -236,10 +236,28 @@ describe('format migrations', () => {
     expect(migrateProject(v3)).toMatchObject({ from: 3, data: { schemaVersion: PROJECT_SCHEMA_VERSION } });
     const { project: loaded, issues } = validateProject(v3);
     expect(issues.filter((i) => i.level === 'error')).toEqual([]);
-    expect(PROJECT_SCHEMA_VERSION).toBe(4);
-    expect(loaded?.schemaVersion).toBe(4);
+    expect(loaded?.schemaVersion).toBe(PROJECT_SCHEMA_VERSION);
     expect(loaded?.keymaps[0].layers.every((l) => l.cName === undefined)).toBe(true);
     expect(loaded?.firmware.pipeline).toBeUndefined();
+  });
+
+  it('a format 4 file opens with no key aliases', () => {
+    const { p } = project();
+    const v4 = JSON.parse(serializeProject(p));
+    v4.schemaVersion = 4;
+    delete v4.keyAliases;
+    const { project: loaded, issues } = validateProject(v4);
+    expect(issues.filter((i) => i.level === 'error')).toEqual([]);
+    expect(PROJECT_SCHEMA_VERSION).toBe(5);
+    expect(loaded?.schemaVersion).toBe(5);
+    expect(loaded?.keyAliases).toEqual([]);
+  });
+
+  it('key aliases survive a save and load', () => {
+    const { p } = project();
+    const withAliases = { ...p, keyAliases: [{ id: 'ka1', label: 'Copy', keycode: parseQmk(spec, 'C(KC_C)') }] };
+    const loaded = parseProjectText(serializeProject(withAliases)).project;
+    expect(loaded?.keyAliases).toEqual([{ id: 'ka1', label: 'Copy', keycode: 0x0106 }]);
   });
 });
 

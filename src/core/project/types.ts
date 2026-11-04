@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 4;
+export const PROJECT_SCHEMA_VERSION = 5;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -269,6 +269,18 @@ export interface CustomKeycode {
   action: CustomAction;
 }
 
+/**
+ * Key alias: a label for a keycode, shown on every key with that value. The generated C gets
+ * `#define NV_<LABEL> <expression>` (core/keycodes/aliases.ts) so the user's own C can refer to the key;
+ * the keymap itself keeps the plain expression.
+ */
+export interface KeyAlias {
+  id: string;
+  /** What the key shows: “Copy”. The C name is derived from it. */
+  label: string;
+  keycode: number;
+}
+
 // ── Lighting ──────────────────────────────────────────────────────────
 
 export interface LightingState {
@@ -344,6 +356,8 @@ export interface Project {
   combos: Combo[];
   keyOverrides: KeyOverride[];
   customKeycodes: CustomKeycode[];
+  /** Labels for keycodes, with a C name for the user's code (since format 5). */
+  keyAliases: KeyAlias[];
   /** Sequences after the leader key (QK_LEAD) — leader_end_user in keymap.c. */
   leaderSequences: LeaderSequence[];
   /** Character table for UM(i)/UP(i,j) (UNICODEMAP): index = position in the list. */

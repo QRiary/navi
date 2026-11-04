@@ -21,6 +21,8 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
   2: (d) => ({ ...d, schemaVersion: 3, leaderSequences: Array.isArray(d.leaderSequences) ? d.leaderSequences : [], unicodeMap: Array.isArray(d.unicodeMap) ? d.unicodeMap : [] }),
   // 3 → 4: layer C names (Layer.cName) and “own pipeline” mode (firmware.pipeline); both optional.
   3: (d) => ({ ...d, schemaVersion: 4 }),
+  // 4 → 5: key aliases (keyAliases).
+  4: (d) => ({ ...d, schemaVersion: 5, keyAliases: Array.isArray(d.keyAliases) ? d.keyAliases : [] }),
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {

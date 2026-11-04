@@ -80,6 +80,7 @@ export function diffProjects(before: Project, after: Project): ProjectDiff {
   check('combos', before.combos, after.combos);
   check('keyOverrides', before.keyOverrides, after.keyOverrides);
   check('customKeycodes', before.customKeycodes, after.customKeycodes);
+  check('keyAliases', before.keyAliases, after.keyAliases);
   check('leaderSequences', before.leaderSequences, after.leaderSequences);
   check('unicodeMap', before.unicodeMap, after.unicodeMap);
   check('lighting', before.lighting, after.lighting);

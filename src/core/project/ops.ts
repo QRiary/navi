@@ -185,7 +185,14 @@ function remapAllLayerRefs(p: Project, keymapId: string, spec: KeycodeSpec, mapp
     layers: c.layers?.map(mapping).filter((n): n is number => n !== null),
   }));
   const keyOverrides = p.keyOverrides.map((o) => ({ ...o, replacement: fix(o.replacement), layers: o.layers?.map(mapping).filter((n): n is number => n !== null) }));
-  return touch({ ...p, keymaps, tapDances, combos, keyOverrides });
+  // An alias follows its key: TG(2) stays the same layer after a reorder. An alias of a deleted layer goes away,
+  // otherwise its label would land on every KC_NO (or on the plain tap key of an LT).
+  const refsDeleted = (v: number) => {
+    const d = decode(spec, v);
+    return (d.kind === 'layer' || d.kind === 'layer-tap' || d.kind === 'layer-mod') && mapping(d.layer) === null;
+  };
+  const keyAliases = p.keyAliases.filter((a) => !refsDeleted(a.keycode)).map((a) => ({ ...a, keycode: fix(a.keycode) }));
+  return touch({ ...p, keymaps, tapDances, combos, keyOverrides, keyAliases });
 }
 
 export function addLayer(p: Project, keymapId: string, name: string, at?: number): Project {

@@ -18,6 +18,7 @@ const SECTION_NAMES = (): Record<string, string> => ({
   combos: t('combos', 'комбо'),
   keyOverrides: t('key overrides', 'подмены'),
   customKeycodes: t('custom keycodes', 'свои keycodes'),
+  keyAliases: t('key aliases', 'псевдонимы клавиш'),
   leaderSequences: t('leader sequences', 'последовательности лидера'),
   unicodeMap: t('unicode table', 'таблица юникода'),
   lighting: t('lighting', 'подсветка'),

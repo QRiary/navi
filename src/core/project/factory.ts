@@ -84,6 +84,7 @@ export function createProject({ name, hardware, geometry, layers = 4, encoderCou
     combos: [],
     keyOverrides: [],
     customKeycodes: [],
+    keyAliases: [],
     leaderSequences: [],
     unicodeMap: [],
     lighting: { rgbMatrix: null, rgblight: null, rgbMatrixEffects: null },

@@ -21,6 +21,7 @@ import { RGB_MATRIX_EFFECTS } from '../lighting/effects';
 import { effectiveMaxBrightness, rgbTargetDefaults } from '../lighting/buildDefaults';
 import type { Keymap, MacroStep, Project } from '../project/types';
 import { activeGeometry } from '../project/ops';
+import { checkKeyAliases } from '../project/aliases';
 import { layoutMacro, renderLayers, textLayout } from './layoutText';
 
 export interface GeneratedFile {
@@ -186,6 +187,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     ...checkUnicodeMap(spec, project),
     ...layerNameIssues(project, keymap),
   ];
+  const aliases = checkKeyAliases(project, layerIds);
+  issues.push(...aliases.issues);
   // “Own pipeline”: the hooks get a _navi suffix, enums and prototypes go to navi.h, build settings to navi_*.
   const pipeline = project.firmware.pipeline?.enabled === true;
   const hookName = (qmk: keyof typeof NAVI_HOOKS) => (pipeline ? NAVI_HOOKS[qmk] : qmk);
@@ -286,6 +289,11 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     unicodeTable.forEach((u) => c.push(`    [${u.name}] = 0x${u.codepoint.toString(16).toUpperCase().padStart(4, '0')},`));
     c.push('};');
     c.push('');
+  }
+  if (aliases.defines.length) {
+    decl.push('// Key aliases (NAVI: Advanced → Aliases): names of keycodes for your own code. The keymap below uses the keycodes themselves.');
+    aliases.defines.forEach((a) => decl.push(`#define ${a.cName} ${kc(a.keycode)}`));
+    decl.push('');
   }
   // Layers are written following the drawing (as the keys sit), the NAVI_LAYOUT macro turns them into the matrix.
   // A position without a key on the drawing that is KC_NO or KC_TRNS on every layer does nothing — it can be left out.
