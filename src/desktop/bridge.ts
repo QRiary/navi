@@ -89,6 +89,20 @@ export interface CompileResult {
   durationMs: number;
 }
 
+/** A file the build gate cannot pass in an untrusted folder. */
+export interface TrustIssue {
+  file: string;
+  reason: string;
+}
+
+export interface TrustState {
+  /** The keymap folder a build uses; trust is looked up on it and covers its users/<keymap> folders. */
+  dir: string;
+  trusted: boolean;
+  /** Files in the keymap folder and users/<keymap> that fail the allowlist; empty = builds without trust. */
+  issues: TrustIssue[];
+}
+
 export interface LogEvent {
   job: number | null;
   stream: 'stdout' | 'stderr';
@@ -163,6 +177,16 @@ export interface NaviBridge {
     onStarted(cb: (e: { job: number; kind: string; args: string[] }) => void): () => void;
     onLog(cb: (e: LogEvent) => void): () => void;
     onDone(cb: (e: { job: number | null; code: number | null }) => void): () => void;
+  };
+  /** Trusted keymap folders: kept only in NAVI's local data; a trusted folder's own C/make code is built as is. */
+  trust: {
+    /** Trusted folders, normalized. */
+    list(): Promise<string[]>;
+    /** The keymap folder a build would use, whether it is trusted, and its files that fail the allowlist. */
+    state(home: string, userspace: string | null, kb: string, km: string): Promise<TrustState>;
+    /** Shows the main-process warning dialog; true = the user trusted the folder, false = canceled. */
+    grant(dir: string, lang: 'en' | 'ru'): Promise<boolean>;
+    revoke(dir: string): Promise<void>;
   };
   firmware: {
     list(): Promise<FirmwareInfo[]>;
