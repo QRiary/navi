@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const require = createRequire(import.meta.url);
-const { createTrustStore, normalizeFolder, scanFolders, trustRefusal } = require('./trust.cjs');
+const { createTrustStore, normalizeFolder, scanFolders, trustDialogDetail, trustRefusal } = require('./trust.cjs');
 const { buildScanFolders, checkTrust } = require('./qmk.cjs');
 
 let tmp, home, user, store, storeFile;
@@ -223,6 +223,20 @@ describe('the build gate', () => {
     expect(checkTrust(store, home, user, 'acme/split', 'mine')).toMatch(/rules\.mk/);
     store.grant(dir);
     expect(checkTrust(store, home, user, 'acme/split', 'mine')).toBeNull();
+  });
+
+  it('the grant dialog names every folder the trust covers: the keymap folder and its users/<keymap> folders', () => {
+    const dir = kmDir(user, 'acme/split', 'mine');
+    stock(dir);
+    put(path.join(user, 'users', 'mine', 'mine.c'), '// user code');
+    const folders = buildScanFolders(home, user, 'acme/split', 'mine');
+    for (const ru of [false, true]) {
+      const text = trustDialogDetail(folders, 'mine', ru);
+      expect(text).toContain(dir);
+      expect(text).toContain(path.join(user, 'users', 'mine'));
+      expect(text).toContain('users/mine');
+    }
+    expect(trustDialogDetail([dir], 'mine', false)).toContain('(none right now)');
   });
 
   it('a file inside the folder cannot grant trust (only the store file in NAVI data counts)', () => {
