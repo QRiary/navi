@@ -15,9 +15,9 @@
  */
 const fs = require('node:fs');
 const path = require('node:path');
-const { cancel, findMsys, findOnPath, qmkCommand, run, validatePath } = require('./runner.cjs');
+const { cancel, qmkCommand, run, validatePath } = require('./runner.cjs');
 const os = require('node:os');
-const { firmwarePath, describeFirmware, scanUf2, archiveFirmware, BACKUP_MAX } = require('./qmk.cjs');
+const { firmwarePath, describeFirmware, scanUf2, archiveFirmware, runner, BACKUP_MAX } = require('./qmk.cjs');
 
 const BOOTLOADERS = [
   ['atmel-dfu', '03eb', '2fef', 'ATmega16U2'],
@@ -238,14 +238,14 @@ function registerFlashIpc({ ipcMain, getWindow, firmwareDir }) {
 
   /** Flash through the official qmk flash (DFU, Caterina, HalfKay …). */
   ipcMain.handle('navi:flash:qmk', async (_e, settings, firmwareId, bootloader) => {
-    const msys = findMsys(settings?.msys);
-    const qmk = msys ? null : findOnPath('qmk');
-    if (!msys && !qmk) throw new Error('QMK CLI not found');
+    const r = await runner(settings);
+    if (!r) throw new Error('QMK CLI not found');
+    if (r.kind === 'wsl') throw new Error('qmk flash does not work inside WSL: WSL cannot see USB devices. Use UF2 flashing, or QMK MSYS.');
     const file = validatePath(firmwarePath(firmwareDir, firmwareId)).replace(/\\/g, '/');
     const args = ['flash'];
     if (typeof bootloader === 'string' && /^[a-z0-9-]{2,30}$/.test(bootloader)) args.push('-bl', bootloader);
     args.push(file);
-    const cmd = qmkCommand(msys ? { kind: 'msys', bash: msys.bash } : { kind: 'path', qmk }, args);
+    const cmd = qmkCommand(r, args);
     const job = run(cmd.command, cmd.args, { env: cmd.env, onLine: (stream, line) => send('navi:qmk:log', { job: job.id, stream, line }), timeoutMs: 11 * 60 * 1000 });
     send('navi:qmk:started', { job: job.id, kind: 'flash', args });
     const res = await job.done;

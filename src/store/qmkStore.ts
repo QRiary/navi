@@ -40,7 +40,7 @@ export interface QmkState {
 
 function qmkSettings() {
   const s = useSettingsStore.getState().settings.qmk;
-  return { home: s.home, msys: s.msys };
+  return { home: s.home, msys: s.msys, wsl: s.wsl };
 }
 
 let subscribed = false;

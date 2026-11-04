@@ -131,11 +131,69 @@ function cancelAll() {
   jobs.clear();
 }
 
+const DISTRO_RE = /^[A-Za-z0-9._-]{1,64}$/;
+
+/** WSL distro name: letters, digits, . _ - only, not starting with "-" (it would read as a wsl.exe option). */
+function validateDistro(name) {
+  if (typeof name !== 'string' || !DISTRO_RE.test(name) || name.startsWith('-')) throw new Error(`WSL distro name is not allowed: ${String(name).slice(0, 60)}`);
+  return name;
+}
+
+/** Output of `wsl.exe -l -q` (UTF-16LE, or UTF-8 with WSL_UTF8=1) → valid distro names. */
+function parseWslList(buf) {
+  let utf16 = false;
+  if (buf.length >= 2) {
+    if (buf[0] === 0xff && buf[1] === 0xfe) utf16 = true;
+    else {
+      let nulOdd = 0;
+      let odd = 0;
+      for (let i = 1; i < buf.length; i += 2) {
+        odd++;
+        if (buf[i] === 0) nulOdd++;
+      }
+      utf16 = nulOdd * 2 >= odd;
+    }
+  }
+  const text = buf.toString(utf16 ? 'utf16le' : 'utf8').replace(/\ufeff/g, '');
+  const names = [];
+  for (const line of text.split(/[\r\n]+/)) {
+    const name = line.trim();
+    if (!name) continue;
+    try {
+      names.push(validateDistro(name));
+    } catch {
+      // not a usable name: dropped
+    }
+  }
+  return names;
+}
+
+/** Linux path inside a distro -> \\wsl.localhost\<distro>\path. */
+function toWslUnc(distro, linuxPath) {
+  validateDistro(distro);
+  if (typeof linuxPath !== 'string' || !linuxPath.startsWith('/') || linuxPath.split('/').includes('..')) throw new Error('WSL path must be absolute without ".."');
+  return `\\\\wsl.localhost\\${distro}\\${linuxPath.slice(1).replace(/\//g, '\\')}`;
+}
+
+/** \\wsl.localhost\<distro>\path (or \\wsl$\...) -> { distro, linuxPath }; anything else -> null. */
+function fromWslUnc(p) {
+  if (typeof p !== 'string') return null;
+  const m = p.replace(/\\/g, '/').match(/^\/\/wsl(?:\.localhost|\$)\/([^/]+)(\/.*)?$/i);
+  if (!m) return null;
+  try {
+    validateDistro(m[1]);
+  } catch {
+    return null;
+  }
+  return { distro: m[1], linuxPath: '/' + (m[2] ?? '').split('/').filter(Boolean).join('/') };
+}
+
 /**
- * QMK command: through QMK MSYS (bash --login) or through qmk in PATH.
- * args — already validated arguments (validateArg / validatePath).
+ * QMK command: through QMK MSYS (bash --login), qmk in WSL (wsl.exe ... bash -lc) or qmk in PATH.
+ * args — already validated arguments (validateArg / validatePath); the WSL branch checks them again.
+ * opts.cwd — working folder; for WSL a \\wsl.localhost path of the same distro (becomes --cd).
  */
-function qmkCommand(runner, args) {
+function qmkCommand(runner, args, opts = {}) {
   if (runner.kind === 'msys') {
     const quoted = args.map((a) => `'${a}'`).join(' ');
     return {
@@ -144,7 +202,21 @@ function qmkCommand(runner, args) {
       env: { MSYSTEM: 'MINGW64', CHERE_INVOKING: '1' },
     };
   }
+  if (runner.kind === 'wsl') {
+    const distro = validateDistro(runner.distro);
+    const quoted = args.map((a) => `'${validatePath(validateArg(a))}'`).join(' ');
+    const wslArgs = ['-d', distro];
+    if (opts.cwd) {
+      const u = fromWslUnc(opts.cwd);
+      if (!u || u.distro !== distro) throw new Error('working folder is not inside the WSL distro');
+      validatePath(u.linuxPath);
+      wslArgs.push('--cd', u.linuxPath);
+    }
+    // bash -l: qmk lives in ~/.local/bin, which only the login PATH has.
+    wslArgs.push('--', 'bash', '-lc', `qmk ${quoted}`);
+    return { command: 'wsl.exe', args: wslArgs, env: {} };
+  }
   return { command: runner.qmk, args, env: {} };
 }
 
-module.exports = { validateArg, validatePath, toMsysPath, findMsys, findOnPath, run, cancel, cancelAll, qmkCommand };
+module.exports = { validateArg, validatePath, validateDistro, parseWslList, toWslUnc, fromWslUnc, toMsysPath, findMsys, findOnPath, run, cancel, cancelAll, qmkCommand };

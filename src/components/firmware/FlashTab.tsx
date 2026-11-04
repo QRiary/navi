@@ -130,7 +130,7 @@ export function FlashTab() {
     setPolling(false);
     setStep({ phase: 'flashing', detail: 'qmk flash' });
     try {
-      const res = await navi!.flash.qmk({ home: qmkSettings.home, msys: qmkSettings.msys }, fw.id, bootloader);
+      const res = await navi!.flash.qmk({ home: qmkSettings.home, msys: qmkSettings.msys, wsl: qmkSettings.wsl }, fw.id, bootloader);
       if (res.code !== 0) {
         setStep({ phase: 'done', ok: false, text: t(`qmk flash failed (exit code ${res.code}) — see the log.`, `qmk flash не удался (код ${res.code}) — см. лог.`) });
         return;
