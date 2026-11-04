@@ -19,6 +19,7 @@ import {
   resizeMatrix,
   setEncoder,
   setKeycodes,
+  setLayerCName,
   swapKeycodes,
 } from './ops';
 import { parseProjectText, serializeProject, validateProject } from './validate';
@@ -226,5 +227,73 @@ describe('format migrations', () => {
     expect(issues.filter((i) => i.level === 'error')).toEqual([]);
     expect(loaded?.leaderSequences).toEqual([]);
     expect(loaded?.unicodeMap).toEqual([]);
+  });
+
+  it('a format 3 file opens: no layer C names, no own pipeline', () => {
+    const { p } = project();
+    const v3 = JSON.parse(serializeProject(p));
+    v3.schemaVersion = 3;
+    expect(migrateProject(v3)).toMatchObject({ from: 3, data: { schemaVersion: PROJECT_SCHEMA_VERSION } });
+    const { project: loaded, issues } = validateProject(v3);
+    expect(issues.filter((i) => i.level === 'error')).toEqual([]);
+    expect(PROJECT_SCHEMA_VERSION).toBe(4);
+    expect(loaded?.schemaVersion).toBe(4);
+    expect(loaded?.keymaps[0].layers.every((l) => l.cName === undefined)).toBe(true);
+    expect(loaded?.firmware.pipeline).toBeUndefined();
+  });
+});
+
+describe('layer C names and own pipeline (format 4)', () => {
+  const withLayers = (cNames: unknown[]) => {
+    const { p } = project();
+    const raw = JSON.parse(serializeProject(p));
+    cNames.forEach((n, i) => (raw.keymaps[0].layers[i].cName = n));
+    return validateProject(raw);
+  };
+
+  it('a valid C name survives save and load exactly as written', () => {
+    const { project: loaded, issues } = withLayers(['Base', '_nav2']);
+    expect(issues).toEqual([]);
+    expect(loaded!.keymaps[0].layers.map((l) => l.cName)).toEqual(['Base', '_nav2', undefined, undefined]);
+    expect(JSON.parse(serializeProject(loaded!)).keymaps[0].layers[0].cName).toBe('Base');
+  });
+
+  it('invalid, keyword and repeated C names are dropped with a warning', () => {
+    const { project: loaded, issues } = withLayers(['1st', 'int', 'BASE', 'BASE']);
+    expect(loaded!.keymaps[0].layers.map((l) => l.cName)).toEqual([undefined, undefined, 'BASE', undefined]);
+    expect(issues.filter((i) => i.path.endsWith('.cName')).map((i) => [i.path, i.level])).toEqual([
+      ['keymaps[0].layers[0].cName', 'warning'],
+      ['keymaps[0].layers[1].cName', 'warning'],
+      ['keymaps[0].layers[3].cName', 'warning'],
+    ]);
+    expect(withLayers([42]).project!.keymaps[0].layers[0].cName).toBeUndefined();
+    expect(withLayers(['A'.repeat(65)]).project!.keymaps[0].layers[0].cName).toBeUndefined();
+  });
+
+  it('pipeline headers: bad ones are dropped, at most 20', () => {
+    const { p } = project();
+    const raw = JSON.parse(serializeProject(p));
+    raw.firmware.pipeline = { enabled: true, headers: ['user.h', 'lib/keys.h', '../x.h', '/etc/passwd', 'a/../b.h', 'a b.h', 7] };
+    const { project: loaded, issues } = validateProject(raw);
+    expect(loaded!.firmware.pipeline).toEqual({ enabled: true, headers: ['user.h', 'lib/keys.h'] });
+    expect(issues.filter((i) => i.path.startsWith('firmware.pipeline.headers')).length).toBe(5);
+    raw.firmware.pipeline = { enabled: 'yes', headers: Array.from({ length: 25 }, (_, i) => `h${i}.h`) };
+    const again = validateProject(raw);
+    expect(again.project!.firmware.pipeline!.headers.length).toBe(20);
+    expect(again.project!.firmware.pipeline!.enabled).toBe(false);
+    expect(again.issues.some((i) => i.path === 'firmware.pipeline.headers')).toBe(true);
+  });
+
+  it('layer ops carry the C name: move keeps it, duplicate does not copy it, set/clear', () => {
+    const { p, km } = project();
+    let next = setLayerCName(p, km.id, 1, ' NAV ');
+    expect(activeKeymap(next).layers[1].cName).toBe('NAV');
+    next = moveLayer(next, km.id, spec, 1, 3);
+    expect(activeKeymap(next).layers.map((l) => l.cName)).toEqual([undefined, undefined, undefined, 'NAV']);
+    next = duplicateLayer(next, km.id, spec, 3);
+    expect(activeKeymap(next).layers.map((l) => l.cName)).toEqual([undefined, undefined, undefined, 'NAV', undefined]);
+    expect('cName' in activeKeymap(next).layers[4]).toBe(false);
+    next = setLayerCName(next, km.id, 3, '');
+    expect('cName' in activeKeymap(next).layers[3]).toBe(false);
   });
 });

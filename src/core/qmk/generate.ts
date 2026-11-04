@@ -1,5 +1,7 @@
 /**
  * KEYMAP SOURCE GENERATOR for QMK: keymap.c, rules.mk, config.h (+ keymap.json for the Configurator).
+ * “Own pipeline” mode (firmware.pipeline): keymap.c, navi.h, navi_rules.mk, navi_config.h instead; NAVI's hooks are
+ * named *_navi (always defined, neutral when unused) and the user's own C defines the QMK hooks and calls them.
  *
  * Layers in keymap.c are drawn following the keyboard drawing (layoutText.ts): the NAVI_LAYOUT macro
  * places them into the matrix keymaps[layer][row][col]. The keyboard's LAYOUT macro is not needed —
@@ -13,7 +15,7 @@ import type { KeycodeSpec } from '../keycodes/spec';
 import { FEATURE_BY_ID, type FeatureId } from '../features/registry';
 import { checkCombos, checkKeyOverrides, checkLeaderSequences, checkTapDances, checkUnicodeMap, leaderFunction, type AdvancedIssue } from '../features/advanced';
 import { configParams, configValueType } from './configParams';
-import { checkCustom, customBlock, CUSTOM_FILES, hasCustomCode, unsafeDefineValue, type CustomFile } from './customCode';
+import { checkCustom, customBlock, CUSTOM_FILES, hasCustomCode, NAVI_HOOKS, PIPELINE_MAX_HEADERS, safeHeaderName, unsafeDefineValue, validCIdentifier, type CustomFile } from './customCode';
 import { requiredFeatures } from '../features/required';
 import { RGB_MATRIX_EFFECTS } from '../lighting/effects';
 import { effectiveMaxBrightness, rgbTargetDefaults } from '../lighting/buildDefaults';
@@ -22,7 +24,7 @@ import { activeGeometry } from '../project/ops';
 import { layoutMacro, renderLayers, textLayout } from './layoutText';
 
 export interface GeneratedFile {
-  name: 'keymap.c' | 'rules.mk' | 'config.h' | 'keymap.json' | 'readme.md';
+  name: 'keymap.c' | 'rules.mk' | 'config.h' | 'keymap.json' | 'readme.md' | 'navi.h' | 'navi_rules.mk' | 'navi_config.h';
   text: string;
 }
 
@@ -46,10 +48,22 @@ export function commentText(s: string): string {
   return s.replace(/[\x00-\x1f\x7f]+/g, ' ').replace(/\\/g, '/').replace(/\/\*|\*\//g, ' ').slice(0, 200);
 }
 
-/** C identifier from a layer name: “Lower” → L_LOWER; uniqueness is guaranteed. */
+/**
+ * C identifier of each layer: its own C name (cName) exactly as written, else from the layer name: “Lower” → L_LOWER.
+ * Uniqueness is guaranteed: an invalid or repeated cName is ignored here (layerNameIssues reports it),
+ * and a generated L_… name steps around the C names.
+ */
 export function layerIdentifiers(keymap: Keymap): string[] {
+  const own: (string | undefined)[] = [];
   const used = new Set<string>();
+  for (const l of keymap.layers) {
+    const ok = !!l.cName && validCIdentifier(l.cName) && !used.has(l.cName);
+    own.push(ok ? l.cName : undefined);
+    if (ok) used.add(l.cName!);
+  }
   return keymap.layers.map((l, i) => {
+    const mine = own[i];
+    if (mine) return mine;
     let base = `L_${l.name.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '')}`;
     if (base === 'L_' || /^L_\d/.test(base)) base = `L_${i}`;
     let name = base;
@@ -58,6 +72,31 @@ export function layerIdentifiers(keymap: Keymap): string[] {
     used.add(name);
     return name;
   });
+}
+
+/** Layer C names that would not compile: not an identifier / a keyword, repeated, or the name of another enum member. */
+export function layerNameIssues(project: Project, keymap: Keymap): AdvancedIssue[] {
+  const issues: AdvancedIssue[] = [];
+  const others = new Set<string>([
+    ...project.customKeycodes.map((c) => c.name),
+    ...project.tapDances.map((t) => t.name),
+    ...project.unicodeMap.map((u) => u.name),
+    'NAVI_SAFE_RANGE',
+  ]);
+  const seen = new Set<string>();
+  keymap.layers.forEach((l, i) => {
+    if (l.cName === undefined) return;
+    const where = `layer ${i} “${commentText(l.name)}”: C name`;
+    if (!validCIdentifier(l.cName)) {
+      issues.push({ level: 'error', where, message: { en: `“${l.cName}” is not a C identifier (letters, digits, _; not starting with a digit; not a C keyword; up to 64 characters).`, ru: `«${l.cName}» — не идентификатор C (буквы, цифры, _; не с цифры; не ключевое слово C; до 64 символов).` } });
+    } else if (seen.has(l.cName)) {
+      issues.push({ level: 'error', where, message: { en: `“${l.cName}” is already the C name of another layer.`, ru: `«${l.cName}» уже задано как имя C другого слоя.` } });
+    } else if (others.has(l.cName)) {
+      issues.push({ level: 'error', where, message: { en: `“${l.cName}” is already used by a custom keycode, tap dance or unicode entry.`, ru: `«${l.cName}» уже занято своим keycode, tap dance или символом unicode.` } });
+    }
+    seen.add(l.cName);
+  });
+  return issues;
 }
 
 /** Quoted C string: control characters as octal \ooo (always 3 digits so they do not “eat” the next ones). */
@@ -145,7 +184,22 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     ...checkKeyOverrides(project.keyOverrides),
     ...checkLeaderSequences(spec, project),
     ...checkUnicodeMap(spec, project),
+    ...layerNameIssues(project, keymap),
   ];
+  // “Own pipeline”: the hooks get a _navi suffix, enums and prototypes go to navi.h, build settings to navi_*.
+  const pipeline = project.firmware.pipeline?.enabled === true;
+  const hookName = (qmk: keyof typeof NAVI_HOOKS) => (pipeline ? NAVI_HOOKS[qmk] : qmk);
+  const headers = pipeline ? project.firmware.pipeline!.headers.filter(safeHeaderName).slice(0, PIPELINE_MAX_HEADERS) : [];
+  if (pipeline && headers.length !== project.firmware.pipeline!.headers.length) {
+    issues.push({
+      level: 'error',
+      where: 'own pipeline: headers',
+      message: {
+        en: `Headers must be relative paths inside the keymap folder (letters, digits, _ . / -; no “..”, no leading /), at most ${PIPELINE_MAX_HEADERS}.`,
+        ru: `Заголовки — относительные пути внутри папки keymap (буквы, цифры, _ . / -; без «..» и / в начале), не больше ${PIPELINE_MAX_HEADERS}.`,
+      },
+    });
+  }
   // Only valid sequences with an action get into the code.
   const leaders = project.leaderSequences.filter((s) => s.keys.length >= 1 && s.keys.length <= 5 && s.keys.every((k) => k >= 0x04 && k <= 0xff) && s.action.type !== 'none' && !(s.action.type === 'send-string' && !s.action.text));
   const unicodeTable = project.firmware.unicode === 'unicodemap' ? project.unicodeMap : [];
@@ -169,28 +223,65 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   c.push(`// ${HEADER(project)}`);
   c.push(`// Keyboard matrix ${rows}×${cols}, ${keymap.layers.length} layers, QMK keycodes ${spec.version}.`);
   c.push('#include QMK_KEYBOARD_H');
-  c.push('');
-  c.push('enum layer_names {');
-  layerIds.forEach((id, i) => c.push(`    ${id} = ${i}, // ${commentText(keymap.layers[i].name)}`));
-  c.push('};');
-  c.push('');
-  if (customs.length) {
+  // navi.h (own pipeline): the enums and *_navi prototypes, includable from the user's other .c files too.
+  const h: string[] = [];
+  if (pipeline) {
+    c.push('#include "navi.h"');
+    for (const name of headers) c.push(`#include "${name}"`);
+    c.push('');
+    h.push(`// ${HEADER(project)}`);
+    h.push('// NAVI part of the keymap (own pipeline mode): layer/keycode enums and the *_navi functions defined in keymap.c.');
+    h.push('// QMK calls the usual hooks, so your code defines them and forwards to NAVI, for example:');
+    h.push('//   bool process_record_user(uint16_t keycode, keyrecord_t *record) {');
+    h.push('//       if (!process_record_navi(keycode, record)) return false;');
+    h.push('//       // ... your code ...');
+    h.push('//       return true;');
+    h.push('//   }');
+    h.push('//   uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) { return get_tapping_term_navi(keycode, record); }');
+    h.push('//   uint16_t get_combo_term(uint16_t index, combo_t *combo) { return get_combo_term_navi(index, combo); }');
+    h.push('//   bool combo_should_trigger(uint16_t index, combo_t *combo, uint16_t keycode, keyrecord_t *record) {');
+    h.push('//       return combo_should_trigger_navi(index, combo, keycode, record);');
+    h.push('//   }');
+    h.push('//   void leader_end_user(void) { leader_end_navi(); }');
+    h.push('// Your own keycodes start at NAVI_SAFE_RANGE: enum my_keycodes { MY_KEY = NAVI_SAFE_RANGE, ... };');
+    h.push('#pragma once');
+    h.push('');
+    h.push('#include QMK_KEYBOARD_H');
+  }
+  // Enum tags get a navi_ prefix in pipeline mode so they do not clash with the user's own enums.
+  const decl = pipeline ? h : c;
+  decl.push('');
+  decl.push(`enum ${pipeline ? 'navi_layers' : 'layer_names'} {`);
+  layerIds.forEach((id, i) => decl.push(`    ${id} = ${i}, // ${commentText(keymap.layers[i].name)}`));
+  decl.push('};');
+  decl.push('');
+  if (pipeline) {
+    decl.push('enum navi_keycodes {');
+    customs.forEach((ck, i) => decl.push(`    ${ck.name}${i === 0 ? ' = SAFE_RANGE' : ''}, // ${commentText(ck.description)}`));
+    decl.push(customs.length ? '    NAVI_SAFE_RANGE // your own keycodes start here' : '    NAVI_SAFE_RANGE = SAFE_RANGE // your own keycodes start here');
+    decl.push('};');
+    decl.push('');
+  } else if (customs.length) {
     c.push('enum custom_keycodes {');
     customs.forEach((ck, i) => c.push(`    ${ck.name}${i === 0 ? ' = SAFE_RANGE' : ''}, // ${commentText(ck.description)}`));
     c.push('};');
     c.push('');
   }
   if (hasTd) {
-    c.push('enum tap_dance_ids {');
-    tdSorted.forEach((t) => c.push(`    ${t.name} = ${t.index},`));
-    c.push('};');
-    c.push('');
+    decl.push(`enum ${pipeline ? 'navi_tap_dances' : 'tap_dance_ids'} {`);
+    tdSorted.forEach((t) => decl.push(`    ${t.name} = ${t.index},`));
+    decl.push('};');
+    decl.push('');
   }
   if (unicodeTable.length) {
-    c.push('// Unicode map: UM(i) / UP(i, j) refer to these entries by index.');
-    c.push('enum unicode_names {');
-    unicodeTable.forEach((u, i) => c.push(`    ${u.name} = ${i}, // ${codepointComment(u.codepoint)}`));
-    c.push('};');
+    decl.push('// Unicode map: UM(i) / UP(i, j) refer to these entries by index.');
+    decl.push(`enum ${pipeline ? 'navi_unicode_names' : 'unicode_names'} {`);
+    unicodeTable.forEach((u, i) => decl.push(`    ${u.name} = ${i}, // ${codepointComment(u.codepoint)}`));
+    decl.push('};');
+    if (pipeline) {
+      decl.push('');
+      c.push('// Unicode map: entries by the indexes of enum navi_unicode_names (navi.h).');
+    }
     c.push('const uint32_t PROGMEM unicode_map[] = {');
     unicodeTable.forEach((u) => c.push(`    [${u.name}] = 0x${u.codepoint.toString(16).toUpperCase().padStart(4, '0')},`));
     c.push('};');
@@ -304,7 +395,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push('};');
     if (comboTerms.length) {
       c.push('');
-      c.push('uint16_t get_combo_term(uint16_t combo_index, combo_t *combo) {');
+      c.push(`uint16_t ${hookName('get_combo_term')}(uint16_t combo_index, combo_t *combo) {`);
       c.push('    switch (combo_index) {');
       project.combos.forEach((combo, i) => combo.term && c.push(`        case ${i}: return ${combo.term}; // ${combo.name}`));
       c.push('    }');
@@ -313,7 +404,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     }
     if (comboLayers.length) {
       c.push('');
-      c.push('bool combo_should_trigger(uint16_t combo_index, combo_t *combo, uint16_t keycode, keyrecord_t *record) {');
+      c.push(`bool ${hookName('combo_should_trigger')}(uint16_t combo_index, combo_t *combo, uint16_t keycode, keyrecord_t *record) {`);
       c.push('    switch (combo_index) {');
       project.combos.forEach((combo, i) => {
         if (!combo.layers?.length) return;
@@ -343,7 +434,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   }
 
   if (hasTd && tdTerms.length) {
-    c.push('uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {');
+    c.push(`uint16_t ${hookName('get_tapping_term')}(uint16_t keycode, keyrecord_t *record) {`);
     c.push('    switch (keycode) {');
     tdTerms.forEach((t) => c.push(`        case TD(${t.name}): return ${t.tappingTerm};`));
     c.push('        default: return TAPPING_TERM;');
@@ -354,7 +445,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
 
   if (leaders.length) {
     c.push('// ── Leader key: QK_LEAD, then a sequence ─────────────────────────────');
-    c.push('void leader_end_user(void) {');
+    c.push(`void ${hookName('leader_end_user')}(void) {`);
     leaders.forEach((s, i) => {
       c.push(`    ${i === 0 ? 'if' : '} else if'} (${leaderFunction(s.keys.length)}(${s.keys.map(kc).join(', ')})) {`);
       if (s.action.type === 'send-string') c.push(`        SEND_STRING(${cString(s.action.text)});`);
@@ -367,7 +458,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
 
   const macroHandledInCode = !via && macros.length > 0;
   if (sendStringCustoms.length || macroHandledInCode) {
-    c.push('bool process_record_user(uint16_t keycode, keyrecord_t *record) {');
+    c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
     c.push('    if (!record->event.pressed) return true;');
     c.push('    switch (keycode) {');
     sendStringCustoms.forEach((ck) => {
@@ -388,6 +479,46 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push('');
   }
 
+  // Which hooks the project fills (in both modes the same conditions as above).
+  const hookUsed: Record<keyof typeof NAVI_HOOKS, boolean> = {
+    process_record_user: sendStringCustoms.length > 0 || macroHandledInCode,
+    get_tapping_term: hasTd && tdTerms.length > 0,
+    get_combo_term: comboTerms.length > 0,
+    combo_should_trigger: comboLayers.length > 0,
+    leader_end_user: leaders.length > 0,
+  };
+  if (pipeline) {
+    // Every *_navi function always exists, so the user's calls keep compiling as the project changes.
+    const allStubs: { hook: keyof typeof NAVI_HOOKS; guard?: string; lines: string[] }[] = [
+      { hook: 'process_record_user', lines: ['bool process_record_navi(uint16_t keycode, keyrecord_t *record) {', '    return true;', '}'] },
+      { hook: 'get_tapping_term', lines: ['uint16_t get_tapping_term_navi(uint16_t keycode, keyrecord_t *record) {', '    return TAPPING_TERM;', '}'] },
+      { hook: 'get_combo_term', guard: 'COMBO_ENABLE', lines: ['uint16_t get_combo_term_navi(uint16_t combo_index, combo_t *combo) {', '    return COMBO_TERM;', '}'] },
+      { hook: 'combo_should_trigger', guard: 'COMBO_ENABLE', lines: ['bool combo_should_trigger_navi(uint16_t combo_index, combo_t *combo, uint16_t keycode, keyrecord_t *record) {', '    return true;', '}'] },
+      { hook: 'leader_end_user', guard: 'LEADER_ENABLE', lines: ['void leader_end_navi(void) {}'] },
+    ];
+    const stubs = allStubs.filter((s) => !hookUsed[s.hook]);
+    if (stubs.length) {
+      c.push('// ── NAVI hooks the project does not use yet (they exist so your calls to them always compile) ──');
+      for (const s of stubs) {
+        if (s.guard) c.push(`#ifdef ${s.guard}`);
+        c.push(...s.lines);
+        if (s.guard) c.push('#endif');
+      }
+      c.push('');
+    }
+    h.push('// Defined in keymap.c. Call them from your QMK hooks (see the top of this file).');
+    h.push('bool process_record_navi(uint16_t keycode, keyrecord_t *record);');
+    h.push('uint16_t get_tapping_term_navi(uint16_t keycode, keyrecord_t *record);');
+    h.push('#ifdef COMBO_ENABLE');
+    h.push('uint16_t get_combo_term_navi(uint16_t combo_index, combo_t *combo);');
+    h.push('bool combo_should_trigger_navi(uint16_t combo_index, combo_t *combo, uint16_t keycode, keyrecord_t *record);');
+    h.push('#endif');
+    h.push('#ifdef LEADER_ENABLE');
+    h.push('void leader_end_navi(void);');
+    h.push('#endif');
+    h.push('');
+  }
+
   // ── rules.mk ────────────────────────────────────────────────────────
   const rules: Record<string, 'yes' | 'no'> = {};
   const setRule = (f: FeatureId, on: boolean) => {
@@ -405,11 +536,15 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (hasEncoders) rules.ENCODER_MAP_ENABLE = 'yes';
   if (leaders.length) rules.LEADER_ENABLE = 'yes';
   if (unicodeTable.length) rules.UNICODEMAP_ENABLE = 'yes';
-  const rulesText = [`# ${HEADER(project)}`, ...Object.entries(rules).map(([k, v]) => `${k} = ${v}`), ''].join('\n');
+  // Own pipeline: rules.mk / config.h are the user's and include these files (the line to add is in the comment).
+  // $(dir $(lastword $(MAKEFILE_LIST))) is the folder of the makefile being read — the keymap folder, wherever it is.
+  const rulesHint = pipeline ? ['# Your rules.mk includes this file; add as its first line:', '#   include $(dir $(lastword $(MAKEFILE_LIST)))navi_rules.mk'] : [];
+  const rulesText = [`# ${HEADER(project)}`, ...rulesHint, ...Object.entries(rules).map(([k, v]) => `${k} = ${v}`), ''].join('\n');
 
   // ── config.h ────────────────────────────────────────────────────────
   const params = new Map(configParams().map((p) => [p.define, p]));
-  const cfg: string[] = [`// ${HEADER(project)}`, '#pragma once', ''];
+  const cfgHint = pipeline ? ['// Your config.h includes this file; add the line:', '//   #include "navi_config.h"'] : [];
+  const cfg: string[] = [`// ${HEADER(project)}`, ...cfgHint, '#pragma once', ''];
   // The keymap's config.h is read after the keyboard's config.h: a second #define with another value
   // is a warning in GCC, and QMK builds with -Werror. So #undef first.
   const define = (name: string, value?: string | number) => cfg.push(`#undef ${name}`, value === undefined || value === '' ? `#define ${name}` : `#define ${name} ${value}`);
@@ -469,13 +604,15 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (hasEncoders) generatedSymbols.add('encoder_map');
   if (hasTd) generatedSymbols.add('tap_dance_actions');
   if (hasCombos) generatedSymbols.add('key_combos');
-  if (comboTerms.length) generatedSymbols.add('get_combo_term');
-  if (comboLayers.length) generatedSymbols.add('combo_should_trigger');
+  if (!pipeline && comboTerms.length) generatedSymbols.add('get_combo_term');
+  if (!pipeline && comboLayers.length) generatedSymbols.add('combo_should_trigger');
   if (hasOverrides) generatedSymbols.add('key_overrides');
-  if (hasTd && tdTerms.length) generatedSymbols.add('get_tapping_term');
-  if (sendStringCustoms.length || macroHandledInCode) generatedSymbols.add('process_record_user');
-  if (leaders.length) generatedSymbols.add('leader_end_user');
+  if (!pipeline && hasTd && tdTerms.length) generatedSymbols.add('get_tapping_term');
+  if (!pipeline && (sendStringCustoms.length || macroHandledInCode)) generatedSymbols.add('process_record_user');
+  if (!pipeline && leaders.length) generatedSymbols.add('leader_end_user');
   if (unicodeTable.length) generatedSymbols.add('unicode_map');
+  // Own pipeline: every *_navi function is defined (the QMK hooks are the user's).
+  if (pipeline) for (const name of Object.values(NAVI_HOOKS)) generatedSymbols.add(name);
   for (const file of CUSTOM_FILES) {
     const text = custom[file];
     if (!text?.trim()) continue;
@@ -501,12 +638,43 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (!via && macros.length) issues.push({ level: 'warning', where: 'macros', message: { en: 'Without VIA, macros are compiled into keymap.c (send_string / tap_code).', ru: 'Без VIA макросы вкомпилируются в keymap.c (send_string / tap_code).' } });
   if (via) issues.push({ level: 'warning', where: 'VIA', message: { en: 'After flashing a new build, VIA resets the keyboard memory to this keymap.c (that is why it is generated from the project).', ru: 'После прошивки новой сборки VIA сбрасывает память клавиатуры к этому keymap.c (поэтому он и генерируется из проекта).' } });
 
+  if (pipeline) {
+    // QMK calls only its own hooks: the user's code must define them and forward to the *_navi ones.
+    const forward: { hook: keyof typeof NAVI_HOOKS; call: string; why: { en: string; ru: string } }[] = [
+      { hook: 'process_record_user', call: 'if (!process_record_navi(keycode, record)) return false;', why: { en: 'custom keycodes and macros', ru: 'свои keycodes и макросы' } },
+      { hook: 'get_tapping_term', call: 'return get_tapping_term_navi(keycode, record);', why: { en: 'TAPPING_TERM_PER_KEY is on — without it the build fails', ru: 'включён TAPPING_TERM_PER_KEY — без неё сборка не пройдёт' } },
+      { hook: 'get_combo_term', call: 'return get_combo_term_navi(combo_index, combo);', why: { en: 'COMBO_TERM_PER_COMBO is on — without it the build fails', ru: 'включён COMBO_TERM_PER_COMBO — без неё сборка не пройдёт' } },
+      { hook: 'combo_should_trigger', call: 'return combo_should_trigger_navi(combo_index, combo, keycode, record);', why: { en: 'COMBO_SHOULD_TRIGGER is on — combo layer limits', ru: 'включён COMBO_SHOULD_TRIGGER — ограничения комбинаций по слоям' } },
+      { hook: 'leader_end_user', call: 'leader_end_navi();', why: { en: 'leader sequences', ru: 'последовательности leader' } },
+    ];
+    for (const f of forward) {
+      if (!hookUsed[f.hook]) continue;
+      issues.push({
+        level: 'warning',
+        where: `own pipeline: ${f.hook}()`,
+        message: {
+          en: `Your code must define ${f.hook}() and call ${NAVI_HOOKS[f.hook]}() from it (${f.why.en}): ${f.call}`,
+          ru: `Ваш код должен определить ${f.hook}() и вызывать из неё ${NAVI_HOOKS[f.hook]}() (${f.why.ru}): ${f.call}`,
+        },
+      });
+    }
+  }
+
+  const rulesFile = custom['rules.mk']?.trim() ? `${withCustom('rules.mk', [rulesText.replace(/\n$/, '')]).join('\n')}\n` : rulesText;
+  const configFile = custom['config.h']?.trim() ? `${withCustom('config.h', cfg.slice(0, -1)).join('\n')}\n` : cfg.join('\n');
   return {
-    files: [
-      { name: 'keymap.c', text: `${withCustom('keymap.c', c).join('\n')}\n` },
-      { name: 'rules.mk', text: custom['rules.mk']?.trim() ? `${withCustom('rules.mk', [rulesText.replace(/\n$/, '')]).join('\n')}\n` : rulesText },
-      { name: 'config.h', text: custom['config.h']?.trim() ? `${withCustom('config.h', cfg.slice(0, -1)).join('\n')}\n` : cfg.join('\n') },
-    ],
+    files: pipeline
+      ? [
+          { name: 'keymap.c', text: `${withCustom('keymap.c', c).join('\n')}\n` },
+          { name: 'navi.h', text: `${h.join('\n')}` },
+          { name: 'navi_rules.mk', text: rulesFile },
+          { name: 'navi_config.h', text: configFile },
+        ]
+      : [
+          { name: 'keymap.c', text: `${withCustom('keymap.c', c).join('\n')}\n` },
+          { name: 'rules.mk', text: rulesFile },
+          { name: 'config.h', text: configFile },
+        ],
     issues,
     rules,
     symbols: generatedSymbols,

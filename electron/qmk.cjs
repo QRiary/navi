@@ -12,10 +12,12 @@ const crypto = require('node:crypto');
 const { execFile } = require('node:child_process');
 const { cancel, findMsys, findOnPath, fromWslUnc, parseWslList, qmkCommand, run, toWslUnc, validateArg, validateDistro, validatePath } = require('./runner.cjs');
 const { allowedBuildOption, insideDir, joinInside, readTextIfExists, safeFileName, safeId, unsafeSource, writeFileAtomic } = require('./safety.cjs');
+const { createTrustStore, scanFolders, trustRefusal } = require('./trust.cjs');
 
 const KB_RE = /^[a-z0-9_][a-z0-9_/.+-]{0,150}$/i;
 const KM_RE = /^[a-z0-9_][a-z0-9_-]{0,60}$/i;
-const KEYMAP_FILES = new Set(['keymap.c', 'keymap.json', 'rules.mk', 'config.h', 'readme.md']);
+// navi.h / navi_rules.mk / navi_config.h: the "own pipeline" mode writes these beside the user's own rules.mk/config.h.
+const KEYMAP_FILES = new Set(['keymap.c', 'keymap.json', 'rules.mk', 'config.h', 'readme.md', 'navi.h', 'navi_rules.mk', 'navi_config.h']);
 const KEYBOARD_FILES = new Set(['keyboard.json', 'info.json', 'rules.mk', 'config.h', 'readme.md', 'halconf.h', 'mcuconf.h']);
 const MAX_SOURCE = 2 * 1024 * 1024;
 
@@ -321,6 +323,22 @@ function keymapDir(home, userspace, kb, km) {
   return { dir: joinInside(path.join(base, 'keyboards'), ...parts, 'keymaps', km), exists: false, root };
 }
 
+/**
+ * The folders whose files make reads for this build: the keymap folder, plus users/<keymap> in the userspace and in
+ * qmk_firmware when they exist (QMK's USER_NAME defaults to the keymap name; USER_NAME is not on the make allowlist).
+ */
+function buildScanFolders(home, userspace, kb, km) {
+  const { dir } = keymapDir(home, userspace, kb, km);
+  const users = [userspace, home].filter(Boolean).map((root) => joinInside(path.join(root, 'users'), km));
+  return [dir, ...users.filter((d) => fs.existsSync(d))];
+}
+
+/** null = build, string = refusal. Trust is looked up on the keymap folder and covers its users/<keymap> folders. */
+function checkTrust(store, home, userspace, kb, km) {
+  const folders = buildScanFolders(home, userspace, kb, km);
+  return trustRefusal({ issues: scanFolders(folders), trusted: store.isTrusted(folders[0]) });
+}
+
 function readKeymap(home, userspace, kb, km) {
   const { dir, exists, root } = keymapDir(home, userspace, kb, km);
   const files = [];
@@ -556,6 +574,8 @@ function checkUserspace(userspace) {
 
 function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
   const send = (channel, payload) => getWindow()?.webContents.send(channel, payload);
+  // Only NAVI's local data, never the JSONC config the renderer writes.
+  const trust = createTrustStore(path.join(dataDir, 'trusted-folders.json'));
 
   ipcMain.handle('navi:qmk:detect', (_e, settings) => detect(settings));
   ipcMain.handle('navi:qmk:list-keyboards', (_e, home) => listKeyboards(validatePath(home)));
@@ -570,6 +590,9 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
     const userspace = checkUserspace(us);
     checkKb(keyboard);
     checkKm(keymap);
+    // The user's own files in an untrusted folder must pass the allowlist, or make would run them.
+    const untrusted = checkTrust(trust, home, userspace, keyboard, keymap);
+    if (untrusted) throw new Error(untrusted);
     // QMK must build the folder the user sees: ask it (dry run) before the real build.
     const dry = await runQmk(settings, ['compile', '-n', '-kb', validateArg(keyboard), '-km', validateArg(keymap)], { cwd: home, timeoutMs: 60000 });
     const r = await runner(settings);
@@ -622,6 +645,47 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
 
   ipcMain.handle('navi:qmk:cancel', (_e, job) => cancel(job));
 
+  // ── Trusted folders ──
+  ipcMain.handle('navi:trust:list', () => trust.list());
+  ipcMain.handle('navi:trust:state', (_e, home, userspace, kb, km) => {
+    validatePath(home);
+    const us = checkUserspace(userspace);
+    checkKb(kb);
+    checkKm(km);
+    const folders = buildScanFolders(home, us, kb, km);
+    return { dir: folders[0], trusted: trust.isTrusted(folders[0]), issues: scanFolders(folders) };
+  });
+  /** The grant is confirmed by a dialog the main process shows, so the interface alone cannot trust a folder. */
+  ipcMain.handle('navi:trust:grant', async (_e, dir, lang) => {
+    validatePath(dir);
+    if (!path.isAbsolute(dir) || !fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) throw new Error(`not a folder: ${dir}`);
+    const { dialog } = require('electron');
+    const ru = lang === 'ru';
+    const options = {
+      type: 'warning',
+      buttons: ru ? ['Отмена', 'Доверять'] : ['Cancel', 'Trust'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: 'NAVI',
+      message: ru ? 'Доверять этой папке?' : 'Trust this folder?',
+      detail: ru
+        ? `${dir}\n\nПри сборке make запустит код из этой папки (её rules.mk, .mk-файлы и C-код) на этом компьютере. ` +
+          'NAVI больше не будет проверять её файлы. Доверяйте только папке, код которой вы знаете. Доверие можно отозвать.'
+        : `${dir}\n\nWhen building, make will run code from this folder (its rules.mk, .mk files and C code) on this computer. ` +
+          'NAVI will no longer check its files. Trust only a folder whose code you know. You can revoke trust later.',
+    };
+    const win = getWindow();
+    const { response } = win ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options);
+    if (response !== 1) return false;
+    trust.grant(dir);
+    return true;
+  });
+  ipcMain.handle('navi:trust:revoke', (_e, dir) => {
+    validatePath(dir);
+    trust.revoke(dir);
+  });
+
   ipcMain.handle('navi:fw:list', () => listFirmware(firmwareDir));
   ipcMain.handle('navi:fw:remove', (_e, id) => {
     safeId(id);
@@ -644,4 +708,4 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
   });
 }
 
-module.exports = { registerQmkIpc, chooseRunner, homeFromConfig, parseQmkConfig, parseQmkEnv, isUserspace, keymapDir, writeKeymap, checkBuildFolder, firmwareSnapshot, runner, keyboardTargets, listKeyboards, readKeyboard, readKeymap, describeFirmware, scanUf2, archiveFirmware, listFirmware, firmwarePath, findBuiltFirmware, isQmkHome, BACKUP_MAX };
+module.exports = { registerQmkIpc, buildScanFolders, checkTrust, chooseRunner, homeFromConfig, parseQmkConfig, parseQmkEnv, isUserspace, keymapDir, writeKeymap, checkBuildFolder, firmwareSnapshot, runner, keyboardTargets, listKeyboards, readKeyboard, readKeymap, describeFirmware, scanUf2, archiveFirmware, listFirmware, firmwarePath, findBuiltFirmware, isQmkHome, BACKUP_MAX };

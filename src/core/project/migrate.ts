@@ -19,6 +19,8 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
   },
   // 2 → 3: leader key sequences and the unicode map (UNICODEMAP).
   2: (d) => ({ ...d, schemaVersion: 3, leaderSequences: Array.isArray(d.leaderSequences) ? d.leaderSequences : [], unicodeMap: Array.isArray(d.unicodeMap) ? d.unicodeMap : [] }),
+  // 3 → 4: layer C names (Layer.cName) and “own pipeline” mode (firmware.pipeline); both optional.
+  3: (d) => ({ ...d, schemaVersion: 4 }),
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {

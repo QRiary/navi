@@ -41,6 +41,7 @@ build/           app icon (icon.svg is the source)
 | Import/export: QMK `keymap.json`/`info.json`, VIA (definition and backup), KLE | `src/core/io/formats.ts`, `kle.ts` |
 | VIA protocol, client (queue, timeouts), macros, matrix detection, write plan + read-back check | `src/core/via/*` (`simulator.ts` is for tests only) |
 | `keymap.c` / `rules.mk` / `config.h` generator (tap dance, combos, leader, unicode map) | `src/core/qmk/generate.ts`; `config.h` parameters — `configParams.ts` |
+| Layer C names (`Layer.cName`, else `L_<NAME>`); “own pipeline” mode (`firmware.pipeline`): `keymap.c` + `navi.h` (enums, `NAVI_SAFE_RANGE`, prototypes) + `navi_rules.mk` / `navi_config.h` that the user's own `rules.mk` / `config.h` include; hooks are `*_navi` (always defined), the user's QMK hooks call them | `generate.ts` (`layerIdentifiers`, `layerNameIssues`), `customCode.ts` (`NAVI_HOOKS`, `PIPELINE_SYMBOLS`, `safeHeaderName`) |
 | Readable `keymap.c`: layers drawn by the geometry in box-drawing frames, `NAVI_LAYOUT` macro | `src/core/qmk/layoutText.ts` |
 | Lighting defaults of your own build (`RGB_MATRIX_DEFAULT_*`, brightness limit) | `src/core/lighting/buildDefaults.ts`, `components/lighting/BuildLighting.tsx` |
 | User's own lines in `keymap.c`/`rules.mk`/`config.h`, make variable allowlist, C cleanup | `src/core/qmk/customCode.ts`; checked again before writing — `electron/safety.cjs` |
@@ -49,6 +50,7 @@ build/           app icon (icon.svg is the source)
 | Main process: window, `app://`, WebHID permissions, IPC | `electron/main.cjs`, bridge `electron/preload.cjs` ⇄ `src/desktop/bridge.ts` |
 | Projects on disk (draft, save, 50 versions, trash) | `electron/projects.cjs` ⇄ `src/platform/projectRepo.ts` (in a browser — localStorage) |
 | QMK CLI: finding MSYS/qmk, sources, writing the keymap with a backup, compile, firmware archive; External Userspace: keymap lookup like QMK's `locate_keymap`, a `qmk compile -n` dry run refuses a build when QMK would use another folder, only firmware this build made is taken | `electron/qmk.cjs`, `electron/runner.cjs` (only validated arguments) |
+| Trusted folders: trust store (`<userData>/trusted-folders.json`, per normalized folder), scan of the keymap folder and `users/<keymap>` against the allowlist, build gate, grant (main-process warning dialog) / revoke IPC | `electron/trust.cjs`, gate and IPC in `electron/qmk.cjs` |
 | Flashing: bootloaders from the QMK table, UF2 with chip family check, `CURRENT.UF2` backup, `qmk flash` | `electron/flash.cjs` |
 | WebHID transport, `--probe-device` mode | `src/device/webhid.ts`, `src/device/probeRun.ts` |
 | Stores: project + undo/redo + draft; device; QMK; settings | `src/store/projectStore.ts`, `deviceStore.ts`, `qmkStore.ts`, `settingsStore.ts` |
@@ -67,6 +69,12 @@ Building runs `make` on the user's computer, so a project file must not be able 
 - The main process checks the files again right before writing (`electron/safety.cjs`).
 - QMK files are written only into the keymap folder (or a new target) and only after showing a diff;
   the previous files go to `%APPDATA%\NAVI\backups\qmk`.
+- Before a build, every file in the keymap folder and `users/<keymap>` must pass the same allowlist (`.mk` → make
+  check, other text → C include check; links, files too big to read and over 5000 files fail), or the build is
+  refused, unless the user trusted that folder (`electron/trust.cjs`). Trust is kept only in
+  `<userData>/trusted-folders.json` (never in a project or import/export, never set by a file in the folder), is
+  granted only through a warning dialog shown by the main process, and can be revoked. NAVI's own generated files
+  still go through the allowlist either way.
 
 ## Project format
 

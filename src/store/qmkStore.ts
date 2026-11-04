@@ -4,7 +4,8 @@
  */
 import { create } from 'zustand';
 import { analyzeKeyboard, type KeyboardSourceInfo } from '../core/qmk/sources';
-import { navi, type CompileResult, type FirmwareInfo, type FlashScan, type KeyboardSources, type KeymapSources, type QmkEnvironment } from '../desktop/bridge';
+import { navi, type CompileResult, type FirmwareInfo, type FlashScan, type KeyboardSources, type KeymapSources, type QmkEnvironment, type TrustState } from '../desktop/bridge';
+import { getLanguage } from '../i18n';
 import { useSettingsStore } from './settingsStore';
 
 export interface LogLine {
@@ -18,6 +19,8 @@ export interface QmkState {
   keyboards: string[] | null;
   sources: { keyboard: string; keymap: string; raw: KeyboardSources; info: KeyboardSourceInfo } | null;
   keymapSources: KeymapSources | null;
+  trust: TrustState | null;
+  trustedFolders: string[];
   job: { id: number | null; kind: string; running: boolean; startedAt: number } | null;
   log: LogLine[];
   lastCompile: CompileResult | null;
@@ -30,6 +33,10 @@ export interface QmkState {
   userspace(): string | null;
   loadKeyboards(): Promise<void>;
   loadSources(keyboard: string, keymap: string): Promise<void>;
+  loadTrust(keyboard: string, keymap: string): Promise<void>;
+  loadTrustedFolders(): Promise<void>;
+  grantTrust(dir: string): Promise<void>;
+  revokeTrust(dir: string): Promise<void>;
   compile(keyboard: string, keymap: string, env?: Record<string, string>, parallel?: number): Promise<CompileResult | null>;
   runDiagnostic(cmd: 'doctor' | 'version' | 'env'): Promise<void>;
   cancel(): Promise<void>;
@@ -73,6 +80,8 @@ export const useQmkStore = create<QmkState>()((set, get) => {
     keyboards: null,
     sources: null,
     keymapSources: null,
+    trust: null,
+    trustedFolders: [],
     job: null,
     log: [],
     lastCompile: null,
@@ -122,8 +131,55 @@ export const useQmkStore = create<QmkState>()((set, get) => {
           km.files.map((f) => ({ path: f.name, text: f.text })),
         );
         set({ sources: { keyboard, keymap, raw, info }, keymapSources: km, error: null });
+        await get().loadTrust(keyboard, keymap);
       } catch (err) {
-        set({ sources: null, keymapSources: null, error: (err as Error).message });
+        set({ sources: null, keymapSources: null, trust: null, error: (err as Error).message });
+      }
+    },
+
+    async loadTrust(keyboard, keymap) {
+      const home = get().home();
+      if (!navi || !home) {
+        set({ trust: null });
+        return;
+      }
+      try {
+        set({ trust: await navi.trust.state(home, get().userspace(), keyboard, keymap) });
+      } catch (err) {
+        set({ trust: null, error: (err as Error).message });
+      }
+    },
+
+    async loadTrustedFolders() {
+      if (!navi) return;
+      try {
+        set({ trustedFolders: await navi.trust.list() });
+      } catch (err) {
+        set({ error: (err as Error).message });
+      }
+    },
+
+    async grantTrust(dir) {
+      if (!navi) return;
+      try {
+        await navi.trust.grant(dir, getLanguage());
+        await get().loadTrustedFolders();
+        const s = get().sources;
+        if (s) await get().loadTrust(s.keyboard, s.keymap);
+      } catch (err) {
+        set({ error: (err as Error).message });
+      }
+    },
+
+    async revokeTrust(dir) {
+      if (!navi) return;
+      try {
+        await navi.trust.revoke(dir);
+        await get().loadTrustedFolders();
+        const s = get().sources;
+        if (s) await get().loadTrust(s.keyboard, s.keymap);
+      } catch (err) {
+        set({ error: (err as Error).message });
       }
     },
 

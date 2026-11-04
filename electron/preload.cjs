@@ -49,6 +49,12 @@ contextBridge.exposeInMainWorld('navi', {
     onLog: (cb) => subscribe('navi:qmk:log', cb),
     onDone: (cb) => subscribe('navi:qmk:done', cb),
   },
+  trust: {
+    list: invoke('navi:trust:list'),
+    state: invoke('navi:trust:state'),
+    grant: invoke('navi:trust:grant'),
+    revoke: invoke('navi:trust:revoke'),
+  },
   firmware: {
     list: invoke('navi:fw:list'),
     remove: invoke('navi:fw:remove'),

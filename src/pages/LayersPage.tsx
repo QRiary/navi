@@ -11,7 +11,8 @@ import { KeymapManager } from '../components/project/KeymapManager';
 import { decode } from '../core/keycodes/codec';
 import { keyLabel } from '../core/keycodes/labels';
 import { KC_NO, KC_TRNS } from '../core/project/factory';
-import { compareLayers, copyLayerKeys, duplicateLayer, fillLayer, insertLayer, moveLayer, removeLayer, renameLayer, setDefaultLayer, setLayerColor } from '../core/project/ops';
+import { compareLayers, copyLayerKeys, duplicateLayer, fillLayer, insertLayer, moveLayer, removeLayer, renameLayer, setDefaultLayer, setLayerColor, setLayerCName } from '../core/project/ops';
+import { layerIdentifiers } from '../core/qmk/generate';
 import { useActive, useLabelContext } from '../lib/projectContext';
 import { href, navigate } from '../lib/router';
 import { useEditorStore } from '../store/editorStore';
@@ -54,6 +55,8 @@ export function LayersPage() {
   const { project, keymap, geometry } = active;
   const cols = project.hardware.matrix.cols;
   const id = keymap.id;
+  // What each layer's C name would be if its own name were empty (the input's placeholder).
+  const defaultIds = layerIdentifiers({ ...keymap, layers: keymap.layers.map(({ cName: _cName, ...l }) => l) });
   const n = keymap.layers.length;
   const diff = cmpA < n && cmpB < n ? compareLayers(project, keymap, cmpA, cmpB) : [];
   const diffSet = new Set(diff.map((p) => `${p[0]},${p[1]}`));
@@ -94,6 +97,17 @@ export function LayersPage() {
                       maxLength={40}
                       onChange={(e) => apply((p) => renameLayer(p, id, i, e.target.value), t('rename layer', 'имя слоя'), { coalesce: `rename:${l.id}` })}
                       aria-label={t('Layer name', 'Имя слоя')}
+                    />
+                    <input
+                      className="input"
+                      style={{ maxWidth: 130, fontFamily: 'var(--mono, monospace)' }}
+                      value={l.cName ?? ''}
+                      maxLength={40}
+                      placeholder={defaultIds[i]}
+                      spellCheck={false}
+                      onChange={(e) => apply((p) => setLayerCName(p, id, i, e.target.value.replace(/[^A-Za-z0-9_]/g, '')), t('layer C name', 'C-имя слоя'), { coalesce: `cname:${l.id}` })}
+                      aria-label={t('C name (in keymap.c / navi.h)', 'C-имя (в keymap.c / navi.h)')}
+                      title={t('C name (in keymap.c / navi.h)', 'C-имя (в keymap.c / navi.h)')}
                     />
                     {i === keymap.defaultLayer && <span className="badge badge--ok">{t('base', 'базовый')}</span>}
                   </div>

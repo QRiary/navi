@@ -21,9 +21,16 @@ export function SetupTab() {
   const qmk = useSettingsStore((s) => s.settings.qmk);
   const setValue = useSettingsStore((s) => s.setValue);
 
+  const trustedFolders = useQmkStore((s) => s.trustedFolders);
+  const loadTrustedFolders = useQmkStore((s) => s.loadTrustedFolders);
+  const revokeTrust = useQmkStore((s) => s.revokeTrust);
+
   useEffect(() => {
     if (!env && navi) void detect();
   }, [env, detect]);
+  useEffect(() => {
+    void loadTrustedFolders();
+  }, [loadTrustedFolders]);
 
   if (!navi) {
     return (
@@ -120,6 +127,25 @@ export function SetupTab() {
               </label>
             )}
             <p className="field-hint">{t('Saved in the app config (Settings → config). Press “check again” after changing.', 'Сохраняется в конфиге приложения (Настройки → config). После изменения — «проверить снова».')}</p>
+          </div>
+        </section>
+        <section className="panel-box">
+          <div className="panel-box-head">
+            <span className="cell-label">{t('trusted folders', 'доверенные папки')}</span>
+          </div>
+          <div className="panel-box-body field">
+            {trustedFolders.length === 0 ? (
+              <p className="field-hint">{t('No trusted folders.', 'Нет доверенных папок.')}</p>
+            ) : (
+              trustedFolders.map((dir) => (
+                <div key={dir} className="field-row">
+                  <code style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{dir}</code>
+                  <button className="btn" onClick={() => void revokeTrust(dir)}>
+                    {t('revoke', 'отозвать')}
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </section>
       </div>
