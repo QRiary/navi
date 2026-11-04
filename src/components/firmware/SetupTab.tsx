@@ -139,7 +139,7 @@ export function SetupTab() {
             ) : (
               trustedFolders.map((dir) => (
                 <div key={dir} className="field-row">
-                  <code>{dir}</code>
+                  <code style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{dir}</code>
                   <button className="btn" onClick={() => void revokeTrust(dir)}>
                     {t('revoke', 'отозвать')}
                   </button>

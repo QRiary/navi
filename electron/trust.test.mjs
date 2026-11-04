@@ -75,6 +75,13 @@ describe('trust store', () => {
     expect(store.list()).toHaveLength(1);
   });
 
+  it('the list shows the folder as it was spelled (not case-folded), without a trailing separator', () => {
+    const dir = path.join(tmp, 'Mixed_Case');
+    fs.mkdirSync(dir);
+    store.grant(dir + path.sep);
+    expect(store.list()).toEqual([dir]);
+  });
+
   it('only an existing absolute folder can be granted', () => {
     expect(() => store.grant('relative/dir')).toThrow();
     expect(() => store.grant(path.join(tmp, 'missing'))).toThrow();

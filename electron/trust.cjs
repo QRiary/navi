@@ -45,11 +45,15 @@ function createTrustStore(file) {
     try {
       const data = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (!data || !Array.isArray(data.folders)) return [];
+      // Kept as the user's folder was spelled (shown in the list); compared by its normalized form.
       const out = [];
+      const keys = new Set();
       for (const f of data.folders) {
         if (typeof f !== 'string' || !path.isAbsolute(f)) continue;
         const n = normalizeFolder(f);
-        if (!out.includes(n)) out.push(n);
+        if (keys.has(n)) continue;
+        keys.add(n);
+        out.push(f);
       }
       return out;
     } catch {
@@ -57,10 +61,18 @@ function createTrustStore(file) {
     }
   };
   const write = (folders) => writeFileAtomic(file, `${JSON.stringify({ folders }, null, 2)}\n`);
+  const has = (folders, n) => folders.some((f) => normalizeFolder(f) === n);
+  /** The folder as written, resolved and without a trailing separator. */
+  const tidy = (dir) => {
+    let abs = path.resolve(dir);
+    const root = path.parse(abs).root;
+    while (abs.length > root.length && /[\\/]$/.test(abs)) abs = abs.slice(0, -1);
+    return abs;
+  };
 
   return {
     list: () => read(),
-    isTrusted: (dir) => typeof dir === 'string' && dir.length > 0 && read().includes(normalizeFolder(dir)),
+    isTrusted: (dir) => typeof dir === 'string' && dir.length > 0 && has(read(), normalizeFolder(dir)),
     grant(dir) {
       if (typeof dir !== 'string' || !path.isAbsolute(dir)) throw new Error('only an absolute folder can be trusted');
       let st;
@@ -72,13 +84,13 @@ function createTrustStore(file) {
       if (!st.isDirectory()) throw new Error(`not a folder: ${dir}`);
       const n = normalizeFolder(dir);
       const folders = read();
-      if (!folders.includes(n)) write([...folders, n]);
+      if (!has(folders, n)) write([...folders, tidy(dir)]);
     },
     revoke(dir) {
       if (typeof dir !== 'string' || dir.length === 0) return;
       const n = normalizeFolder(dir);
       const folders = read();
-      if (folders.includes(n)) write(folders.filter((f) => f !== n));
+      if (has(folders, n)) write(folders.filter((f) => normalizeFolder(f) !== n));
     },
   };
 }
