@@ -14,6 +14,8 @@ const { unsafeSource, writeFileAtomic } = require('./safety.cjs');
 const MAX_FILE = 2 * 1024 * 1024;
 /** More files than this is not a keymap folder; refuse instead of passing what was not scanned. */
 const MAX_FILES = 5000;
+/** Files with a NUL byte that are skipped as binary: images, firmware, archives. */
+const BINARY_EXT = /\.(png|jpe?g|gif|bmp|ico|webp|uf2|bin|hex|elf|pdf|zip|7z|gz)$/i;
 
 /**
  * One spelling per folder: resolved, no trailing separator. On Windows drive paths are case-folded (the file system
@@ -138,7 +140,13 @@ function scanFolders(folders) {
         continue;
       }
       const isMake = cur.toLowerCase().endsWith('.mk');
-      if (!isMake && buf.includes(0)) continue;
+      if (buf.includes(0)) {
+        // Only known binary types are skipped: any other file could be #included, and a NUL byte would hide the rest
+        // of it from the check. (gcc would still stop on the NUL: QMK builds with -Werror.)
+        if (!isMake && BINARY_EXT.test(cur)) continue;
+        issues.push({ file: cur, reason: 'binary data' });
+        continue;
+      }
       // The name only routes unsafeSource to its make or C branch.
       const why = unsafeSource(isMake ? 'rules.mk' : 'file.c', buf.toString('utf8'));
       if (why) issues.push({ file: cur, reason: why });

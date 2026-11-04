@@ -143,6 +143,13 @@ describe('scanning a folder against the allowlist', () => {
     expect(scanFolders([dir, path.join(tmp, 'missing')])).toEqual([]);
   });
 
+  it('a NUL byte does not hide a text file from the check (only known binary types are skipped)', () => {
+    const dir = kmDir(home, 'acme/split', 'mine');
+    stock(dir);
+    put(path.join(dir, 'evil.h'), Buffer.concat([Buffer.from('// \0\n#include "/etc/passwd"\n')]));
+    expect(scanFolders([dir]).map((i) => i.file)).toEqual([path.join(dir, 'evil.h')]);
+  });
+
   it('a file too big to check fails instead of being skipped', () => {
     const dir = kmDir(home, 'acme/split', 'mine');
     stock(dir);
