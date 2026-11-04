@@ -102,7 +102,9 @@
     // qmk_firmware folder. Empty — ask the QMK CLI (qmk config user.qmk_home)
     "home": "",
     // QMK MSYS folder (Windows). Empty — look in C:\QMK_MSYS
-    "msys": ""
+    "msys": "",
+    // WSL distro with QMK (Windows). Empty — the distro where qmk is found
+    "wsl": ""
   },
 
   // Any CSS variables directly

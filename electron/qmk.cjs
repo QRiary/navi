@@ -9,7 +9,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { cancel, findMsys, findOnPath, qmkCommand, run, validateArg, validatePath } = require('./runner.cjs');
+const { execFile } = require('node:child_process');
+const { cancel, findMsys, findOnPath, fromWslUnc, parseWslList, qmkCommand, run, toWslUnc, validateArg, validateDistro, validatePath } = require('./runner.cjs');
 const { allowedBuildOption, insideDir, joinInside, readTextIfExists, safeFileName, safeId, unsafeSource, writeFileAtomic } = require('./safety.cjs');
 
 const KB_RE = /^[a-z0-9_][a-z0-9_/.+-]{0,150}$/i;
@@ -36,33 +37,104 @@ function isQmkHome(dir) {
   }
 }
 
-function runner(settings) {
+/** Pure choice of the QMK runner. found = { msys, qmkOnPath, wsl: [{ name, hasQmk }] }. */
+function chooseRunner(settings, found) {
+  const msysResult = () => ({ kind: 'msys', bash: found.msys.bash, dir: found.msys.dir });
+  if (settings?.msys && found.msys?.dir === settings.msys) return msysResult();
+  if (settings?.wsl) {
+    try {
+      return { kind: 'wsl', distro: validateDistro(settings.wsl) };
+    } catch {
+      // invalid name in settings: ignored
+    }
+  }
+  if (found.msys) return msysResult();
+  if (found.qmkOnPath) return { kind: 'path', qmk: found.qmkOnPath };
+  const d = (found.wsl || []).find((x) => x.hasQmk);
+  return d ? { kind: 'wsl', distro: d.name } : null;
+}
+
+/** Output of a program as raw bytes (wsl.exe -l prints UTF-16). Never rejects: { code, stdout }. */
+function execBytes(file, args, timeout) {
+  return new Promise((resolve) => {
+    execFile(file, args, { encoding: 'buffer', timeout, windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
+      resolve({ code: err ? (typeof err.code === 'number' ? err.code : -1) : 0, stdout: stdout || Buffer.alloc(0) });
+    });
+  });
+}
+
+let wslCache = null;
+
+/** WSL distros and whether qmk is found in each. null: not Windows or wsl.exe is unusable. */
+async function discoverWsl(refresh) {
+  if (process.platform !== 'win32') return null;
+  if (wslCache && !refresh) return wslCache.list;
+  const l = await execBytes('wsl.exe', ['-l', '-q'], 10000);
+  let list = null;
+  if (l.code === 0) {
+    list = [];
+    for (const name of parseWslList(l.stdout)) {
+      const q = await execBytes('wsl.exe', ['-d', name, '--', 'bash', '-lc', 'command -v qmk'], 20000);
+      list.push({ name, hasQmk: q.code === 0 && q.stdout.toString('utf8').includes('qmk') });
+    }
+  }
+  wslCache = { list };
+  return list;
+}
+
+async function runner(settings, refresh = false) {
   const msys = findMsys(settings?.msys);
-  if (msys) return { kind: 'msys', bash: msys.bash, dir: msys.dir };
-  const qmk = findOnPath('qmk');
-  if (qmk) return { kind: 'path', qmk };
-  return null;
+  const qmkOnPath = findOnPath('qmk');
+  const found = { msys, qmkOnPath, wsl: [] };
+  // wsl.exe is only asked when nothing found locally decides the choice.
+  const local = chooseRunner(settings, found);
+  if (local) return local;
+  found.wsl = (await discoverWsl(refresh)) || [];
+  return chooseRunner(settings, found);
+}
+
+/**
+ * A value from `qmk config <key>` output, or null when unset. QMK CLI 1.2 adds where it came from:
+ * `user.qmk_home=/home/qmk/qmk_firmware (config)`; that suffix is not part of the path.
+ */
+function parseQmkConfig(output, key) {
+  const line = output.split(/\r?\n/).find((l) => l.startsWith(`${key}=`));
+  if (!line) return null;
+  const value = line.slice(key.length + 1).replace(/\s+\((?:config|default|env|cli)\)\s*$/, '').trim();
+  return value && value !== 'None' ? value : null;
+}
+
+/** qmk config home: a Linux path from WSL becomes UNC, an MSYS path /c/... a drive path. */
+function homeFromConfig(value, r) {
+  if (r?.kind === 'wsl' && value.startsWith('/')) return toWslUnc(r.distro, value);
+  const m = r?.kind === 'msys' ? value.match(/^\/([a-z])\/(.*)$/i) : null;
+  if (m) return `${m[1].toUpperCase()}:\\${m[2].replace(/\//g, '\\')}`;
+  return value;
 }
 
 async function runQmk(settings, args, opts = {}) {
-  const r = runner(settings);
+  const r = await runner(settings);
   if (!r) return { code: -1, output: 'QMK CLI not found' };
-  const cmd = qmkCommand(r, args);
-  const job = run(cmd.command, cmd.args, { cwd: opts.cwd, env: cmd.env, onLine: opts.onLine, timeoutMs: opts.timeoutMs });
+  // wsl.exe gets --cd instead of a spawn cwd (a UNC folder cannot be one).
+  const cmd = qmkCommand(r, args, { cwd: opts.cwd });
+  const job = run(cmd.command, cmd.args, { cwd: r.kind === 'wsl' ? undefined : opts.cwd, env: cmd.env, onLine: opts.onLine, timeoutMs: opts.timeoutMs });
   opts.onJob?.(job.id);
   return job.done;
 }
 
 /** QMK environment: where the CLI is, where qmk_firmware is, which version. */
 async function detect(settings) {
-  const r = runner(settings);
+  // "Check again": the distro list is refreshed here (the picker in settings shows it).
+  const wsl = await discoverWsl(true);
+  const r = await runner(settings);
   const report = {
-    runner: r ? { kind: r.kind, path: r.kind === 'msys' ? r.dir : r.qmk } : null,
+    runner: r ? { kind: r.kind, path: r.kind === 'msys' ? r.dir : r.kind === 'wsl' ? r.distro : r.qmk } : null,
     cliVersion: null,
     home: null,
     homeSource: null,
     homeValid: false,
     git: null,
+    wsl,
     errors: [],
   };
   if (r) {
@@ -75,9 +147,9 @@ async function detect(settings) {
   if (home) report.homeSource = 'settings';
   if (!home && r) {
     const c = await runQmk(settings, ['config', 'user.qmk_home'], { timeoutMs: 60000 });
-    const m = c.output.match(/user\.qmk_home=(.+)/);
-    if (m && m[1].trim() && m[1].trim() !== 'None') {
-      home = m[1].trim();
+    const value = parseQmkConfig(c.output, 'user.qmk_home');
+    if (value) {
+      home = value;
       report.homeSource = 'qmk-config';
     }
   }
@@ -89,15 +161,16 @@ async function detect(settings) {
     }
   }
   if (home) {
-    // In MSYS a path may come as /c/Users/… — convert it to Windows.
-    const m = home.match(/^\/([a-z])\/(.*)$/i);
-    if (m) home = `${m[1].toUpperCase()}:\\${m[2].replace(/\//g, '\\')}`;
+    home = homeFromConfig(home, r);
     report.home = home;
     report.homeValid = isQmkHome(home);
     if (report.homeValid) {
-      const gitExe = findOnPath('git');
+      const u = fromWslUnc(home);
+      // Windows git on \\wsl.localhost trips safe.directory and is slow: ask git inside the distro.
+      const gitExe = u ? 'wsl.exe' : findOnPath('git');
       if (gitExe) {
-        const g = await run(gitExe, ['-C', home, 'log', '-1', '--format=%H|%cI'], { timeoutMs: 20000 }).done;
+        const gitArgs = u ? ['-d', u.distro, '--exec', 'git', '-C', validatePath(u.linuxPath), 'log', '-1', '--format=%H|%cI'] : ['-C', home, 'log', '-1', '--format=%H|%cI'];
+        const g = await run(gitExe, gitArgs, { timeoutMs: 20000 }).done;
         if (g.code === 0) {
           const [commit, date] = g.output.trim().split('|');
           report.git = { commit, date };
@@ -112,12 +185,48 @@ async function detect(settings) {
 
 const keyboardListCache = new Map();
 
+/**
+ * Same targets as the folder walk below, from file paths relative to keyboards/ (a find run inside WSL).
+ * Folders named keymaps or starting with "." are skipped; at most 6 levels deep.
+ */
+function keyboardTargets(relFiles) {
+  const dirs = new Map(); // folder -> Set of file names
+  for (const raw of relFiles) {
+    const parts = raw.trim().replace(/^\.\//, '').split('/').filter(Boolean);
+    if (parts.length < 2) continue;
+    const name = parts.pop();
+    if (!['keyboard.json', 'rules.mk', 'info.json', 'config.h'].includes(name)) continue;
+    if (parts.some((p) => p === 'keymaps' || p.startsWith('.'))) continue;
+    const dir = parts.join('/');
+    if (!dirs.has(dir)) dirs.set(dir, new Set());
+    dirs.get(dir).add(name);
+  }
+  const out = [];
+  for (const [dir, names] of dirs) {
+    if (dir.split('/').length > 6) continue;
+    const hasChildTarget = () => [...dirs.keys()].some((d) => d.startsWith(`${dir}/`) && !d.slice(dir.length + 1).includes('/') && dirs.get(d).has('keyboard.json'));
+    if (names.has('keyboard.json') || (names.has('rules.mk') && (names.has('info.json') || names.has('config.h')) && !hasChildTarget())) out.push(dir);
+  }
+  return out.sort();
+}
+
 /** All keyboard targets: folders with keyboard.json (or info.json + rules.mk for old ones). */
-function listKeyboards(home) {
+async function listKeyboards(home) {
   if (!isQmkHome(home)) throw new Error('not a qmk_firmware folder');
   const root = path.join(home, 'keyboards');
   const cached = keyboardListCache.get(root);
   if (cached && Date.now() - cached.at < 60000) return cached.list;
+  const wslHome = fromWslUnc(home);
+  if (wslHome) {
+    // --exec: no shell in between (parentheses and | would break). A walk over \\wsl.localhost takes minutes (2.5 min vs 0.25 s inside WSL): list the files inside the distro.
+    const base = `${wslHome.linuxPath === '/' ? '' : wslHome.linuxPath}/keyboards`;
+    const args = ['-d', wslHome.distro, '--cd', validatePath(base), '--exec', 'find', '.', '-mindepth', '2', '-maxdepth', '8', '(', '-name', 'keymaps', '-o', '-name', '.?*', ')', '-prune', '-o', '-type', 'f', '(', '-name', 'keyboard.json', '-o', '-name', 'rules.mk', '-o', '-name', 'info.json', '-o', '-name', 'config.h', ')', '-print'];
+    const res = await run('wsl.exe', args, { timeoutMs: 120000 }).done;
+    if (res.code !== 0) throw new Error(`listing keyboards in WSL failed: ${res.output.trim().slice(-300)}`);
+    const list = keyboardTargets(res.output.split('\n').map((l) => l.replace(/^\.\//, '')));
+    keyboardListCache.set(root, { at: Date.now(), list });
+    return list;
+  }
   const out = [];
   const walk = (dir, rel, depth) => {
     if (depth > 6) return;
@@ -428,4 +537,4 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
   });
 }
 
-module.exports = { registerQmkIpc, listKeyboards, readKeyboard, readKeymap, describeFirmware, scanUf2, archiveFirmware, listFirmware, firmwarePath, findBuiltFirmware, isQmkHome, BACKUP_MAX };
+module.exports = { registerQmkIpc, chooseRunner, homeFromConfig, parseQmkConfig, runner, keyboardTargets, listKeyboards, readKeyboard, readKeymap, describeFirmware, scanUf2, archiveFirmware, listFirmware, firmwarePath, findBuiltFirmware, isQmkHome, BACKUP_MAX };

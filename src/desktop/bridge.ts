@@ -30,10 +30,12 @@ export interface Revision {
 export interface QmkSettings {
   home: string;
   msys: string;
+  wsl: string;
 }
 
 export interface QmkEnvironment {
-  runner: { kind: 'msys' | 'path'; path: string } | null;
+  runner: { kind: 'msys' | 'path' | 'wsl'; path: string } | null;
+  wsl: { name: string; hasQmk: boolean }[] | null;
   cliVersion: string | null;
   home: string | null;
   homeSource: 'settings' | 'qmk-config' | 'default-folder' | null;

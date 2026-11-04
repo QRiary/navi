@@ -283,6 +283,8 @@ export interface AppSettings {
     home: string;
     /** QMK MSYS folder (Windows). Empty — look in C:\QMK_MSYS. */
     msys: string;
+    /** WSL distro with QMK (Windows). Empty — the distro where qmk is found. */
+    wsl: string;
   };
   /** Any CSS variables directly: { "--panel-border-width": "2px" }. */
   vars: Record<string, string>;
@@ -329,7 +331,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   editor: { snap: 0.25, confirmDeviceWrite: true },
   device: { autoConnect: true, liveWrite: false },
-  qmk: { home: '', msys: '' },
+  qmk: { home: '', msys: '', wsl: '' },
   vars: {},
 };
 

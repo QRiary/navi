@@ -47,7 +47,7 @@ export function SetupTab() {
             {env ? (
               <dl className="kv">
                 <dt>QMK CLI</dt>
-                <dd>{env.runner ? `${env.cliVersion ?? '?'} · ${env.runner.kind === 'msys' ? 'QMK MSYS' : 'PATH'} · ${env.runner.path}` : <span style={{ color: 'var(--danger-color)' }}>{t('not found', 'не найден')}</span>}</dd>
+                <dd>{env.runner ? `${env.cliVersion ?? '?'} · ${env.runner.kind === 'msys' ? 'QMK MSYS' : env.runner.kind === 'wsl' ? 'WSL' : 'PATH'} · ${env.runner.path}` : <span style={{ color: 'var(--danger-color)' }}>{t('not found', 'не найден')}</span>}</dd>
                 <dt>qmk_firmware</dt>
                 <dd>
                   {env.home ? (
@@ -95,6 +95,20 @@ export function SetupTab() {
               <span className="field-label">QMK MSYS</span>
               <input className="input" defaultValue={qmk.msys} placeholder="C:\QMK_MSYS" onBlur={(e) => e.target.value !== qmk.msys && setValue('qmk.msys', e.target.value.trim())} />
             </label>
+            {env?.wsl && (
+              <label className="field">
+                <span className="field-label">{t('WSL distro', 'дистрибутив WSL')}</span>
+                <select className="select" value={qmk.wsl} onChange={(e) => setValue('qmk.wsl', e.target.value)}>
+                  <option value="">{t('automatic', 'автоматически')}</option>
+                  {env.wsl.map((d) => (
+                    <option key={d.name} value={d.name}>
+                      {d.name} · {d.hasQmk ? t('qmk found', 'qmk найден') : t('no qmk', 'нет qmk')}
+                    </option>
+                  ))}
+                  {qmk.wsl && !env.wsl.some((d) => d.name === qmk.wsl) && <option value={qmk.wsl}>{qmk.wsl}</option>}
+                </select>
+              </label>
+            )}
             <p className="field-hint">{t('Saved in the app config (Settings → config). Press “check again” after changing.', 'Сохраняется в конфиге приложения (Настройки → config). После изменения — «проверить снова».')}</p>
           </div>
         </section>
