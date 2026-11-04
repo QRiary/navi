@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Copy, CopyPlus, Eraser, Plus, SquareDashed, Star, Trash2 } from 'lucide-react';
 import { LayoutPreview } from '../components/keyboard/LayoutPreview';
 import { KeymapManager } from '../components/project/KeymapManager';
+import { LayerKeysOnTopRow } from '../components/advanced/LayerKeysOnTop';
 import { decode } from '../core/keycodes/codec';
 import { keyLabel } from '../core/keycodes/labels';
 import { KC_NO, KC_TRNS } from '../core/project/factory';
@@ -69,6 +70,9 @@ export function LayersPage() {
           'QMK смотрит слои от самого верхнего включённого вниз; прозрачная клавиша (▽) пропускает к следующему включённому слою, базовый слой всегда снизу. Номера слоёв в MO()/LT()/TG()… пересчитываются сами при перестановке и удалении.',
         )}
       </p>
+      <div className="panel-box rows">
+        <LayerKeysOnTopRow project={project} />
+      </div>
       <KeymapManager />
       <div className="toolbar">
         <span className="kicker">

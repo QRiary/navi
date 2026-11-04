@@ -1,6 +1,6 @@
 /**
  * ADVANCED SECTION: tap dance, combos, key overrides, own keycodes, leader, unicode,
- * behavior (config.h). All of this is code in the firmware (keymap.c / config.h): it works after building
+ * NAVI's own behavior, behavior (config.h). All of this is code in the firmware (keymap.c / config.h): it works after building
  * and flashing your own firmware (the Firmware section). It cannot be set up over VIA — and it says so.
  */
 import { useMemo, useState } from 'react';
@@ -20,6 +20,7 @@ import { useProjectStore, useSpec } from '../store/projectStore';
 import { ActionEditor, FeatureNote, IssueList, KeycodeField } from '../components/advanced/common';
 import { LeaderTab } from '../components/advanced/LeaderTab';
 import { UnicodeTab } from '../components/advanced/UnicodeTab';
+import { LayerKeysOnTopRow } from '../components/advanced/LayerKeysOnTop';
 import { ModsInput } from '../components/keyboard/KeycodeComposer';
 import { LayoutPreview } from '../components/keyboard/LayoutPreview';
 import { getLanguage, t } from '../i18n';
@@ -301,27 +302,24 @@ function AliasesTab({ project }: { project: Project }) {
   );
 }
 
-/** NAVI's own layer setting (firmware.layerKeysOnTop), shown beside the tap/hold options; not a config.h define. */
-function LayerKeysOnTopRow({ project }: { project: Project }) {
-  const apply = useProjectStore((s) => s.apply);
-  const on = project.firmware.layerKeysOnTop;
-  const title = t('Layer keys bring their layer to the top', 'Клавиши слоёв поднимают свой слой наверх');
+/** NAVI's own behaviors: C code NAVI writes into keymap.c, kept apart from QMK's config.h settings. */
+function NaviBehaviorTab({ project }: { project: Project }) {
   return (
-    <div className="row" style={{ ['--row-cols' as string]: 'minmax(0,1.3fr) minmax(0,1fr) auto' }}>
-      <span>
-        {title}
-        <span className="field-hint">
-          {' — '}
-          {t(
-            'The layer turned on last wins: layers above it are hidden while it is on. Without this, QMK shows the highest layer, so a key for a lower layer seems to do nothing.',
-            'Побеждает слой, включённый последним: слои выше него скрыты, пока он включён. Без этого QMK показывает самый верхний слой, и клавиша нижнего слоя будто не работает.',
-          )}
-        </span>
-      </span>
-      <code className="kicker">{t('NAVI (keymap.c)', 'NAVI (keymap.c)')}</code>
-      <label className="checkbox">
-        <input type="checkbox" checked={on} onChange={(e) => apply((p) => ({ ...p, firmware: { ...p.firmware, layerKeysOnTop: e.target.checked } }), title)} aria-label={title} />
-      </label>
+    <div className="page">
+      <p className="field-hint">
+        {t(
+          "Behaviors QMK does not have: NAVI writes them into keymap.c as its own C code. They apply after building and flashing. QMK's own settings are on the Behavior (config.h) tab.",
+          'Поведение, которого нет в QMK: NAVI пишет его в keymap.c своим кодом на C. Действует после сборки и прошивки. Собственные настройки QMK — на вкладке «Поведение (config.h)».',
+        )}
+      </p>
+      <section className="section">
+        <div className="section-head">
+          <h2>{t('Layers', 'Слои')}</h2>
+        </div>
+        <div className="panel-box rows">
+          <LayerKeysOnTopRow project={project} />
+        </div>
+      </section>
     </div>
   );
 }
@@ -360,7 +358,6 @@ function BehaviorTab({ project }: { project: Project }) {
             <h2>{lang === 'ru' ? groupTitle(group).ru : groupTitle(group).en}</h2>
           </div>
           <div className="panel-box rows">
-            {group === 'tapping' && <LayerKeysOnTopRow project={project} />}
             {list.map((p) => {
               const v = project.firmware.buildConfig[p.define];
               return (
@@ -400,7 +397,7 @@ function BehaviorTab({ project }: { project: Project }) {
 
 export function AdvancedPage({ tab }: { tab?: string }) {
   const project = useProjectStore((s) => s.project);
-  const current = ['tapdance', 'combos', 'overrides', 'custom', 'aliases', 'leader', 'unicode', 'behavior'].includes(tab ?? '') ? tab! : 'tapdance';
+  const current = ['tapdance', 'combos', 'overrides', 'custom', 'aliases', 'leader', 'unicode', 'navi', 'behavior'].includes(tab ?? '') ? tab! : 'tapdance';
   if (!project) return null;
   const tabs: [string, string][] = [
     ['tapdance', 'Tap Dance'],
@@ -410,6 +407,7 @@ export function AdvancedPage({ tab }: { tab?: string }) {
     ['aliases', t('Aliases', 'Псевдонимы')],
     ['leader', t('Leader key', 'Клавиша-лидер')],
     ['unicode', t('Unicode', 'Юникод')],
+    ['navi', t('NAVI behavior', 'Поведение NAVI')],
     ['behavior', t('Behavior (config.h)', 'Поведение (config.h)')],
   ];
   return (
@@ -428,6 +426,7 @@ export function AdvancedPage({ tab }: { tab?: string }) {
       {current === 'aliases' && <AliasesTab project={project} />}
       {current === 'leader' && <LeaderTab project={project} />}
       {current === 'unicode' && <UnicodeTab project={project} />}
+      {current === 'navi' && <NaviBehaviorTab project={project} />}
       {current === 'behavior' && <BehaviorTab project={project} />}
     </div>
   );
