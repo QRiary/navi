@@ -16,6 +16,7 @@ import {
   viaMacroToSteps,
 } from './formats';
 import { parseQmk } from '../keycodes/codec';
+import { analyzeKeyboard } from '../qmk/sources';
 import { loadSpec } from '../keycodes/spec';
 import { createDilemmaProject } from '../project/factory';
 import { activeGeometry, activeKeymap, setEncoder, setKeycodes } from '../project/ops';
@@ -93,6 +94,29 @@ describe('QMK keyboard.json', () => {
     expect(res.order[0]).toEqual([0, 0]);
     expect(res.order[6]).toEqual([5, 5]);
     expect(res.geometry.keys.filter((k) => k.half === 'left')).toHaveLength(28);
+  });
+
+  it('split board with direct pins: rows are the pins of one half × 2, not the layout rows × 2', () => {
+    // Made-up 2×2 per half, wired direct; the layout already spans both halves (rows 0-1 left, 2-3 right).
+    const layout = [
+      [0, 0, 0, 0], [0, 1, 1, 0], [1, 0, 0, 1], [1, 1, 1, 1],
+      [2, 0, 3, 0], [2, 1, 4, 0], [3, 0, 3, 1], [3, 1, 4, 1],
+    ].map(([r, c, x, y]) => ({ matrix: [r, c], x, y }));
+    const info = {
+      keyboard_name: 'test split direct',
+      split: { enabled: true },
+      matrix_pins: { direct: [['GP0', 'GP1'], ['GP2', 'GP3']] },
+      layouts: { LAYOUT: { layout } },
+    };
+    const res = importQmkLayout(info, 'LAYOUT');
+    expect([res.rows, res.cols]).toEqual([4, 2]);
+    expect(analyzeKeyboard([{ path: 'test/keyboard.json', text: JSON.stringify(info) }]).matrix).toEqual({ rows: 4, cols: 2 });
+  });
+
+  it('split board with neither pins nor matrix_size: rows come from the layout, not doubled', () => {
+    const layout = [[0, 0], [1, 0], [2, 0], [3, 0]].map(([r, c], i) => ({ matrix: [r, c], x: i, y: 0 }));
+    const res = importQmkLayout({ split: { enabled: true }, layouts: { LAYOUT: { layout } } }, 'LAYOUT');
+    expect([res.rows, res.cols]).toEqual([4, 1]);
   });
 });
 

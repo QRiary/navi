@@ -87,6 +87,14 @@ describe('codec: compound keycodes', () => {
     }
   });
 
+  it('redundant parentheses around an argument or a whole expression, like in C', () => {
+    expect(parseQmk(spec, 'C(S((KC_J)))')).toBe(parseQmk(spec, 'C(S(KC_J))'));
+    expect(parseQmk(spec, '(KC_A)')).toBe(0x04);
+    expect(parseQmk(spec, 'LT(2, ((KC_SPC)))')).toBe(0x422c);
+    expect(() => parseQmk(spec, '(KC_A')).toThrow();
+    expect(() => parseQmk(spec, '()')).toThrow();
+  });
+
   it('modifiers: nesting and aliases like in C', () => {
     expect(parseQmk(spec, 'LCTL(LSFT(KC_A))')).toBe(0x0304);
     expect(parseQmk(spec, 'C(S(KC_A))')).toBe(0x0304);

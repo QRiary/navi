@@ -171,10 +171,14 @@ export function importQmkLayout(info: Record<string, unknown>, layoutName: strin
   }
   const ms = isObj(info.matrix_size) ? info.matrix_size : null;
   const pins = isObj(info.matrix_pins) ? info.matrix_pins : null;
-  let rows = ms && typeof ms.rows === 'number' ? ms.rows : pins && Array.isArray(pins.rows) ? pins.rows.length : Math.max(0, ...order.map((p) => p[0])) + 1;
-  const cols = ms && typeof ms.cols === 'number' ? ms.cols : pins && Array.isArray(pins.cols) ? pins.cols.length : Math.max(0, ...order.map((p) => p[1])) + 1;
-  // Split: matrix_pins describe one half, the matrix has twice as many rows.
-  if (isObj(info.split) && (info.split as Record<string, unknown>).enabled && pins && !ms) rows *= 2;
+  // Split: matrix_pins describe one half, the matrix has twice as many rows. The layout's own
+  // matrix positions already span both halves, so they are never doubled.
+  const split = isObj(info.split) && !!(info.split as Record<string, unknown>).enabled;
+  const direct = pins && Array.isArray(pins.direct) ? (pins.direct as unknown[]).filter(Array.isArray) as unknown[][] : null;
+  const pinRows = pins && Array.isArray(pins.rows) ? pins.rows.length : direct ? direct.length : undefined;
+  const pinCols = pins && Array.isArray(pins.cols) ? pins.cols.length : direct ? Math.max(0, ...direct.map((r) => r.length)) : undefined;
+  const rows = ms && typeof ms.rows === 'number' ? ms.rows : pinRows !== undefined ? pinRows * (split ? 2 : 1) : Math.max(0, ...order.map((p) => p[0])) + 1;
+  const cols = ms && typeof ms.cols === 'number' ? ms.cols : pinCols ?? Math.max(0, ...order.map((p) => p[1])) + 1;
   const name = typeof info.keyboard_name === 'string' ? info.keyboard_name : (keyboard ?? 'QMK keyboard');
   const geometry: Geometry = {
     id: newId('geo'),
