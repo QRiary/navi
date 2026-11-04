@@ -18,6 +18,7 @@ import { href } from '../lib/router';
 import { useEditorStore } from '../store/editorStore';
 import { useProjectStore, useSpec } from '../store/projectStore';
 import { ActionEditor, FeatureNote, IssueList, KeycodeField } from '../components/advanced/common';
+import { TapHoldTab } from '../components/advanced/TapHoldTab';
 import { LeaderTab } from '../components/advanced/LeaderTab';
 import { UnicodeTab } from '../components/advanced/UnicodeTab';
 import { LayerKeysOnTopRow } from '../components/advanced/LayerKeysOnTop';
@@ -397,10 +398,11 @@ function BehaviorTab({ project }: { project: Project }) {
 
 export function AdvancedPage({ tab }: { tab?: string }) {
   const project = useProjectStore((s) => s.project);
-  const current = ['tapdance', 'combos', 'overrides', 'custom', 'aliases', 'leader', 'unicode', 'navi', 'behavior'].includes(tab ?? '') ? tab! : 'tapdance';
+  const current = ['tapdance', 'taphold', 'combos', 'overrides', 'custom', 'aliases', 'leader', 'unicode', 'navi', 'behavior'].includes(tab ?? '') ? tab! : 'tapdance';
   if (!project) return null;
   const tabs: [string, string][] = [
     ['tapdance', 'Tap Dance'],
+    ['taphold', t('Tap-hold', 'Тап-холд')],
     ['combos', t('Combos', 'Комбо')],
     ['overrides', t('Key overrides', 'Подмена сочетаний')],
     ['custom', t('Custom keycodes', 'Свои keycodes')],
@@ -420,6 +422,7 @@ export function AdvancedPage({ tab }: { tab?: string }) {
         ))}
       </div>
       {current === 'tapdance' && <TapDanceTab project={project} />}
+      {current === 'taphold' && <TapHoldTab project={project} />}
       {current === 'combos' && <CombosTab project={project} />}
       {current === 'overrides' && <OverridesTab project={project} />}
       {current === 'custom' && <CustomTab project={project} />}

@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 6;
+export const PROJECT_SCHEMA_VERSION = 7;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -281,6 +281,21 @@ export interface KeyAlias {
   keycode: number;
 }
 
+/**
+ * Tap-hold settings of one mod-tap / layer-tap keycode (core/project/tapHolds.ts): every key with that keycode
+ * shares them, like QMK's own per-key get_*() functions. undefined = the global setting.
+ */
+export interface TapHoldSetting {
+  id: string;
+  keycode: number;
+  /** tap-preferred: neither flag; balanced: PERMISSIVE_HOLD; hold-preferred: HOLD_ON_OTHER_KEY_PRESS. */
+  flavor?: 'tap-preferred' | 'balanced' | 'hold-preferred';
+  tappingTerm?: number;
+  quickTapTerm?: number;
+  /** Pressing one of these keys while the tap-hold key is undecided makes it a hold at once. */
+  holdOnKeys?: number[];
+}
+
 // ── Lighting ──────────────────────────────────────────────────────────
 
 export interface LightingState {
@@ -363,6 +378,8 @@ export interface Project {
   customKeycodes: CustomKeycode[];
   /** Labels for keycodes, with a C name for the user's code (since format 5). */
   keyAliases: KeyAlias[];
+  /** Per-keycode tap-hold settings (since format 7). */
+  tapHolds: TapHoldSetting[];
   /** Sequences after the leader key (QK_LEAD) — leader_end_user in keymap.c. */
   leaderSequences: LeaderSequence[];
   /** Character table for UM(i)/UP(i,j) (UNICODEMAP): index = position in the list. */

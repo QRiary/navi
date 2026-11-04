@@ -38,6 +38,7 @@ build/           app icon (icon.svg is the source)
 | Firmware features and their states (works / needs firmware / not supported / unknown) | `src/core/features/registry.ts`, `required.ts`, `advanced.ts` (tap dance / combo / override checks) |
 | Project model | `src/core/project/types.ts`; operations `ops.ts`, untrusted JSON `validate.ts`, `migrate.ts`, `diff.ts`, `factory.ts` |
 | Key aliases: a label shown on every key with that keycode, C name `NV_<LABEL>` (Cyrillic transliterated), checks; `#define`s go to `navi.h` (own pipeline) or `keymap.c`, the keymap keeps plain keycodes; layer moves renumber them, a deleted layer drops its aliases | `src/core/project/aliases.ts`, Advanced → Aliases (`pages/AdvancedPage.tsx`) |
+| Per-key tap-hold settings (flavor, tapping term, quick tap term, “hold when pressed” keys), keyed by the MT / LT keycode: checks and usage, C pieces (`get_tapping_term` shared with tap dance, `get_quick_tap_term`, `get_hold_on_other_key_press`, `get_permissive_hold`, `pre_process_record`), tab Advanced → Tap-hold | `src/core/project/tapHolds.ts`, `src/core/qmk/tapHold.ts`, `components/advanced/TapHoldTab.tsx` |
 | Geometry and templates (Dilemma 4x6 clone, grid) | `src/core/layout/geometry.ts`, `templates.ts` |
 | Import/export: QMK `keymap.json`/`info.json`, VIA (definition and backup), KLE | `src/core/io/formats.ts`, `kle.ts` |
 | VIA protocol, client (queue, timeouts), macros, matrix detection, write plan + read-back check | `src/core/via/*` (`simulator.ts` is for tests only) |

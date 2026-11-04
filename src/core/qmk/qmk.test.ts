@@ -511,7 +511,7 @@ describe('own pipeline mode', async () => {
     };
   };
   const QMK_HOOKS = ['process_record_user', 'get_tapping_term', 'get_combo_term', 'combo_should_trigger', 'leader_end_user'];
-  const NAVI_FNS = ['process_record_navi', 'get_tapping_term_navi', 'get_combo_term_navi', 'combo_should_trigger_navi', 'leader_end_navi', 'layer_state_set_navi'];
+  const NAVI_FNS = ['process_record_navi', 'get_tapping_term_navi', 'get_combo_term_navi', 'combo_should_trigger_navi', 'leader_end_navi', 'layer_state_set_navi', 'get_quick_tap_term_navi', 'get_hold_on_other_key_press_navi', 'get_permissive_hold_navi', 'pre_process_record_navi'];
   const defines = (c: string, name: string) => new RegExp(`^\\w[\\w ]*\\b${name}\\([^;]*\\)\\s*\\{`, 'm').test(c);
 
   it('file set: keymap.c, navi.h, navi_rules.mk, navi_config.h — never rules.mk / config.h', () => {

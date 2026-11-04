@@ -257,10 +257,10 @@ describe('format migrations', () => {
     const v5 = JSON.parse(serializeProject(p));
     v5.schemaVersion = 5;
     delete v5.firmware.layerKeysOnTop;
-    expect(migrateProject(v5)).toMatchObject({ from: 5, data: { schemaVersion: 6, firmware: { layerKeysOnTop: false } } });
+    expect(migrateProject(v5)).toMatchObject({ from: 5, data: { schemaVersion: 7, firmware: { layerKeysOnTop: false } } });
     const { project: loaded, issues } = validateProject(v5);
     expect(issues.filter((i) => i.level === 'error')).toEqual([]);
-    expect(PROJECT_SCHEMA_VERSION).toBe(6);
+    expect(PROJECT_SCHEMA_VERSION).toBe(7);
     expect(loaded?.firmware.layerKeysOnTop).toBe(false);
   });
 
