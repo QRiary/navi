@@ -511,7 +511,7 @@ describe('own pipeline mode', async () => {
     };
   };
   const QMK_HOOKS = ['process_record_user', 'get_tapping_term', 'get_combo_term', 'combo_should_trigger', 'leader_end_user'];
-  const NAVI_FNS = ['process_record_navi', 'get_tapping_term_navi', 'get_combo_term_navi', 'combo_should_trigger_navi', 'leader_end_navi'];
+  const NAVI_FNS = ['process_record_navi', 'get_tapping_term_navi', 'get_combo_term_navi', 'combo_should_trigger_navi', 'leader_end_navi', 'layer_state_set_navi'];
   const defines = (c: string, name: string) => new RegExp(`^\\w[\\w ]*\\b${name}\\([^;]*\\)\\s*\\{`, 'm').test(c);
 
   it('file set: keymap.c, navi.h, navi_rules.mk, navi_config.h — never rules.mk / config.h', () => {
@@ -532,7 +532,7 @@ describe('own pipeline mode', async () => {
     expect(c).toContain('#ifdef LEADER_ENABLE\nvoid leader_end_navi(void) {}\n#endif');
     for (const hook of QMK_HOOKS) expect(defines(c, hook), hook).toBe(false);
     expect(res.issues.filter((i) => i.where.startsWith('own pipeline'))).toEqual([]);
-    expect([...res.symbols].sort()).toEqual(['keymaps', ...NAVI_FNS].sort());
+    expect([...res.symbols].sort()).toEqual(['keymaps', 'navi_layers_on', 'navi_layer_off', ...NAVI_FNS].sort());
     const h = file(res, 'navi.h');
     expect(h).toContain('#pragma once');
     expect(h).toContain('    NAVI_SAFE_RANGE = SAFE_RANGE // your own keycodes start here');
@@ -622,6 +622,72 @@ describe('own pipeline mode', async () => {
     expect(file(b, 'keymap.c')).not.toContain('NAVI_SAFE_RANGE');
     expect(file(b, 'keymap.c').split('// ── your own lines')[0]).not.toContain('_navi');
     expect(file(b, 'keymap.c')).toContain('enum custom_keycodes {\n    HELLO = SAFE_RANGE, // says hi\n};');
+  });
+
+  describe('layer keys bring their layer to the top', () => {
+    const onTop = (p: Project, on = true): Project => ({ ...p, firmware: { ...p.firmware, layerKeysOnTop: on } });
+    const gen = (p: Project) => generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: false, encoderCount: 2 });
+
+    it('off: pure output is the same as without the field, with no layer state code', () => {
+      for (const p of [createBlankProject('x', 4, 6, false), full()]) {
+        const { layerKeysOnTop: _, ...fw } = p.firmware;
+        const a = gen(onTop(p, false));
+        const b = gen({ ...p, firmware: fw as Project['firmware'] });
+        expect(a.files).toEqual(b.files);
+        const c = file(a, 'keymap.c');
+        for (const s of ['layer_state_set_user', 'navi_wanted', 'navi_layer_keys', 'navi_layers_on']) expect(c).not.toContain(s);
+        expect(a.symbols.has('layer_state_set_user')).toBe(false);
+      }
+      // blank project: no process_record_user either
+      expect(file(gen(createBlankProject('x', 4, 6, false)), 'keymap.c')).not.toContain('process_record_user');
+    });
+
+    it('on, pure: the callback, the state, the helpers and the layer key check in process_record_user', () => {
+      for (const p of [onTop(createBlankProject('x', 4, 6, false)), onTop(full())]) {
+        const res = gen(p);
+        const c = file(res, 'keymap.c').split('// ── your own lines')[0];
+        expect(defines(c, 'layer_state_set_user')).toBe(true);
+        expect(defines(c, 'process_record_user')).toBe(true);
+        expect(defines(c, 'navi_layers_on')).toBe(true);
+        expect(defines(c, 'navi_layer_off')).toBe(true);
+        expect(c).toContain('static layer_state_t navi_wanted');
+        expect(c).toMatch(/bool process_record_user\(uint16_t keycode, keyrecord_t \*record\) \{\n {4}navi_layer_keys\(keycode, record\);/);
+        expect(c).not.toContain('_navi(');
+        for (const s of ['layer_state_set_user', 'process_record_user', 'navi_layers_on', 'navi_layer_off']) expect(res.symbols.has(s), s).toBe(true);
+      }
+      const blank = file(gen(onTop(createBlankProject('x', 4, 6, false))), 'keymap.c');
+      expect(blank).toContain('    navi_layer_keys(keycode, record); // layer keys bring their layer to the top\n    return true;\n}');
+    });
+
+    it('on, pure: own keymap.c lines that define layer_state_set_user are an error', () => {
+      const p = onTop(createBlankProject('x', 4, 6, false));
+      const own = { ...p, firmware: { ...p.firmware, custom: { 'keymap.c': 'layer_state_t layer_state_set_user(layer_state_t state) {\n    return state;\n}' } } };
+      expect(gen(own).issues.some((i) => i.level === 'error' && i.where.startsWith('keymap.c'))).toBe(true);
+      expect(gen(onTop(own, false)).issues.filter((i) => i.level === 'error')).toEqual([]);
+    });
+
+    it('own pipeline: layer_state_set_navi always exists; on → real code, forwarding warnings', () => {
+      const offRes = gen(pipe(createBlankProject('x', 4, 6, false)));
+      expect(file(offRes, 'keymap.c')).toContain('layer_state_t layer_state_set_navi(layer_state_t state) {\n    return state;\n}');
+      const h = file(offRes, 'navi.h');
+      for (const proto of ['layer_state_t layer_state_set_navi(layer_state_t state);', 'layer_state_t navi_layers_on(void);', 'void navi_layer_off(uint8_t layer);']) expect(h).toContain(proto);
+      expect(h).toContain('//   layer_state_t layer_state_set_user(layer_state_t state) { return layer_state_set_navi(state); }');
+
+      const res = gen(pipe(onTop(createBlankProject('x', 4, 6, false))));
+      const c = file(res, 'keymap.c');
+      expect(defines(c, 'layer_state_set_navi')).toBe(true);
+      expect(defines(c, 'layer_state_set_user')).toBe(false);
+      expect(c).not.toContain('    return state;\n}');
+      expect(c).toMatch(/bool process_record_navi\(uint16_t keycode, keyrecord_t \*record\) \{\n {4}navi_layer_keys\(keycode, record\);/);
+      const warn = res.issues.filter((i) => i.where.startsWith('own pipeline'));
+      expect(warn.map((i) => i.where)).toEqual(['own pipeline: process_record_user()', 'own pipeline: layer_state_set_user()']);
+      expect(warn[1].message.en).toContain('return layer_state_set_navi(state);');
+      expect(warn[0].message.en).toContain('layer key releases');
+      // pipeline: the user's own lines may define the QMK hook, not NAVI's function
+      const fwd = (body: string) => gen(pipe({ ...onTop(createBlankProject('x', 4, 6, false)), firmware: { ...onTop(createBlankProject('x', 4, 6, false)).firmware, pipeline: { enabled: true, headers: [] }, custom: { 'keymap.c': body } } }));
+      expect(fwd('layer_state_t layer_state_set_user(layer_state_t state) {\n    return layer_state_set_navi(state);\n}').issues.filter((i) => i.level === 'error')).toEqual([]);
+      expect(fwd('layer_state_t layer_state_set_navi(layer_state_t state) {\n    return state;\n}').issues.some((i) => i.level === 'error')).toBe(true);
+    });
   });
 });
 

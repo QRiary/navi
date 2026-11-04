@@ -23,6 +23,12 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
   3: (d) => ({ ...d, schemaVersion: 4 }),
   // 4 → 5: key aliases (keyAliases).
   4: (d) => ({ ...d, schemaVersion: 5, keyAliases: Array.isArray(d.keyAliases) ? d.keyAliases : [] }),
+  // 5 → 6: “layer keys bring their layer to the top” (firmware.layerKeysOnTop), off for older files.
+  5: (d) => {
+    const f = d.firmware;
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 6 }; // validate reports it
+    return { ...d, schemaVersion: 6, firmware: { ...(f as Data), layerKeysOnTop: false } };
+  },
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {

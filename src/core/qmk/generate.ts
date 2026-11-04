@@ -15,6 +15,7 @@ import type { KeycodeSpec } from '../keycodes/spec';
 import { FEATURE_BY_ID, type FeatureId } from '../features/registry';
 import { checkCombos, checkKeyOverrides, checkLeaderSequences, checkTapDances, checkUnicodeMap, leaderFunction, type AdvancedIssue } from '../features/advanced';
 import { configParams, configValueType } from './configParams';
+import { layerOnTopCallback, layerOnTopState, layerOnTopStubs } from './layerOnTop';
 import { checkCustom, customBlock, CUSTOM_FILES, hasCustomCode, NAVI_HOOKS, PIPELINE_MAX_HEADERS, safeHeaderName, unsafeDefineValue, validCIdentifier, type CustomFile } from './customCode';
 import { requiredFeatures } from '../features/required';
 import { RGB_MATRIX_EFFECTS } from '../lighting/effects';
@@ -246,6 +247,9 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     h.push('//       return combo_should_trigger_navi(index, combo, keycode, record);');
     h.push('//   }');
     h.push('//   void leader_end_user(void) { leader_end_navi(); }');
+    h.push('//   layer_state_t layer_state_set_user(layer_state_t state) { return layer_state_set_navi(state); }');
+    h.push('// With “layer keys bring their layer to the top” on, process_record_navi must also see layer key releases');
+    h.push('// (call it before anything in process_record_user can return false).');
     h.push('// Your own keycodes start at NAVI_SAFE_RANGE: enum my_keycodes { MY_KEY = NAVI_SAFE_RANGE, ... };');
     h.push('#pragma once');
     h.push('');
@@ -465,8 +469,17 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   }
 
   const macroHandledInCode = !via && macros.length > 0;
-  if (sendStringCustoms.length || macroHandledInCode) {
+  const layersOnTop = project.firmware.layerKeysOnTop === true;
+  if (layersOnTop) {
+    c.push(...layerOnTopState());
+    c.push(...layerOnTopCallback(hookName('layer_state_set_user')));
+  }
+  const keysInCode = sendStringCustoms.length > 0 || macroHandledInCode;
+  if (keysInCode || layersOnTop) {
     c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
+    if (layersOnTop) c.push('    navi_layer_keys(keycode, record); // layer keys bring their layer to the top');
+  }
+  if (keysInCode) {
     c.push('    if (!record->event.pressed) return true;');
     c.push('    switch (keycode) {');
     sendStringCustoms.forEach((ck) => {
@@ -482,6 +495,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       });
     }
     c.push('    }');
+  }
+  if (keysInCode || layersOnTop) {
     c.push('    return true;');
     c.push('}');
     c.push('');
@@ -489,7 +504,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
 
   // Which hooks the project fills (in both modes the same conditions as above).
   const hookUsed: Record<keyof typeof NAVI_HOOKS, boolean> = {
-    process_record_user: sendStringCustoms.length > 0 || macroHandledInCode,
+    process_record_user: keysInCode || layersOnTop,
+    layer_state_set_user: layersOnTop,
     get_tapping_term: hasTd && tdTerms.length > 0,
     get_combo_term: comboTerms.length > 0,
     combo_should_trigger: comboLayers.length > 0,
@@ -503,6 +519,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       { hook: 'get_combo_term', guard: 'COMBO_ENABLE', lines: ['uint16_t get_combo_term_navi(uint16_t combo_index, combo_t *combo) {', '    return COMBO_TERM;', '}'] },
       { hook: 'combo_should_trigger', guard: 'COMBO_ENABLE', lines: ['bool combo_should_trigger_navi(uint16_t combo_index, combo_t *combo, uint16_t keycode, keyrecord_t *record) {', '    return true;', '}'] },
       { hook: 'leader_end_user', guard: 'LEADER_ENABLE', lines: ['void leader_end_navi(void) {}'] },
+      { hook: 'layer_state_set_user', lines: layerOnTopStubs() },
     ];
     const stubs = allStubs.filter((s) => !hookUsed[s.hook]);
     if (stubs.length) {
@@ -524,6 +541,9 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     h.push('#ifdef LEADER_ENABLE');
     h.push('void leader_end_navi(void);');
     h.push('#endif');
+    h.push('layer_state_t layer_state_set_navi(layer_state_t state);');
+    h.push('layer_state_t navi_layers_on(void); // layers turned on, hidden ones included');
+    h.push('void navi_layer_off(uint8_t layer); // also turns off a hidden layer');
     h.push('');
   }
 
@@ -616,8 +636,10 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (!pipeline && comboLayers.length) generatedSymbols.add('combo_should_trigger');
   if (hasOverrides) generatedSymbols.add('key_overrides');
   if (!pipeline && hasTd && tdTerms.length) generatedSymbols.add('get_tapping_term');
-  if (!pipeline && (sendStringCustoms.length || macroHandledInCode)) generatedSymbols.add('process_record_user');
+  if (!pipeline && (keysInCode || layersOnTop)) generatedSymbols.add('process_record_user');
   if (!pipeline && leaders.length) generatedSymbols.add('leader_end_user');
+  if (!pipeline && layersOnTop) generatedSymbols.add('layer_state_set_user');
+  if (pipeline || layersOnTop) for (const name of ['navi_layers_on', 'navi_layer_off']) generatedSymbols.add(name);
   if (unicodeTable.length) generatedSymbols.add('unicode_map');
   // Own pipeline: every *_navi function is defined (the QMK hooks are the user's).
   if (pipeline) for (const name of Object.values(NAVI_HOOKS)) generatedSymbols.add(name);
@@ -649,11 +671,18 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (pipeline) {
     // QMK calls only its own hooks: the user's code must define them and forward to the *_navi ones.
     const forward: { hook: keyof typeof NAVI_HOOKS; call: string; why: { en: string; ru: string } }[] = [
-      { hook: 'process_record_user', call: 'if (!process_record_navi(keycode, record)) return false;', why: { en: 'custom keycodes and macros', ru: 'свои keycodes и макросы' } },
+      {
+        hook: 'process_record_user',
+        call: 'if (!process_record_navi(keycode, record)) return false;',
+        why: keysInCode
+          ? { en: `custom keycodes and macros${layersOnTop ? '; layer keys bring their layer to the top' : ''}`, ru: `свои keycodes и макросы${layersOnTop ? '; клавиши слоёв поднимают свой слой наверх' : ''}` }
+          : { en: 'layer keys bring their layer to the top: it must see layer key releases', ru: 'клавиши слоёв поднимают свой слой наверх: она должна видеть отпускание клавиш слоёв' },
+      },
       { hook: 'get_tapping_term', call: 'return get_tapping_term_navi(keycode, record);', why: { en: 'TAPPING_TERM_PER_KEY is on — without it the build fails', ru: 'включён TAPPING_TERM_PER_KEY — без неё сборка не пройдёт' } },
       { hook: 'get_combo_term', call: 'return get_combo_term_navi(combo_index, combo);', why: { en: 'COMBO_TERM_PER_COMBO is on — without it the build fails', ru: 'включён COMBO_TERM_PER_COMBO — без неё сборка не пройдёт' } },
       { hook: 'combo_should_trigger', call: 'return combo_should_trigger_navi(combo_index, combo, keycode, record);', why: { en: 'COMBO_SHOULD_TRIGGER is on — combo layer limits', ru: 'включён COMBO_SHOULD_TRIGGER — ограничения комбинаций по слоям' } },
       { hook: 'leader_end_user', call: 'leader_end_navi();', why: { en: 'leader sequences', ru: 'последовательности leader' } },
+      { hook: 'layer_state_set_user', call: 'return layer_state_set_navi(state);', why: { en: 'layer keys bring their layer to the top', ru: 'клавиши слоёв поднимают свой слой наверх' } },
     ];
     for (const f of forward) {
       if (!hookUsed[f.hook]) continue;

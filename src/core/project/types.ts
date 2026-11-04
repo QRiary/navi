@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 5;
+export const PROJECT_SCHEMA_VERSION = 6;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -335,6 +335,11 @@ export interface FirmwareConfig {
    * headers — the user's header files included at the top of keymap.c, in order (relative paths, ≤ 20).
    */
   pipeline?: { enabled: boolean; headers: string[] };
+  /**
+   * Layer keys bring their layer to the top: the layer turned on last wins and every layer above it (by number)
+   * is hidden while it is on. NAVI's own setting (generated layer_state_set_user / layer_state_set_navi), not a define.
+   */
+  layerKeysOnTop: boolean;
 }
 
 // ── Project ───────────────────────────────────────────────────────────
