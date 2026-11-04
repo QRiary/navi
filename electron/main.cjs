@@ -16,6 +16,7 @@ const { createProjectStore } = require('./projects.cjs');
 const { readTextIfExists, safeFileName, writeFileAtomic } = require('./safety.cjs');
 const { registerQmkIpc } = require('./qmk.cjs');
 const { registerFlashIpc } = require('./flash.cjs');
+const { registerLinkIpc } = require('./links.cjs');
 const { cancelAll } = require('./runner.cjs');
 
 app.setName('NAVI');
@@ -190,6 +191,7 @@ function watchConfig() {
 
 function registerIpc() {
   const store = createProjectStore(projectsDir);
+  const links = registerLinkIpc({ ipcMain, dialog, getWindow: () => win, dataDir });
 
   ipcMain.handle('navi:info', () => ({
     dataDir,
@@ -215,7 +217,10 @@ function registerIpc() {
   ipcMain.handle('navi:projects:save', (_e, id, text, label) => store.save(id, text, label));
   ipcMain.handle('navi:projects:revisions', (_e, id) => store.revisions(id));
   ipcMain.handle('navi:projects:read-revision', (_e, id, file) => store.readRevision(id, file));
-  ipcMain.handle('navi:projects:remove', (_e, id) => store.remove(id));
+  ipcMain.handle('navi:projects:remove', (_e, id) => {
+    store.remove(id);
+    links.unlink(id);
+  });
 
   // Export: the file is written only where the user chose in the save dialog.
   ipcMain.handle('navi:file:save', async (_e, { name, text, filters }) => {

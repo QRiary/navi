@@ -49,6 +49,16 @@ contextBridge.exposeInMainWorld('navi', {
     onLog: (cb) => subscribe('navi:qmk:log', cb),
     onDone: (cb) => subscribe('navi:qmk:done', cb),
   },
+  links: {
+    state: invoke('navi:links:state'),
+    open: invoke('navi:links:open'),
+    attach: invoke('navi:links:attach'),
+    create: invoke('navi:links:create'),
+    relink: invoke('navi:links:relink'),
+    accept: invoke('navi:links:accept'),
+    write: invoke('navi:links:write'),
+    unlink: invoke('navi:links:unlink'),
+  },
   trust: {
     list: invoke('navi:trust:list'),
     state: invoke('navi:trust:state'),
