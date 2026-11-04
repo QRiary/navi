@@ -87,9 +87,21 @@ async function runner(settings, refresh = false) {
   const qmkOnPath = findOnPath('qmk');
   const found = { msys, qmkOnPath, wsl: [] };
   // wsl.exe is only asked when nothing found locally decides the choice.
-  const decided = (settings?.msys && msys?.dir === settings.msys) || settings?.wsl || msys || qmkOnPath;
-  if (!decided) found.wsl = (await discoverWsl(refresh)) || [];
+  const local = chooseRunner(settings, found);
+  if (local) return local;
+  found.wsl = (await discoverWsl(refresh)) || [];
   return chooseRunner(settings, found);
+}
+
+/**
+ * A value from `qmk config <key>` output, or null when unset. QMK CLI 1.2 adds where it came from:
+ * `user.qmk_home=/home/qmk/qmk_firmware (config)`; that suffix is not part of the path.
+ */
+function parseQmkConfig(output, key) {
+  const line = output.split(/\r?\n/).find((l) => l.startsWith(`${key}=`));
+  if (!line) return null;
+  const value = line.slice(key.length + 1).replace(/\s+\((?:config|default|env|cli)\)\s*$/, '').trim();
+  return value && value !== 'None' ? value : null;
 }
 
 /** qmk config home: a Linux path from WSL becomes UNC, an MSYS path /c/... a drive path. */
@@ -135,9 +147,9 @@ async function detect(settings) {
   if (home) report.homeSource = 'settings';
   if (!home && r) {
     const c = await runQmk(settings, ['config', 'user.qmk_home'], { timeoutMs: 60000 });
-    const m = c.output.match(/user\.qmk_home=(.+)/);
-    if (m && m[1].trim() && m[1].trim() !== 'None') {
-      home = m[1].trim();
+    const value = parseQmkConfig(c.output, 'user.qmk_home');
+    if (value) {
+      home = value;
       report.homeSource = 'qmk-config';
     }
   }
@@ -525,4 +537,4 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
   });
 }
 
-module.exports = { registerQmkIpc, chooseRunner, homeFromConfig, runner, keyboardTargets, listKeyboards, readKeyboard, readKeymap, describeFirmware, scanUf2, archiveFirmware, listFirmware, firmwarePath, findBuiltFirmware, isQmkHome, BACKUP_MAX };
+module.exports = { registerQmkIpc, chooseRunner, homeFromConfig, parseQmkConfig, runner, keyboardTargets, listKeyboards, readKeyboard, readKeymap, describeFirmware, scanUf2, archiveFirmware, listFirmware, firmwarePath, findBuiltFirmware, isQmkHome, BACKUP_MAX };

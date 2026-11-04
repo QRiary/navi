@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { validateDistro, parseWslList, toWslUnc, fromWslUnc, qmkCommand } = require('./runner.cjs');
-const { chooseRunner, keyboardTargets, homeFromConfig } = require('./qmk.cjs');
+const { chooseRunner, keyboardTargets, homeFromConfig, parseQmkConfig } = require('./qmk.cjs');
 const { insideDir } = require('./safety.cjs');
 
 /** What `wsl.exe -l -q` prints: UTF-16LE, CRLF line ends, sometimes a trailing blank line. */
@@ -63,6 +63,14 @@ describe('WSL paths', () => {
     expect(homeFromConfig('C:\\qmk', { kind: 'path' })).toBe('C:\\qmk');
     // A UNC path typed into settings is kept as it is.
     expect(homeFromConfig('\\\\wsl.localhost\\QMK\\home\\qmk\\qmk_firmware', { kind: 'wsl', distro: 'QMK' })).toBe('\\\\wsl.localhost\\QMK\\home\\qmk\\qmk_firmware');
+  });
+
+  it('qmk config output: QMK CLI 1.2 adds "(config)" after the value; a login banner may come first', () => {
+    const banner = '\x1b[0;31mWelcome to QMK WSL!\x1b[0m\n  * Documentation:    https://docs.qmk.fm\n';
+    expect(parseQmkConfig(`${banner}user.qmk_home=/home/qmk/qmk_firmware (config)\n`, 'user.qmk_home')).toBe('/home/qmk/qmk_firmware');
+    expect(parseQmkConfig('user.qmk_home=C:/Users/x/qmk_firmware\r\n', 'user.qmk_home')).toBe('C:/Users/x/qmk_firmware');
+    expect(parseQmkConfig('user.qmk_home=None\n', 'user.qmk_home')).toBeNull();
+    expect(parseQmkConfig('nothing here\n', 'user.qmk_home')).toBeNull();
   });
 });
 
