@@ -12,7 +12,7 @@ npm run typecheck      # tsc --noEmit
 npm run build          # tsc + vite build → dist/
 npm run app            # build + Electron window
 npm run app:dev        # Vite :5190 + Electron with hot reload
-npm run app:test       # pick a copy waiting for a test (worktrees with work not on master, newest build first; Enter = newest), build it, open it
+npm run app:test       # build + open the worktree with the newest commit not on master (else master); --dry-run prints the pick
 npm run device:probe   # build + hidden window: reads (read-only!) all VIA keyboards and prints JSON
 npm run gen:qmk -- <qmk_firmware>   # regenerate src/core/qmk-data/* from QMK sources
 npm run icon           # build/icon.svg → build/icon.png, public/icon.png, build/icon.ico
