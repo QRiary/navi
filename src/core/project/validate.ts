@@ -7,7 +7,7 @@
 import { FEATURE_BY_ID, type FeatureId, type FlagInfo } from '../features/registry';
 import { listSpecVersions } from '../keycodes/spec';
 import { newId } from '../layout/geometry';
-import { allowedMakeVar, checkCustom, CUSTOM_FILES, CUSTOM_MAX, MAKE_VALUE_RE, unsafeDefineValue } from '../qmk/customCode';
+import { allowedMakeVar, checkCustom, CUSTOM_FILES, CUSTOM_MAX, MAKE_VALUE_RE, PIPELINE_MAX_HEADERS, safeHeaderName, unsafeDefineValue, validCIdentifier } from '../qmk/customCode';
 import { migrateProject } from './migrate';
 import {
   PROJECT_FORMAT,
@@ -324,6 +324,7 @@ function readGeometry(r: Reader, v: unknown, path: string, rows: number, cols: n
 
 function readKeymap(r: Reader, v: unknown, path: string, rows: number, cols: number): Keymap {
   const o = r.obj(v, path);
+  const cNames = new Set<string>();
   const layers: Layer[] = r.arr(o.layers, `${path}.layers`, LIMITS.maxLayers).map((l, i) => {
     const p = `${path}.layers[${i}]`;
     const lo = r.obj(l, p);
@@ -337,9 +338,17 @@ function readKeymap(r: Reader, v: unknown, path: string, rows: number, cols: num
     });
     const color = lo.color === undefined ? undefined : r.str(lo.color, `${p}.color`, '');
     if (color && !HEX_COLOR.test(color)) r.warn(`${p}.color`, 'color must be #rrggbb — ignored');
+    // C name: an invalid or repeated one is dropped (the layer gets its L_<NAME> again).
+    let cName: string | undefined;
+    if (lo.cName !== undefined && lo.cName !== '') {
+      if (typeof lo.cName !== 'string' || !validCIdentifier(lo.cName)) r.warn(`${p}.cName`, 'layer C name must be a C identifier (not a keyword, up to 64 characters) — ignored');
+      else if (cNames.has(lo.cName)) r.warn(`${p}.cName`, `layer C name “${lo.cName}” is used by another layer — ignored`);
+      else cNames.add((cName = lo.cName));
+    }
     return {
       id: r.id(lo.id, `${p}.id`, 'layer'),
       name: r.str(lo.name, `${p}.name`, `Layer ${i}`, 40),
+      ...(cName ? { cName } : {}),
       color: color && HEX_COLOR.test(color) ? color : undefined,
       keys,
       encoders,
@@ -458,10 +467,21 @@ function readFirmware(r: Reader, v: unknown): FirmwareConfig {
       if (bad.length) r.warn(`firmware.custom.${file}`, `contains forbidden lines (${bad.map((i) => i.line || '—').join(', ')}): writing and building are blocked until fixed`);
     }
   }
+  const po = o.pipeline === undefined ? null : r.obj(o.pipeline, 'firmware.pipeline');
+  let pipeline: FirmwareConfig['pipeline'];
+  if (po) {
+    const headers: string[] = [];
+    r.arr(po.headers, 'firmware.pipeline.headers', PIPELINE_MAX_HEADERS).forEach((h, i) => {
+      if (typeof h === 'string' && safeHeaderName(h)) headers.push(h);
+      else r.error(`firmware.pipeline.headers[${i}]`, 'header must be a relative path inside the keymap folder (letters, digits, _ . / -; no “..”, no leading /) — dropped');
+    });
+    pipeline = { enabled: r.bool(po.enabled, 'firmware.pipeline.enabled', false), headers };
+  }
   return {
     build,
     custom,
     customReview: custom && o.customReview === true ? true : undefined,
+    pipeline,
     keyboard: keyboard || null,
     keymap,
     keycodeSpec,

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { parseQmk, toQmk } from '../keycodes/codec';
 import { loadSpec } from '../keycodes/spec';
 import { createBlankProject, createDilemmaProject } from '../project/factory';
-import { activeGeometry, activeKeymap, renameLayer, setEncoder, setKeycodes } from '../project/ops';
+import { activeGeometry, activeKeymap, renameLayer, setEncoder, setKeycodes, setLayerCName } from '../project/ops';
+import type { Project } from '../project/types';
 import dilemmaMax from '../qmk-data/dilemma-max.keyboard.json';
 import { parseBuildLog } from './buildLog';
 import { configParams } from './configParams';
@@ -445,5 +446,180 @@ describe('leader key and unicode map', async () => {
     const res = generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: true, encoderCount: 2 });
     const rules = res.files.find((f) => f.name === 'rules.mk')!.text;
     expect(rules.split('\n').filter((l) => /^CC/.test(l))).toEqual([]);
+  });
+});
+
+describe('layer C names', () => {
+  const km = (layers: { name: string; cName?: string }[]) => ({ id: 'k', name: 'x', defaultLayer: 0, layers: layers.map((l, i) => ({ id: String(i), keys: [], encoders: [], ...l })) });
+
+  it('a C name is used exactly as written; generated names step around it', () => {
+    expect(layerIdentifiers(km([{ name: 'Lower' }, { name: 'x', cName: 'L_LOWER' }, { name: 'Raise', cName: 'raise' }]))).toEqual(['L_LOWER_2', 'L_LOWER', 'raise']);
+  });
+
+  it('invalid or repeated C names fall back to L_<NAME>, ids stay unique', () => {
+    const ids = layerIdentifiers(km([{ name: 'A', cName: 'NAV' }, { name: 'Nav', cName: 'NAV' }, { name: 'B', cName: '9x' }, { name: 'C', cName: 'int' }]));
+    expect(ids).toEqual(['NAV', 'L_NAV', 'L_B', 'L_C']);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('the keymap uses them in both modes; a bad one is a generator error', () => {
+    let p = project();
+    const k = activeKeymap(p);
+    p = setLayerCName(p, k.id, 1, 'LOWER');
+    for (const enabled of [false, true]) {
+      const q2 = { ...p, firmware: { ...p.firmware, pipeline: { enabled, headers: [] } } };
+      const res = generateKeymap({ project: q2, keymap: activeKeymap(q2), spec, via: false, encoderCount: 2 });
+      const text = res.files.map((f) => f.text).join('\n');
+      expect(text).toContain('LOWER = 1');
+      expect(text).toContain('MO(LOWER)');
+      expect(text).toContain('[LOWER] = NAVI_LAYOUT(');
+      expect(res.issues.filter((i) => i.level === 'error')).toEqual([]);
+    }
+    const bad = setLayerCName(setLayerCName(p, k.id, 2, 'LOWER'), k.id, 3, 'switch');
+    const withTd = { ...bad, tapDances: [{ id: 't', index: 0, name: 'TD_X', tap: q('KC_A'), hold: 0, doubleTap: 0, tapHold: 0 }] };
+    const clash = setLayerCName(withTd, k.id, 0, 'TD_X');
+    const res = generateKeymap({ project: clash, keymap: activeKeymap(clash), spec, via: false, encoderCount: 0 });
+    // layer 0: same as a tap dance name; layer 2: repeats layer 1; layer 3: a C keyword
+    expect(res.issues.filter((i) => i.level === 'error' && i.where.endsWith(': C name')).map((i) => i.where.split(' ')[1])).toEqual(['0', '2', '3']);
+    const ids = layerIdentifiers(activeKeymap(clash));
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('own pipeline mode', async () => {
+  const { createRequire } = await import('node:module');
+  const { unsafeSource } = createRequire(import.meta.url)('../../../electron/safety.cjs') as { unsafeSource: (n: string, t: string) => string | null };
+  const pipe = (p: Project, headers: string[] = []): Project => ({ ...p, firmware: { ...p.firmware, pipeline: { enabled: true, headers } } });
+  const file = (res: ReturnType<typeof generateKeymap>, name: string) => res.files.find((f) => f.name === name)?.text ?? '';
+  const full = (): Project => {
+    let p = project();
+    const k = activeKeymap(p);
+    p = setKeycodes(p, k.id, 0, [[0, 2]], q('TD(0)'));
+    p = setKeycodes(p, k.id, 0, [[0, 3]], q('QK_LEAD'));
+    p = setLayerCName(p, k.id, 0, 'BASE');
+    return {
+      ...p,
+      tapDances: [{ id: 't', index: 0, name: 'TD_ESC', tap: q('KC_ESC'), hold: q('MO(1)'), doubleTap: q('KC_CAPS'), tapHold: 0, tappingTerm: 250 }],
+      combos: [{ id: 'c', name: 'esc_one', keys: [[0, 0], [0, 1]], result: q('KC_TAB'), term: 40, layers: [0, 1] }],
+      keyOverrides: [{ id: 'k', name: 'shift_bspc', mods: 0x02, trigger: q('KC_BSPC'), replacement: q('KC_DEL') }],
+      customKeycodes: [{ id: 'x', name: 'HELLO', description: 'says hi', action: { type: 'send-string', text: 'hi' } }],
+      macros: [{ id: 'm', index: 0, name: 'git', steps: [{ type: 'text', text: 'git status' }] }],
+      leaderSequences: [{ id: 'l', keys: [q('KC_G'), q('KC_S')], action: { type: 'send-string', text: 'gs' } }],
+      unicodeMap: [{ id: 'u', name: 'SNOW', codepoint: 0x2603 }],
+      firmware: { ...p.firmware, unicode: 'unicodemap', buildConfig: { TAPPING_TERM: 190 }, custom: { 'rules.mk': 'CONSOLE_ENABLE = yes', 'config.h': '#define MY_FLAG 1', 'keymap.c': 'bool process_record_user(uint16_t keycode, keyrecord_t *record) {\n    return process_record_navi(keycode, record);\n}' } },
+    };
+  };
+  const QMK_HOOKS = ['process_record_user', 'get_tapping_term', 'get_combo_term', 'combo_should_trigger', 'leader_end_user'];
+  const NAVI_FNS = ['process_record_navi', 'get_tapping_term_navi', 'get_combo_term_navi', 'combo_should_trigger_navi', 'leader_end_navi'];
+  const defines = (c: string, name: string) => new RegExp(`^\\w[\\w ]*\\b${name}\\([^;]*\\)\\s*\\{`, 'm').test(c);
+
+  it('file set: keymap.c, navi.h, navi_rules.mk, navi_config.h — never rules.mk / config.h', () => {
+    for (const p of [createBlankProject('x', 4, 6, false), full()]) {
+      const res = generateKeymap({ project: pipe(p), keymap: activeKeymap(p), spec, via: false, encoderCount: 0 });
+      expect(res.files.map((f) => f.name)).toEqual(['keymap.c', 'navi.h', 'navi_rules.mk', 'navi_config.h']);
+    }
+  });
+
+  it('an empty project still defines every *_navi function with a neutral default, guarded by feature', () => {
+    const p = pipe(createBlankProject('x', 4, 6, false));
+    const res = generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: false, encoderCount: 0 });
+    const c = file(res, 'keymap.c');
+    expect(c).toContain('bool process_record_navi(uint16_t keycode, keyrecord_t *record) {\n    return true;\n}');
+    expect(c).toContain('uint16_t get_tapping_term_navi(uint16_t keycode, keyrecord_t *record) {\n    return TAPPING_TERM;\n}');
+    expect(c).toContain('#ifdef COMBO_ENABLE\nuint16_t get_combo_term_navi(uint16_t combo_index, combo_t *combo) {\n    return COMBO_TERM;\n}\n#endif');
+    expect(c).toContain('#ifdef COMBO_ENABLE\nbool combo_should_trigger_navi(uint16_t combo_index, combo_t *combo, uint16_t keycode, keyrecord_t *record) {\n    return true;\n}\n#endif');
+    expect(c).toContain('#ifdef LEADER_ENABLE\nvoid leader_end_navi(void) {}\n#endif');
+    for (const hook of QMK_HOOKS) expect(defines(c, hook), hook).toBe(false);
+    expect(res.issues.filter((i) => i.where.startsWith('own pipeline'))).toEqual([]);
+    expect([...res.symbols].sort()).toEqual(['keymaps', ...NAVI_FNS].sort());
+    const h = file(res, 'navi.h');
+    expect(h).toContain('#pragma once');
+    expect(h).toContain('    NAVI_SAFE_RANGE = SAFE_RANGE // your own keycodes start here');
+    expect(h).toMatch(/#ifdef COMBO_ENABLE\nuint16_t get_combo_term_navi\(uint16_t combo_index, combo_t \*combo\);\nbool combo_should_trigger_navi\([^)]*\);\n#endif/);
+    expect(h).toContain('#ifdef LEADER_ENABLE\nvoid leader_end_navi(void);\n#endif');
+  });
+
+  it('with everything: hooks renamed, enums in navi.h, headers in order, forwarding warnings', () => {
+    const p = pipe(full(), ['user.h', 'lib/keys.h']);
+    const res = generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: false, encoderCount: 2 });
+    const c = file(res, 'keymap.c');
+    const h = file(res, 'navi.h');
+    expect(c.split('\n').filter((l) => l.startsWith('#include'))).toEqual(['#include QMK_KEYBOARD_H', '#include "navi.h"', '#include "user.h"', '#include "lib/keys.h"']);
+    // generated part: only *_navi functions; the user's own process_record_user comes after the end marker
+    const generated = c.split('// ── your own lines')[0];
+    for (const hook of QMK_HOOKS) expect(defines(generated, hook), hook).toBe(false);
+    for (const fn of NAVI_FNS) expect(defines(generated, fn), fn).toBe(true);
+    expect(generated).toContain('case TD(TD_ESC): return 250;');
+    expect(generated).toContain('case 0: return layer_state_is(BASE) || layer_state_is(L_LOWER); // esc_one');
+    expect(generated).toContain('case QK_MACRO_0: // git');
+    expect(generated).toContain('if (leader_sequence_two_keys(KC_G, KC_S)) {');
+    expect(generated).toContain('const uint32_t PROGMEM unicode_map[] = {');
+    expect(generated).not.toMatch(/^enum /m);
+    expect(c).toContain('// ── your own lines (NAVI: Firmware → keymap files) ──\nbool process_record_user(');
+    expect(h).toContain('enum navi_layers {\n    BASE = 0,');
+    expect(h).toContain('enum navi_keycodes {\n    HELLO = SAFE_RANGE, // says hi\n    NAVI_SAFE_RANGE // your own keycodes start here\n};');
+    expect(h).toContain('enum navi_tap_dances {\n    TD_ESC = 0,\n};');
+    expect(h).toContain('enum navi_unicode_names {\n    SNOW = 0,');
+    expect(h).toContain('#include QMK_KEYBOARD_H');
+    // build settings and the user's own lines go into navi_rules.mk / navi_config.h
+    const rules = file(res, 'navi_rules.mk');
+    expect(rules).toContain('#   include $(dir $(lastword $(MAKEFILE_LIST)))navi_rules.mk');
+    expect(rules).toMatch(/^TAP_DANCE_ENABLE = yes$/m);
+    expect(rules).toContain('CONSOLE_ENABLE = yes\n# ── end of your own lines ──');
+    const cfg = file(res, 'navi_config.h');
+    expect(cfg).toContain('//   #include "navi_config.h"');
+    for (const d of ['COMBO_TERM_PER_COMBO', 'COMBO_SHOULD_TRIGGER', 'TAPPING_TERM_PER_KEY', 'TAPPING_TERM 190']) expect(cfg).toContain(`#define ${d}`);
+    expect(cfg).toContain('#define MY_FLAG 1');
+    // one forwarding warning per hook the project fills
+    expect(res.issues.filter((i) => i.where.startsWith('own pipeline')).map((i) => [i.level, i.where])).toEqual(QMK_HOOKS.map((hk) => ['warning', `own pipeline: ${hk}()`]));
+    expect(res.issues.filter((i) => i.level === 'error')).toEqual([]);
+    // the symbols: arrays and *_navi functions, no QMK hooks
+    for (const hook of QMK_HOOKS) expect(res.symbols.has(hook)).toBe(false);
+    for (const s of ['keymaps', 'encoder_map', 'tap_dance_actions', 'key_combos', 'key_overrides', 'unicode_map', ...NAVI_FNS]) expect(res.symbols.has(s), s).toBe(true);
+  });
+
+  it('the generated files pass the main process check (pipeline is no way around the allowlist)', () => {
+    for (const p of [pipe(full(), ['user.h']), pipe(createBlankProject('x', 4, 6, false))]) {
+      for (const via of [true, false]) {
+        const res = generateKeymap({ project: p, keymap: activeKeymap(p), spec, via, encoderCount: 2 });
+        for (const f of res.files) expect(unsafeSource(f.name, f.text), f.name).toBeNull();
+      }
+    }
+    // own rules.mk lines are checked the same way in pipeline mode
+    const evil = full();
+    const res = generateKeymap({ project: pipe({ ...evil, firmware: { ...evil.firmware, custom: { 'rules.mk': 'CC = calc.exe' } } }), keymap: activeKeymap(evil), spec, via: false, encoderCount: 0 });
+    expect(res.issues.some((i) => i.level === 'error' && i.where.startsWith('rules.mk'))).toBe(true);
+    expect(unsafeSource('navi_rules.mk', file(res, 'navi_rules.mk'))).not.toBeNull();
+  });
+
+  it('customReview holds own lines back in pipeline mode too', () => {
+    const p = full();
+    const held = pipe({ ...p, firmware: { ...p.firmware, customReview: true } });
+    const res = generateKeymap({ project: held, keymap: activeKeymap(held), spec, via: false, encoderCount: 0 });
+    expect(res.issues.some((i) => i.where === 'your own lines' && i.level === 'error')).toBe(true);
+    expect(res.files.map((f) => f.text).join('\n')).not.toContain('CONSOLE_ENABLE');
+    expect(file(res, 'keymap.c')).not.toContain('your own lines');
+  });
+
+  it('bad headers are a generator error and are not included', () => {
+    const p = full();
+    const bad = { ...p, firmware: { ...p.firmware, pipeline: { enabled: true, headers: ['ok.h', '../evil.h', '/abs.h', 'x"y.h'] } } };
+    const res = generateKeymap({ project: bad, keymap: activeKeymap(bad), spec, via: false, encoderCount: 0 });
+    expect(res.issues.some((i) => i.level === 'error' && i.where === 'own pipeline: headers')).toBe(true);
+    expect(file(res, 'keymap.c').split('\n').filter((l) => l.startsWith('#include'))).toEqual(['#include QMK_KEYBOARD_H', '#include "navi.h"', '#include "ok.h"']);
+    const many = { ...p, firmware: { ...p.firmware, pipeline: { enabled: true, headers: Array.from({ length: 21 }, (_, i) => `h${i}.h`) } } };
+    expect(generateKeymap({ project: many, keymap: activeKeymap(many), spec, via: false, encoderCount: 0 }).issues.some((i) => i.where === 'own pipeline: headers')).toBe(true);
+  });
+
+  it('pipeline off (even with headers set) is the normal output', () => {
+    const p = full();
+    const off = { ...p, firmware: { ...p.firmware, pipeline: { enabled: false, headers: ['user.h'] } } };
+    const a = generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: false, encoderCount: 2 });
+    const b = generateKeymap({ project: off, keymap: activeKeymap(off), spec, via: false, encoderCount: 2 });
+    expect(b.files).toEqual(a.files);
+    expect(b.files.map((f) => f.name)).toEqual(['keymap.c', 'rules.mk', 'config.h']);
+    expect(file(b, 'keymap.c')).not.toContain('NAVI_SAFE_RANGE');
+    expect(file(b, 'keymap.c').split('// ── your own lines')[0]).not.toContain('_navi');
+    expect(file(b, 'keymap.c')).toContain('enum custom_keycodes {\n    HELLO = SAFE_RANGE, // says hi\n};');
   });
 });

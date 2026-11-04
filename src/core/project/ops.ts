@@ -220,7 +220,9 @@ export function duplicateLayer(p: Project, keymapId: string, spec: KeycodeSpec, 
   if (!km || !src) return p;
   const shifted = remapAllLayerRefs(p, keymapId, spec, (old) => (old > index ? old + 1 : old));
   return updateKeymap(shifted, keymapId, (k) => {
-    const copy: Layer = { ...structuredClone(k.layers[index]), id: newId('layer'), name: `${src.name} copy` };
+    // The C name is not copied: two layers with one C name would not compile.
+    const { cName: _cName, ...rest } = structuredClone(k.layers[index]);
+    const copy: Layer = { ...rest, id: newId('layer'), name: `${src.name} copy` };
     const layers = [...k.layers];
     layers.splice(index + 1, 0, copy);
     return { ...k, layers };
@@ -242,6 +244,20 @@ export function moveLayer(p: Project, keymapId: string, spec: KeycodeSpec, from:
 
 export function renameLayer(p: Project, keymapId: string, index: number, name: string): Project {
   return updateKeymap(p, keymapId, (k) => updateLayer(k, index, (l) => ({ ...l, name: name.slice(0, 40) })));
+}
+
+/**
+ * C name of a layer (enum member in the generated code). Empty → unset (L_<NAME>). Not checked here:
+ * the generator reports an invalid or repeated one as an error (validCIdentifier in customCode.ts).
+ */
+export function setLayerCName(p: Project, keymapId: string, index: number, cName: string | undefined): Project {
+  const value = cName?.trim() || undefined;
+  return updateKeymap(p, keymapId, (k) =>
+    updateLayer(k, index, (l) => {
+      const { cName: _old, ...rest } = l;
+      return value ? { ...rest, cName: value } : rest;
+    }),
+  );
 }
 
 export function setLayerColor(p: Project, keymapId: string, index: number, color: string | undefined): Project {

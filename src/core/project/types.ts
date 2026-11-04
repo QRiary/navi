@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 3;
+export const PROJECT_SCHEMA_VERSION = 4;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -166,6 +166,11 @@ export interface EncoderAction {
 export interface Layer {
   id: string;
   name: string;
+  /**
+   * Name of the layer in the generated C (enum member), exactly as written: a C identifier, not a keyword,
+   * unique in the keymap. Unset → L_<NAME> from the layer name.
+   */
+  cName?: string;
   /** Layer tag color (#rrggbb) or empty. */
   color?: string;
   /** Keycodes row by row: keys[row * cols + col]. Length = rows × cols. */
@@ -312,6 +317,12 @@ export interface FirmwareConfig {
    * while true they are not written to files. Set by the import (not by the file itself), cleared by the “allow” button.
    */
   customReview?: boolean;
+  /**
+   * “Own pipeline” mode, for users with their own C: NAVI writes keymap.c, navi.h, navi_rules.mk and navi_config.h
+   * (not rules.mk / config.h, those are the user's), its hooks are named *_navi and the user's code calls them.
+   * headers — the user's header files included at the top of keymap.c, in order (relative paths, ≤ 20).
+   */
+  pipeline?: { enabled: boolean; headers: string[] };
 }
 
 // ── Project ───────────────────────────────────────────────────────────
