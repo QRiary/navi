@@ -12,7 +12,7 @@ const crypto = require('node:crypto');
 const { execFile } = require('node:child_process');
 const { cancel, findMsys, findOnPath, fromWslUnc, parseWslList, qmkCommand, run, toWslUnc, validateArg, validateDistro, validatePath } = require('./runner.cjs');
 const { allowedBuildOption, insideDir, joinInside, readTextIfExists, safeFileName, safeId, unsafeSource, writeFileAtomic } = require('./safety.cjs');
-const { createTrustStore, scanFolders, trustRefusal } = require('./trust.cjs');
+const { createTrustStore, scanFolders, trustDialogDetail, trustRefusal } = require('./trust.cjs');
 
 const KB_RE = /^[a-z0-9_][a-z0-9_/.+-]{0,150}$/i;
 const KM_RE = /^[a-z0-9_][a-z0-9_-]{0,60}$/i;
@@ -656,9 +656,15 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
     return { dir: folders[0], trusted: trust.isTrusted(folders[0]), issues: scanFolders(folders) };
   });
   /** The grant is confirmed by a dialog the main process shows, so the interface alone cannot trust a folder. */
-  ipcMain.handle('navi:trust:grant', async (_e, dir, lang) => {
-    validatePath(dir);
-    if (!path.isAbsolute(dir) || !fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) throw new Error(`not a folder: ${dir}`);
+  // The folders come from the build target, not from the interface: the dialog names everything the trust covers.
+  ipcMain.handle('navi:trust:grant', async (_e, home, userspace, kb, km, lang) => {
+    validatePath(home);
+    const us = checkUserspace(userspace);
+    checkKb(kb);
+    checkKm(km);
+    const folders = buildScanFolders(home, us, kb, km);
+    const dir = folders[0];
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) throw new Error(`not a folder: ${dir}`);
     const { dialog } = require('electron');
     const ru = lang === 'ru';
     const options = {
@@ -669,11 +675,7 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
       noLink: true,
       title: 'NAVI',
       message: ru ? 'Доверять этой папке?' : 'Trust this folder?',
-      detail: ru
-        ? `${dir}\n\nПри сборке make запустит код из этой папки (её rules.mk, .mk-файлы и C-код) на этом компьютере. ` +
-          'NAVI больше не будет проверять её файлы. Доверяйте только папке, код которой вы знаете. Доверие можно отозвать.'
-        : `${dir}\n\nWhen building, make will run code from this folder (its rules.mk, .mk files and C code) on this computer. ` +
-          'NAVI will no longer check its files. Trust only a folder whose code you know. You can revoke trust later.',
+      detail: trustDialogDetail(folders, km, ru),
     };
     const win = getWindow();
     const { response } = win ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options);

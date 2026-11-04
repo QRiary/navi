@@ -185,7 +185,8 @@ export interface NaviBridge {
     /** The keymap folder a build would use, whether it is trusted, and its files that fail the allowlist. */
     state(home: string, userspace: string | null, kb: string, km: string): Promise<TrustState>;
     /** Shows the main-process warning dialog; true = the user trusted the folder, false = canceled. */
-    grant(dir: string, lang: 'en' | 'ru'): Promise<boolean>;
+    /** The main process shows a warning naming every folder the trust covers; true = granted. */
+      grant(home: string, userspace: string | null, kb: string, km: string, lang: 'en' | 'ru'): Promise<boolean>;
     revoke(dir: string): Promise<void>;
   };
   firmware: {

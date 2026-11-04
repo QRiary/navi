@@ -35,7 +35,7 @@ export interface QmkState {
   loadSources(keyboard: string, keymap: string): Promise<void>;
   loadTrust(keyboard: string, keymap: string): Promise<void>;
   loadTrustedFolders(): Promise<void>;
-  grantTrust(dir: string): Promise<void>;
+  grantTrust(keyboard: string, keymap: string): Promise<void>;
   revokeTrust(dir: string): Promise<void>;
   compile(keyboard: string, keymap: string, env?: Record<string, string>, parallel?: number): Promise<CompileResult | null>;
   runDiagnostic(cmd: 'doctor' | 'version' | 'env'): Promise<void>;
@@ -159,13 +159,14 @@ export const useQmkStore = create<QmkState>()((set, get) => {
       }
     },
 
-    async grantTrust(dir) {
-      if (!navi) return;
+    async grantTrust(keyboard, keymap) {
+      const home = get().home();
+      if (!navi || !home) return;
       try {
-        await navi.trust.grant(dir, getLanguage());
+        // The main process works out the folders from the target and names them all in its dialog.
+        await navi.trust.grant(home, get().userspace(), keyboard, keymap, getLanguage());
         await get().loadTrustedFolders();
-        const s = get().sources;
-        if (s) await get().loadTrust(s.keyboard, s.keymap);
+        await get().loadTrust(keyboard, keymap);
       } catch (err) {
         set({ error: (err as Error).message });
       }

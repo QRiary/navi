@@ -179,4 +179,22 @@ function trustRefusal({ issues, trusted }) {
   );
 }
 
-module.exports = { createTrustStore, normalizeFolder, scanFolders, trustRefusal, MAX_FILES };
+/**
+ * Text of the grant dialog. folders[0] is the keymap folder (where the trust is stored); the rest are the
+ * users/<keymap> folders QMK also builds with this keymap, which the same trust covers — named too.
+ */
+function trustDialogDetail(folders, km, ru) {
+  const [dir, ...users] = folders;
+  const also = ru
+    ? `\n\nЭто доверие распространяется и на папки users/${km}, которые QMK собирает с этим keymap:\n` +
+      `${users.length ? users.join('\n') : '(сейчас таких нет)'}\nВключая такую папку, созданную позже.`
+    : `\n\nThis trust also covers the users/${km} folders QMK builds with this keymap:\n` +
+      `${users.length ? users.join('\n') : '(none right now)'}\nIncluding one created later.`;
+  return ru
+    ? `${dir}${also}\n\nПри сборке make запустит код из этих папок (их rules.mk, .mk-файлы и C-код) на этом компьютере. ` +
+        'NAVI больше не будет проверять их файлы. Доверяйте, только если знаете этот код. Доверие можно отозвать.'
+    : `${dir}${also}\n\nWhen building, make will run code from these folders (their rules.mk, .mk files and C code) on this computer. ` +
+        'NAVI will no longer check their files. Trust only if you know this code. You can revoke trust later.';
+}
+
+module.exports = { createTrustStore, normalizeFolder, scanFolders, trustRefusal, trustDialogDetail, MAX_FILES };

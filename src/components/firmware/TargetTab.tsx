@@ -167,7 +167,7 @@ export function TargetTab() {
                       {trust.issues.length > 5 && <div>{t(`…and ${trust.issues.length - 5} more`, `…и ещё ${trust.issues.length - 5}`)}</div>}
                     </div>
                     <div>
-                      <button className="btn" onClick={() => void grantTrust(trust.dir)}>
+                      <button className="btn" onClick={() => project.firmware.keyboard && void grantTrust(project.firmware.keyboard, project.firmware.keymap)}>
                         {t('trust this folder…', 'доверять этой папке…')}
                       </button>
                     </div>
