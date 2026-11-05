@@ -226,14 +226,19 @@ its combos; "new combo" says to select keys but keys can't be selected there.
   `layers` (limit to layers) exists in the model but isn't editable here; names default to `combo_N`.
 
 **Do**
-1. Layout: keyboard on top, sticky; list below scrolls on its own. Reference layers move into a collapsed
+1. ✅ Layout: keyboard on top, sticky; list below scrolls on its own. Reference layers move into a collapsed
    "advanced" section.
-2. The keyboard is clickable: New combo enters key-pick mode (click keys, Enter/Done to finish, Esc cancels);
+2. ✅ The keyboard is clickable: New combo enters key-pick mode (click keys, Enter/Done to finish, Esc cancels);
    editing a combo's keys works the same way.
-3. Every key shows a small count of combos using it; clicking a key (outside pick mode) filters the list to
+3. ✅ Every key shows a small count of combos using it; clicking a key (outside pick mode) filters the list to
    its combos; a search box filters by name, key or result.
-4. List rows read "Y + U → !" (Step 3 names), C name secondary; the combo's keys highlight on hover.
-5. "Limited to layers" editable; default name built from keys and result.
+4. ✅ List rows read "Y + U → !" (Step 3 names), C name secondary; the combo's keys highlight on hover.
+5. ✅ "Limited to layers" editable; default name built from keys and result.
+   Done as: the keyboard, the open combo and the search/add bar stick together under the tab bar (not sticky below
+   760px height or 1100px width); the list scrolls under them. "Take selected keys" (from the Keyboard page) is gone:
+   the pick mode replaces it. Layer chips open behind "limit" so the sticky block stays short. A default name
+   (CM_J_K_ESC) follows key/result edits until the user types one; old combo_N names follow too.
+   Left over: Ctrl+F for the search box waits for Step 8; a filtered list can still show an open combo that isn't in it.
 
 ## Step 7: how to reach a layer (🟠 6/10)
 

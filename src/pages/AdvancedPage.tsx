@@ -3,30 +3,27 @@
  * QMK settings (config.h), NAVI additions (its own C code). All of this is code in the firmware (keymap.c / config.h): it works after building
  * and flashing your own firmware (the Firmware section). It cannot be set up over VIA — and it says so.
  */
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import { friendlyName } from '../core/keycodes/friendly';
-import { keyLabel } from '../core/keycodes/labels';
-import { checkCombos, checkKeyOverrides, comboRefOf } from '../core/features/advanced';
+import { checkKeyOverrides } from '../core/features/advanced';
 import { configParams, groupTitle } from '../core/qmk/configParams';
 import { newId } from '../core/layout/geometry';
-import { activeKeymap, setLayerComboRef } from '../core/project/ops';
-import type { Combo, CustomKeycode, KeyAlias, KeyOverride, MatrixPos, Project } from '../core/project/types';
+import { activeKeymap } from '../core/project/ops';
+import type { CustomKeycode, KeyAlias, KeyOverride, Project } from '../core/project/types';
 import { aliasCName, ALIAS_LABEL_MAX, checkKeyAliases, KEY_ALIASES_MAX } from '../core/project/aliases';
 import { layerIdentifiers } from '../core/qmk/generate';
-import { customKeycodeValue, useActive, useLabelContext } from '../lib/projectContext';
+import { customKeycodeValue } from '../lib/projectContext';
 import { href } from '../lib/router';
 import { TabPanels, Tabs, type TabItem } from '../components/Tabs';
-import { useEditorStore } from '../store/editorStore';
 import { useProjectStore, useSpec } from '../store/projectStore';
 import { ActionEditor, FeatureNote, IssueList, KeycodeField } from '../components/advanced/common';
 import { TapHoldTab } from '../components/advanced/TapHoldTab';
+import { CombosTab } from '../components/advanced/CombosTab';
 import { TapDanceTab } from '../components/advanced/TapDanceTab';
 import { LeaderTab } from '../components/advanced/LeaderTab';
 import { UnicodeTab } from '../components/advanced/UnicodeTab';
 import { LayerKeysOnTopRow } from '../components/advanced/LayerKeysOnTop';
 import { ModsInput } from '../components/keyboard/KeycodeComposer';
-import { LayoutPreview } from '../components/keyboard/LayoutPreview';
 import { getLanguage, t } from '../i18n';
 import { openDocs, QMK_DOCS } from '../lib/qmkDocs';
 import { deletedToast } from '../lib/undoToast';
@@ -35,230 +32,6 @@ import { EmptyState } from '../components/EmptyState';
 import { Hint, InfoTip } from '../components/InfoTip';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
-
-function CombosTab({ project }: { project: Project }) {
-  const apply = useProjectStore((s) => s.apply);
-  const spec = useSpec();
-  const labelCtx = useLabelContext();
-  const active = useActive();
-  const selection = useEditorStore((s) => s.selection);
-  const issues = useMemo(() => checkCombos(project, project.combos), [project]);
-  const [current, setCurrent] = useState<string | null>(project.combos[0]?.id ?? null);
-  if (!active || !labelCtx) return null;
-  const km = activeKeymap(project);
-  const cols = project.hardware.matrix.cols;
-  const set = (combos: Combo[], label: string, coalesce?: string) => apply((p) => ({ ...p, combos }), label, coalesce ? { coalesce } : undefined);
-  const combo = project.combos.find((c) => c.id === current) ?? null;
-  const selectedPositions: MatrixPos[] = active.geometry.keys.filter((k) => selection.includes(k.id) && k.matrix).map((k) => k.matrix!);
-  const marked = new Set((combo?.keys ?? []).map(([r, c]) => `${r},${c}`));
-  // Labels of combo keys: the layer combos read on layer 0.
-  const labelLayer = comboRefOf(km, 0);
-  const keyName = ([r, c]: MatrixPos) => {
-    const v = km.layers[labelLayer].keys[r * cols + c];
-    return v > 1 ? friendlyName(spec, v, labelCtx).text : `[${r},${c}]`;
-  };
-  const setRef = (layer: number, value: string) =>
-    apply((p) => setLayerComboRef(p, km.id, layer, value === '' ? undefined : value === 'self' ? 'self' : Number(value)), t('combo reference layer', 'опорный слой комбо'));
-  const addComboButton = (
-    <button
-      className="btn"
-      onClick={() => {
-        const c: Combo = { id: newId('combo'), name: `combo_${project.combos.length}`, keys: [], result: 0 };
-        set([...project.combos, c], t('new combo', 'новое комбо'));
-        setCurrent(c.id);
-      }}
-    >
-      <Plus {...ICON} /> {t('combo', 'комбо')}
-    </button>
-  );
-  return (
-    <div className="page">
-      <FeatureNote project={project} feature="combo" firstUse={{ en: 'add the first combo', ru: 'добавите первое комбо' }} />
-      <p className="field-hint">
-        {t('Press several keys together → another key. Which layer’s keys count is set below.', 'Нажмите несколько клавиш вместе → другая клавиша. Клавиши какого слоя учитываются, задаётся ниже.')}{' '}
-        <InfoTip docs={QMK_DOCS.comboLayers} label={t('Combos', 'Комбо')}>
-          {t(
-            'QMK matches a combo by keycodes, read on each layer from its reference layer (a transparent key uses the setting of the layer it falls through to). The combo keys need unique, non-empty keycodes there. A combo limited to layers works when the highest active layer is one of them.',
-            'QMK узнаёт комбо по keycodes, взятым на каждом слое с его опорного слоя (прозрачная клавиша берёт настройку слоя, на который проваливается). У клавиш комбо там должны быть разные непустые keycodes. Комбо, ограниченное слоями, работает, когда самый верхний активный слой — один из них.',
-          )}
-        </InfoTip>
-      </p>
-      <div className="panel-box">
-        <div className="panel-box-head">
-          <span className="cell-label">
-            <Hint
-              docs={QMK_DOCS.comboLayers}
-              tip={t(
-                'The layer whose keycodes are used to recognize combos while this layer is active. Layer 0 by default; pick “this layer” if its keys differ and the combo should follow them.',
-                'Слой, чьи keycodes используются для распознавания комбо, пока активен этот слой. По умолчанию слой 0; выберите «этот слой», если его клавиши отличаются и комбо должно следовать за ними.',
-              )}
-            >
-              {t('Reference layers: combos on this layer read keys from', 'Опорные слои: комбо на этом слое читают клавиши со слоя')}
-            </Hint>
-          </span>
-        </div>
-        <div className="rows">
-          {km.layers.map((l, i) => {
-            const r = comboRefOf(km, i);
-            const ref = r === 0 ? '' : r === i ? 'self' : String(r);
-            return (
-              <div key={l.id} className="row" style={{ ['--row-cols' as string]: '32px minmax(120px, 240px) minmax(160px, 240px)' }}>
-                <span className="num">{i}</span>
-                <span>{l.name}</span>
-                <select className="select" value={ref} aria-label={t(`Combo reference layer of layer ${i}`, `Опорный слой комбо для слоя ${i}`)} onChange={(e) => setRef(i, e.target.value)}>
-                  <option value="">{t('layer 0 (default)', 'слой 0 (по умолчанию)')}</option>
-                  {i !== 0 && <option value="self">{t('this layer', 'этот слой')}</option>}
-                  {km.layers.map((other, n) =>
-                    n === 0 || n === i ? null : (
-                      <option key={other.id} value={n}>
-                        {t(`layer ${n}`, `слой ${n}`)} · {other.name}
-                      </option>
-                    ),
-                  )}
-                </select>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div className="grid-2" style={{ gridTemplateColumns: 'minmax(240px, 340px) minmax(0, 1fr)' }}>
-        {project.combos.length === 0 ? (
-          <EmptyState
-            what={t('A combo sends another key when you press several keys at the same moment.', 'Комбо отправляет другую клавишу, когда вы нажимаете несколько клавиш одновременно.')}
-            example={t('J + K together = Esc.', 'J + K вместе = Esc.')}
-          >
-            {addComboButton}
-          </EmptyState>
-        ) : (
-          <div className="panel-box">
-            <div className="rows">
-              {project.combos.map((c) => (
-                <button
-                  key={c.id}
-                  className={`row ${c.id === current ? 'is-active' : ''}`}
-                  style={{ ['--row-cols' as string]: 'minmax(0,1fr) auto', textAlign: 'left' }}
-                  onClick={() => setCurrent(c.id)}
-                >
-                  <span title={`${c.keys.map(keyName).join(' + ')} → ${friendlyName(spec, c.result, labelCtx).qmk}`}>
-                    {c.keys.map(keyName).join(' + ') || '—'} → {friendlyName(spec, c.result, labelCtx).text}
-                  </span>
-                  <span className="kicker">{c.name}</span>
-                </button>
-              ))}
-              <div className="row" style={{ ['--row-cols' as string]: '1fr' }}>
-                {addComboButton}
-              </div>
-            </div>
-          </div>
-        )}
-        {combo ? (
-          <div className="panel-box">
-            <div className="panel-box-head">
-              <input
-                className="input"
-                value={combo.name}
-                onChange={(e) =>
-                  set(
-                    project.combos.map((c) => (c.id === combo.id ? { ...c, name: e.target.value.replace(/[^A-Za-z0-9_]/g, '_') } : c)),
-                    t('combo name', 'имя комбо'),
-                    `cname:${combo.id}`,
-                  )
-                }
-                aria-label={t('Name', 'Имя')}
-              />
-              <button
-                className="icon-btn"
-                aria-label={t('Delete', 'Удалить')}
-                onClick={() => {
-                  set(
-                    project.combos.filter((c) => c.id !== combo.id),
-                    t('delete combo', 'удаление комбо'),
-                  );
-                  deletedToast(combo.name || t('combo', 'комбо'));
-                }}
-              >
-                <Trash2 {...ICON} />
-              </button>
-            </div>
-            <div className="panel-box-body field">
-              <LayoutPreview geometry={active.geometry} label={([r, c]) => keyLabel(spec, km.layers[labelLayer].keys[r * cols + c], labelCtx)} marked={marked} height={150} />
-              <div className="field-row">
-                <span className="field-hint">
-                  <Hint
-                    tip={t(
-                      'The physical keys that must go down together. Select 2 or more keys on the Keyboard page, then come back and press “take selected keys”.',
-                      'Физические клавиши, которые нужно нажать вместе. Выделите 2 или больше клавиш в разделе «Клавиатура», вернитесь сюда и нажмите «взять выбранные клавиши».',
-                    )}
-                  >
-                    {t('keys', 'клавиши')}
-                  </Hint>
-                  : {combo.keys.map(keyName).join(' + ') || '—'}
-                </span>
-                <button
-                  className="btn"
-                  {...whyDisabled(selectedPositions.length < 2 && t('Select at least 2 keys on the Keyboard page first', 'Сначала выделите хотя бы 2 клавиши в разделе «Клавиатура»'))}
-                  onClick={() =>
-                    set(
-                      project.combos.map((c) => (c.id === combo.id ? { ...c, keys: selectedPositions } : c)),
-                      t('combo keys', 'клавиши комбо'),
-                    )
-                  }
-                >
-                  {t(`take selected keys (${selectedPositions.length})`, `взять выбранные клавиши (${selectedPositions.length})`)}
-                </button>
-              </div>
-              <div className="field-row">
-                <span className="field-hint">
-                  <Hint tip={t('What the keyboard sends when the combo fires: any keycode.', 'Что отправляет клавиатура, когда комбо срабатывает: любой keycode.')}>{t('result', 'результат')}</Hint>:
-                </span>
-                <KeycodeField
-                  value={combo.result}
-                  label={t('Result', 'Результат')}
-                  onChange={(v) =>
-                    set(
-                      project.combos.map((c) => (c.id === combo.id ? { ...c, result: v } : c)),
-                      t('combo result', 'результат комбо'),
-                    )
-                  }
-                />
-                <span className="field-hint">
-                  <Hint
-                    docs={QMK_DOCS.comboPerCombo}
-                    tip={t(
-                      'How long all the keys of this combo may take to go down together. Empty: the global COMBO_TERM (50 ms in QMK). A longer window catches slow chords but can fire by accident while typing.',
-                      'За сколько все клавиши этого комбо должны быть нажаты. Пусто — общее COMBO_TERM (в QMK 50 мс). Больше окно — ловит медленные нажатия, но может срабатывать случайно при наборе.',
-                    )}
-                  >
-                    {t('own term, ms', 'своё окно, мс')}
-                  </Hint>
-                  :
-                </span>
-                <input
-                  className="input input--num"
-                  type="number"
-                  min={10}
-                  max={1000}
-                  placeholder="—"
-                  value={combo.term ?? ''}
-                  onChange={(e) =>
-                    set(
-                      project.combos.map((c) => (c.id === combo.id ? { ...c, term: e.target.value ? Number(e.target.value) : undefined } : c)),
-                      t('combo term', 'окно комбо'),
-                      `cterm:${combo.id}`,
-                    )
-                  }
-                />
-              </div>
-            </div>
-          </div>
-        ) : (
-          <p className="field-hint">{t('Create a combo on the left.', 'Создайте комбо слева.')}</p>
-        )}
-      </div>
-      <IssueList issues={issues} />
-    </div>
-  );
-}
 
 function OverridesTab({ project }: { project: Project }) {
   const apply = useProjectStore((s) => s.apply);
@@ -662,14 +435,14 @@ export function AdvancedPage({ tab }: { tab?: string }) {
     },
   ];
   const current = tabs.some((i) => i.id === tab) ? tab! : 'tapdance';
-  const panel = (id: string) => {
+  const panel = (id: string, active: boolean) => {
     switch (id) {
       case 'tapdance':
         return <TapDanceTab project={project} />;
       case 'taphold':
         return <TapHoldTab project={project} />;
       case 'combos':
-        return <CombosTab project={project} />;
+        return <CombosTab project={project} active={active} />;
       case 'overrides':
         return <OverridesTab project={project} />;
       case 'custom':
