@@ -347,7 +347,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     revertToSaved() {
       const { saved } = get();
       if (!saved) return;
-      get().apply(() => saved, 'revert to saved');
+      get().apply(() => saved, t('back to the saved version', 'возврат к сохранённой версии'));
     },
 
     async remove(id) {

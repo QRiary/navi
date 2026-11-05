@@ -4,7 +4,7 @@
  *  right — saving the project and writing to the keyboard.
  */
 import { useMemo, useState } from 'react';
-import { Redo2, RefreshCw, Save, Undo2, Upload } from 'lucide-react';
+import { Redo2, RefreshCw, RotateCcw, Save, Undo2, Upload } from 'lucide-react';
 import { activeKeymap } from '../../core/project/ops';
 import { href } from '../../lib/router';
 import { useDeviceStore } from '../../store/deviceStore';
@@ -131,6 +131,7 @@ function SaveCell() {
   const saved = useProjectStore((s) => s.saved);
   const saving = useProjectStore((s) => s.saving);
   const draftError = useProjectStore((s) => s.draftError);
+  const revertToSaved = useProjectStore((s) => s.revertToSaved);
   const status = useDeviceStore((s) => s.status);
   const [writing, setWriting] = useState(false);
   const dirty = useMemo(() => isDirty({ project, saved }), [project, saved]);
@@ -142,8 +143,8 @@ function SaveCell() {
           {dirty ? t('unsaved', 'не сохранено') : t('saved', 'сохранено')}{' '}
           <InfoTip label={t('saving', 'сохранение')}>
             {t(
-              'Your edits are kept as a draft automatically, but only Save (Ctrl+S) makes a version you can return to. “To keyboard” is separate: it writes the keymap to the connected keyboard and does not save the project.',
-              'Правки автоматически хранятся черновиком, но вернуться можно только к версии, созданной «Сохранить» (Ctrl+S). «В клавиатуру» — отдельное действие: оно записывает раскладку в подключённую клавиатуру, но не сохраняет проект.',
+              'Your edits are kept as a draft automatically, but only Save (Ctrl+S) makes a version you can return to; the arrow beside it goes back to the last saved one. “To keyboard” is separate: it writes the keymap to the connected keyboard and does not save the project.',
+              'Правки автоматически хранятся черновиком, но вернуться можно только к версии, созданной «Сохранить» (Ctrl+S); стрелка рядом возвращает последнюю сохранённую. «В клавиатуру» — отдельное действие: оно записывает раскладку в подключённую клавиатуру, но не сохраняет проект.',
             )}
           </InfoTip>
         </strong>
@@ -152,6 +153,20 @@ function SaveCell() {
           return <span title={note}>{note}</span>;
         })()}
       </div>
+      <button
+        className="icon-btn"
+        aria-label={t('Back to the saved version', 'Вернуть сохранённую версию')}
+        {...whyDisabled(
+          (!saved && t('Not saved yet', 'Ещё не сохранено')) || (!dirty && t('Nothing changed since the last save', 'С прошлого сохранения ничего не менялось')),
+          t(
+            'Back to the saved version: drops every edit since the last save (Ctrl+Z brings them back)',
+            'Вернуть сохранённую версию: убирает все правки с прошлого сохранения (Ctrl+Z вернёт их)',
+          ),
+        )}
+        onClick={revertToSaved}
+      >
+        <RotateCcw {...ICON} />
+      </button>
       <button
         className="btn btn--primary"
         {...whyDisabled((saving && t('Wait: saving…', 'Подождите: идёт сохранение…')) || (!dirty && t('Nothing changed since the last save', 'С прошлого сохранения ничего не менялось')), 'Ctrl+S')}
