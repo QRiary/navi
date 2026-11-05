@@ -12,8 +12,13 @@ doesn't conflict with them. Rebase on `master` before each session if those have
 - Refinement, not a restyle: keep the look (mono palette, sidebar, deck). Fix how it reads and works.
 - Field rules decide (WCAG AA contrast, platform conventions, Nielsen's heuristics); the owner judges behavior
   in use, not layouts. No draft rounds: the session builds, then hands over a screenshot and a test list.
-- One session = one step below, in this order (later steps use earlier ones: readable key names before
-  combos, layer reach and search; the shared Tabs/Modal pieces before the pages that use them).
+- One session = one step below, run in waves (later steps use earlier ones: readable key names before
+  combos, layer reach and search; the shared Tabs/Modal pieces before the pages that use them). Each step works
+  on its own branch off `ui-cleanup` and is merged back into it when it lands:
+  - Wave 1, in parallel: Steps 1, 2, 3 (Step 3's key-cap fitting, 3.4, waits for Step 1's type ramp).
+  - Wave 2, one after the other: Step 4 (structure), then Step 5 (hints: annotates the restructured pages).
+  - Wave 3: Steps 6 and 7 in parallel (both touch `LayoutPreview.tsx`: Step 6 adds clicks as optional
+    props), then Step 8 alone.
 - Each step lists what the owner reported (**R**) and what the audit found (**F**). Mark a line done in this
   file when its session lands; delete the file when all are done.
 
@@ -103,36 +108,7 @@ languages (closing with unsaved changes).
    the keyboard" where a key position makes sense.
 4. Key caps: fit text (shrink to a floor, then two lines) before ellipsis; full name in the tooltip.
 
-## Step 4: hints, help and states (🟠 6/10)
-
-**R** no hints or tooltips anywhere: tap-hold flavors aren't explained, nor any non-obvious feature; QMK docs
-links would help (their examples are clear).
-
-**F**
-- Tap-hold columns "flavor", "quick tap", "hold when pressed", "key lists" have no explanation
-  (`TapHoldTab.tsx:205-244`). Tap dance kinds "every-tap" / "own C" are unexplained (`TapDanceTab.tsx:67-76`);
-  its intro is one dense paragraph (`:51`). Combos open with a jargon "reference layers" paragraph.
-- Many `config.h` params have no hint (`configParams.ts`: `TAPPING_TOGGLE`, `ONESHOT_TIMEOUT`,
-  `ONESHOT_TAP_TOGGLE`, Caps Word, `MOUSEKEY_*`, ...); some Russian titles stay English (`:51-63`).
-- Hardware/Setup terms (USB VID/PID, RGB Matrix, QMK MSYS, userspace) unexplained.
-- 41 disabled buttons with no reason (max reached, nothing selected, not connected...), e.g.
-  `TapHoldTab.tsx:296` has two reasons and no text; `LayersPage.tsx:82` (32-layer cap).
-- Empty lists (combos, tap dances, overrides, aliases, macros) show only an add button; no "what this is / how
-  to start".
-- Each Advanced tab opens with "Current firmware: UNKNOWN · your build: off (change)": unclear what is off and
-  what to do, shown even when the project already uses the feature.
-
-**Do**
-1. One `InfoTip` ("?" next to a label: hover or focus shows 1-3 plain sentences + an optional "QMK docs" link,
-   opened in the system browser). Every QMK concept and every non-obvious field gets one; each docs URL is opened
-   and checked when added.
-2. Fill the missing `configParams` hints and Russian titles.
-3. Disabled controls say why (tooltip or inline text): one convention, applied to all 41.
-4. Empty-state block for every list: one line on what it does, one example, the add button.
-5. Rewrite the firmware-status banner as a plain sentence with the action ("Tap dance isn't in your firmware
-   yet: it's added when you build and flash" / "...turned off: turn on").
-
-## Step 5: page structure and safety nets (🟠 6/10)
+## Step 4: page structure and safety nets (🟠 6/10)
 
 **F**
 - 7 hand-written tab bars (`AdvancedPage.tsx:377`, `FirmwarePage.tsx:29`, `HardwarePage.tsx:522`,
@@ -171,6 +147,35 @@ links would help (their examples are clear).
 8. Settings main tab: the `colors` block and effects as real controls (color pickers with "reset to palette"),
    so the JSONC is only for power users.
 9. Layers page: bigger previews (or one large preview of the selected layer).
+
+## Step 5: hints, help and states (🟠 6/10)
+
+**R** no hints or tooltips anywhere: tap-hold flavors aren't explained, nor any non-obvious feature; QMK docs
+links would help (their examples are clear).
+
+**F**
+- Tap-hold columns "flavor", "quick tap", "hold when pressed", "key lists" have no explanation
+  (`TapHoldTab.tsx:205-244`). Tap dance kinds "every-tap" / "own C" are unexplained (`TapDanceTab.tsx:67-76`);
+  its intro is one dense paragraph (`:51`). Combos open with a jargon "reference layers" paragraph.
+- Many `config.h` params have no hint (`configParams.ts`: `TAPPING_TOGGLE`, `ONESHOT_TIMEOUT`,
+  `ONESHOT_TAP_TOGGLE`, Caps Word, `MOUSEKEY_*`, ...); some Russian titles stay English (`:51-63`).
+- Hardware/Setup terms (USB VID/PID, RGB Matrix, QMK MSYS, userspace) unexplained.
+- 41 disabled buttons with no reason (max reached, nothing selected, not connected...), e.g.
+  `TapHoldTab.tsx:296` has two reasons and no text; `LayersPage.tsx:82` (32-layer cap).
+- Empty lists (combos, tap dances, overrides, aliases, macros) show only an add button; no "what this is / how
+  to start".
+- Each Advanced tab opens with "Current firmware: UNKNOWN · your build: off (change)": unclear what is off and
+  what to do, shown even when the project already uses the feature.
+
+**Do**
+1. One `InfoTip` ("?" next to a label: hover or focus shows 1-3 plain sentences + an optional "QMK docs" link,
+   opened in the system browser). Every QMK concept and every non-obvious field gets one; each docs URL is opened
+   and checked when added.
+2. Fill the missing `configParams` hints and Russian titles.
+3. Disabled controls say why (tooltip or inline text): one convention, applied to all 41.
+4. Empty-state block for every list: one line on what it does, one example, the add button.
+5. Rewrite the firmware-status banner as a plain sentence with the action ("Tap dance isn't in your firmware
+   yet: it's added when you build and flash" / "...turned off: turn on").
 
 ## Step 6: combos tab (🟠 7/10)
 
