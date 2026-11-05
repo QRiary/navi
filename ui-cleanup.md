@@ -7,7 +7,9 @@ Line numbers are from that commit.
 
 **Branch:** this work goes on top of `key-lists`, on branch `ui-cleanup`; every step merges into it (`--no-ff`,
 one merge commit per step, so the PR reads step by step) and the whole cleanup goes upstream as one PR, opened
-only after every PR open now has merged, so it doesn't conflict with them. Rebase on `master` before each session if those have landed meanwhile.
+only after every PR open now has merged, so it doesn't conflict with them. PRs #5-#13 are one stack (each contains the one before, `key-lists` = #13's head), so as long as upstream
+merges them with merge commits (as #2-#4) the commits stay the same and `ui-cleanup` needs no rebase; its PR's
+diff shrinks to the cleanup by itself. Rebase only if a PR in the stack gets squashed, rebased or changed.
 
 **Ground rules for every session**
 - Refinement, not a restyle: keep the look (mono palette, sidebar, deck). Fix how it reads and works.
