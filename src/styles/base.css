@@ -106,7 +106,12 @@ kbd {
   color: var(--app-background);
 }
 
-:focus-visible {
+/* Rings only after Tab (src/lib/focusRing.ts): arrows after a click do not draw one, not even Chromium's own. */
+:where(html:not([data-focus-ring])) :focus-visible {
+  outline: none;
+}
+
+:where(html[data-focus-ring]) :focus-visible {
   outline: 1px solid var(--text-primary);
   outline-offset: 2px;
 }

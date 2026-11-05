@@ -531,11 +531,11 @@
 }
 
 .slider:hover::-webkit-slider-thumb,
-.slider:focus-visible::-webkit-slider-thumb {
+:where([data-focus-ring]) .slider:focus-visible::-webkit-slider-thumb {
   opacity: 1;
 }
 
 .slider:hover::-moz-range-thumb,
-.slider:focus-visible::-moz-range-thumb {
+:where([data-focus-ring]) .slider:focus-visible::-moz-range-thumb {
   opacity: 1;
 }

@@ -128,7 +128,7 @@
 }
 
 .panel-resizer:hover::after,
-.panel-resizer:focus-visible::after,
+:where([data-focus-ring]) .panel-resizer:focus-visible::after,
 .panel-resizer.is-active::after {
   background: var(--text-secondary);
 }
