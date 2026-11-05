@@ -510,8 +510,8 @@ function ProfileTab({ project }: { project: Project }) {
                 <Hint
                   docs={QMK_DOCS.rgbMatrix}
                   tip={t(
-                    'RGB Matrix: one RGB LED per key, effects follow the key positions. RGB Light: a chain of RGB LEDs (underglow) with simple effects. LED Matrix: single-color LED per key. Backlight: plain single-color LEDs on a PWM pin.',
-                    'RGB Matrix: RGB-светодиод у каждой клавиши, эффекты учитывают положение клавиш. RGB Light: цепочка RGB-светодиодов (подсветка снизу) с простыми эффектами. LED Matrix: одноцветный светодиод у каждой клавиши. Backlight: обычные одноцветные светодиоды на PWM-выводе.',
+                    '- RGB Matrix: one RGB LED per key, effects follow the key positions.\n- RGB Light: a chain of RGB LEDs (underglow) with simple effects.\n- LED Matrix: single-color LED per key.\n- Backlight: plain single-color LEDs on a PWM pin.',
+                    '- RGB Matrix: RGB-светодиод у каждой клавиши, эффекты учитывают положение клавиш.\n- RGB Light: цепочка RGB-светодиодов (подсветка снизу) с простыми эффектами.\n- LED Matrix: одноцветный светодиод у каждой клавиши.\n- Backlight: обычные одноцветные светодиоды на PWM-выводе.',
                   )}
                 >
                   {t('lighting', 'подсветка')}

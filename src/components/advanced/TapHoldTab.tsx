@@ -34,7 +34,7 @@ import { IssueList, KeyChips, type KeyChip } from './common';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 // The number columns match .input--num (76px); the keys wrap their chips. Hold keys get their own line under the row.
-const COLS = 'minmax(0,1fr) 150px 76px 76px 40px 32px 32px';
+const COLS = 'minmax(0,1fr) 150px 100px 132px 72px 32px 32px';
 const LIST_COLS = '180px minmax(0,1fr) 72px 32px';
 type Flavor = NonNullable<TapHoldSetting['flavor']>;
 
@@ -277,8 +277,8 @@ export function TapHoldTab({ project }: { project: Project }) {
                   <Hint
                     docs={QMK_DOCS.tapHoldModes}
                     tip={t(
-                      'When another key comes in while this one is down. Tap preferred: a hold only once the term has passed (QMK default). Balanced: also a hold when another key is pressed and released inside the term (permissive hold). Hold preferred: a hold as soon as another key is pressed (hold on other key press).',
-                      'Что делать, если пока клавиша зажата, нажали другую. Приоритет нажатия: удержание, только когда прошло время (по умолчанию в QMK). Сбалансированный: удержание и тогда, когда другую клавишу нажали и отпустили в пределах времени (permissive hold). Приоритет удержания: удержание сразу, как нажата другая клавиша (hold on other key press).',
+                      'What happens when another key is pressed while this one is down:\n- Tap preferred: a hold only once the term has passed (QMK default).\n- Balanced: also a hold when another key is pressed and released inside the term (permissive hold).\n- Hold preferred: a hold as soon as another key is pressed (hold on other key press).',
+                      'Что делать, если пока клавиша зажата, нажали другую:\n- Приоритет нажатия: удержание, только когда прошло время (по умолчанию в QMK).\n- Сбалансированный: удержание и тогда, когда другую клавишу нажали и отпустили в пределах времени (permissive hold).\n- Приоритет удержания: удержание сразу, как нажата другая клавиша (hold on other key press).',
                     )}
                   >
                     {t('flavor', 'режим')}

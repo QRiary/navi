@@ -277,8 +277,8 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
         <Hint
           docs={QMK_DOCS.modTap}
           tip={t(
-            'Builds one key from parts. mods+key sends a shortcut (Ctrl+C); tap-hold is a mod-tap or layer-tap (tap = a key, hold = a modifier or layer); layer switches layers; layer+mods holds a layer with modifiers; one-shot applies a modifier to the next key only.',
-            'Собирает одну клавишу из частей. мод+клавиша — сочетание (Ctrl+C); тап-холд — mod-tap или layer-tap (нажатие — клавиша, удержание — модификатор или слой); слой переключает слои; слой+моды держит слой с модификаторами; one-shot применяет модификатор только к следующей клавише.',
+            'Builds one key from parts:\n- mods+key: a shortcut (Ctrl+C).\n- tap-hold: a mod-tap or layer-tap (tap = a key, hold = a modifier or layer).\n- layer: switches layers.\n- layer+mods: holds a layer with modifiers.\n- one-shot: a modifier for the next key only.',
+            'Собирает одну клавишу из частей:\n- мод+клавиша: сочетание (Ctrl+C).\n- тап-холд: mod-tap или layer-tap (нажатие — клавиша, удержание — модификатор или слой).\n- слой: переключает слои.\n- слой+моды: держит слой с модификаторами.\n- one-shot: модификатор только для следующей клавиши.',
           )}
         >
           {t('compose', 'собрать')}
@@ -347,8 +347,8 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
             <LayerSelect project={project} value={layer} max={31} onChange={(l) => commit({ kind: 'layer', fn, layer: l })} />
             <InfoTip docs={QMK_DOCS.layerSwitching} label={t('layer functions', 'функции слоя')}>
               {t(
-                'MO is for a layer you hold (like Fn). TG toggles it on and off. TO switches to it and turns the others off. TT acts as MO when held and toggles when tapped repeatedly. OSL is on for the next key only. DF sets the base layer; PDF also saves it.',
-                'MO — слой, пока держите (как Fn). TG включает и выключает его. TO переходит на него и выключает остальные. TT при удержании как MO, а при нескольких нажатиях подряд переключает. OSL включён только на одну клавишу. DF задаёт базовый слой; PDF ещё и запоминает его.',
+                '- MO: on while you hold it (like Fn).\n- TG: toggles the layer on and off.\n- TO: switches to it and turns the others off.\n- TT: like MO when held, toggles when tapped repeatedly.\n- OSL: on for the next key only.\n- DF: sets the base layer; PDF also saves it.',
+                '- MO: слой включён, пока держите (как Fn).\n- TG: включает и выключает слой.\n- TO: переходит на него и выключает остальные.\n- TT: при удержании как MO, при нескольких нажатиях подряд переключает.\n- OSL: включён только на одну клавишу.\n- DF: задаёт базовый слой; PDF ещё и запоминает его.',
               )}
             </InfoTip>
           </div>
