@@ -12,6 +12,7 @@ import { KeyboardCanvas, type KeyView } from '../components/keyboard/KeyboardCan
 import { checkGeometry, cloneGeometry, geometryBounds, keyCenter, mirrorKeys, rotatePoint } from '../core/layout/geometry';
 import { dilemma4x6Clone, gridGeometry } from '../core/layout/templates';
 import { addGeometry, addKey, moveKeys, patchProject, removeGeometry, removeKeys, resizeMatrix, setKeyMatrix, updateKeys } from '../core/project/ops';
+import { friendlyName } from '../core/keycodes/friendly';
 import { keyLabel } from '../core/keycodes/labels';
 import type { Geometry, HardwareProfile, KeyGeom, MatrixPos, Project } from '../core/project/types';
 import { importKle, importQmkLayout, importViaDefinition, detectFileKind, listQmkLayouts } from '../core/io/formats';
@@ -102,6 +103,7 @@ function GeometryEditor() {
       const v = active && k.matrix ? active.keymap.layers[0]?.keys[k.matrix[0] * active.project.hardware.matrix.cols + k.matrix[1]] : undefined;
       const label = v !== undefined && labelCtx ? keyLabel(spec, v, labelCtx) : { main: k.matrix ? '' : '?', kind: 'none' as const, qmk: t('no matrix position', 'нет позиции матрицы') };
       return {
+        name: v !== undefined && labelCtx ? friendlyName(spec, v, labelCtx).text : undefined,
         label: { ...label, top: k.matrix ? `${k.matrix[0]},${k.matrix[1]}` : t('none', 'нет'), hold: undefined },
         warn: !k.matrix || issues.some((i) => i.keyId === k.id && i.level === 'error'),
         dim: false,

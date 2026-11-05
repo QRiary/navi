@@ -5,6 +5,7 @@
  */
 import { useMemo } from 'react';
 import { ClipboardCopy, ClipboardPaste, Eraser, Search, SquareDashed } from 'lucide-react';
+import { friendlyName } from '../../core/keycodes/friendly';
 import { keyLabel } from '../../core/keycodes/labels';
 import { keycodeNeeds, needStatus, needsCode } from '../../core/keycodes/requirements';
 import { FEATURE_BY_ID } from '../../core/features/registry';
@@ -16,6 +17,7 @@ import { useEditorStore } from '../../store/editorStore';
 import { useSpec } from '../../store/projectStore';
 import { getLanguage, t, count } from '../../i18n';
 import { KeycodeComposer } from '../keyboard/KeycodeComposer';
+import { KeyName } from '../KeyName';
 import { toast } from '../../store/toastStore';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
@@ -143,7 +145,7 @@ export function KeyInspector() {
       <BigKeycode value={value} />
       {value === 1 && (
         <p className="field-hint">
-          {t('Transparent: works as on the layer below →', 'Прозрачная: работает как на слое ниже →')} <code>{keyLabel(spec, eff.keycode, labelCtx).qmk}</code> ({t('layer', 'слой')} {eff.fromLayer})
+          {t('Transparent: works as on the layer below →', 'Прозрачная: работает как на слое ниже →')} <KeyName name={friendlyName(spec, eff.keycode, labelCtx)} /> ({t('layer', 'слой')} {eff.fromLayer})
         </p>
       )}
       {(req.length > 0 || code || standIn) && (
@@ -180,11 +182,14 @@ export function KeyInspector() {
         <div className="layer-stack">
           {keymap.layers.map((l, i) => {
             const v = l.keys[key.matrix![0] * project.hardware.matrix.cols + key.matrix![1]];
-            const lab = keyLabel(spec, v, labelCtx);
+            const name = friendlyName(spec, v, labelCtx);
             return (
               <button key={l.id} className={`layer-stack-row ${i === layer ? 'is-active' : ''}`} onClick={() => setLayer(i)}>
                 <span className="num">L{i}</span>
-                <code className={v === 1 || v === 0 ? 'dim' : ''}>{lab.qmk}</code>
+                <span className={v === 1 || v === 0 ? 'dim' : ''} title={name.qmk}>
+                  {name.text}
+                  {name.text !== name.qmk && <code className="qmk-sub">{name.qmk}</code>}
+                </span>
                 <span className="dim">{l.name}</span>
               </button>
             );
@@ -211,10 +216,12 @@ function BigKeycode({ value }: { value: number }) {
   const labelCtx = useLabelContext();
   if (!labelCtx) return null;
   const l = keyLabel(spec, value, labelCtx);
+  const name = friendlyName(spec, value, labelCtx);
   return (
     <div className="big-keycode">
       <div className="big-keycode-cap">{l.kind === 'transparent' ? '▽' : l.main || '∅'}</div>
       <div className="big-keycode-text">
+        {name.text !== l.qmk && <span className="big-keycode-name">{name.text}</span>}
         <code>{l.qmk}</code>
         <span>{l.description ?? ''}{l.hold ? ` · ${t('hold', 'удержание')}: ${l.hold}` : ''}</span>
         <span className="kicker">0x{value.toString(16).toUpperCase().padStart(4, '0')}</span>
@@ -222,3 +229,4 @@ function BigKeycode({ value }: { value: number }) {
     </div>
   );
 }
+

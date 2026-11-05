@@ -8,8 +8,11 @@ import { activeGeometry, activeKeymap, posIndex, setEncoder, setKeycodeMap, setK
 import type { HoldAction, KeyGeom, MatrixPos, Project } from '../core/project/types';
 import { ensureTapHold, projectOwnCodeRefs, pruneTapHoldActions } from '../core/project/tapHoldActions';
 import { toQmk } from '../core/keycodes/codec';
+import { friendlyName } from '../core/keycodes/friendly';
 import { loadSpec, type KeycodeSpec } from '../core/keycodes/spec';
 import { useQmkStore } from '../store/qmkStore';
+import { useSettingsStore } from '../store/settingsStore';
+import { labelContext } from './projectContext';
 import { t } from '../i18n';
 import { useEditorStore, type ClipboardEntry } from '../store/editorStore';
 import { useProjectStore } from '../store/projectStore';
@@ -25,6 +28,20 @@ function ctx() {
   return { project, editor, geometry, keymap, selected, layer: Math.min(editor.layer, keymap.layers.length - 1) };
 }
 
+/** A keycode's readable name for an undo step's label. */
+function nameOf(spec: KeycodeSpec, project: Project, keycode: number): string {
+  const { os, hostLayout } = useSettingsStore.getState().settings.keyboard;
+  return friendlyName(spec, keycode, labelContext(project, spec, { os, hostLayout })).text;
+}
+
+/** The keycode of the first selected key on the shown layer (“pick from the keyboard” in keycode fields). */
+export function selectedKeycode(): { keycode: number; layer: number } | null {
+  const c = ctx();
+  const key = c?.selected.find((k) => k.matrix);
+  if (!c || !key) return null;
+  return { keycode: c.keymap.layers[c.layer].keys[posIndex(c.project, key.matrix!)], layer: c.layer };
+}
+
 function wired(keys: KeyGeom[]): MatrixPos[] {
   return keys.map((k) => k.matrix).filter((m): m is MatrixPos => m !== null);
 }
@@ -36,7 +53,7 @@ export function assignToSelection(keycode: number): boolean {
   const spec = loadSpec(c.project.firmware.keycodeSpec);
   if (c.editor.encoderTarget) {
     const { index, dir } = c.editor.encoderTarget;
-    useProjectStore.getState().apply((p) => setEncoder(p, c.keymap.id, c.layer, index, dir, keycode), `E${index} ${dir} = ${toQmk(spec, keycode)}`);
+    useProjectStore.getState().apply((p) => setEncoder(p, c.keymap.id, c.layer, index, dir, keycode), `E${index} ${dir} = ${nameOf(spec, c.project, keycode)}`);
     return true;
   }
   const positions = wired(c.selected);
@@ -44,7 +61,7 @@ export function assignToSelection(keycode: number): boolean {
     toast(t('Select a key on the keyboard first', 'Сначала выберите клавишу на схеме'));
     return false;
   }
-  useProjectStore.getState().apply((p) => pruneTapHoldActions(setKeycodes(p, c.keymap.id, c.layer, positions, keycode)), `${positions.length}× ${toQmk(spec, keycode)}`);
+  useProjectStore.getState().apply((p) => pruneTapHoldActions(setKeycodes(p, c.keymap.id, c.layer, positions, keycode)), `${positions.length}× ${nameOf(spec, c.project, keycode)}`);
   return true;
 }
 
@@ -81,7 +98,7 @@ export function assignTapHoldToSelection(tap: number, hold: HoldAction): boolean
   useProjectStore.getState().apply((p) => {
     const r = ensureTapHold(spec, p, tap, hold, reserved);
     return pruneTapHoldActions(setKeycodes(r.project, c.keymap.id, c.layer, positions, r.keycode));
-  }, `${positions.length}× tap-hold ${toQmk(spec, tap)}`);
+  }, `${positions.length}× tap-hold ${nameOf(spec, c.project, tap)}`);
   return true;
 }
 
@@ -89,7 +106,7 @@ export function assignToKey(key: KeyGeom, keycode: number) {
   const c = ctx();
   if (!c || !key.matrix) return;
   const spec = loadSpec(c.project.firmware.keycodeSpec);
-  useProjectStore.getState().apply((p) => setKeycodes(p, c.keymap.id, c.layer, [key.matrix!], keycode), `${toQmk(spec, keycode)}`);
+  useProjectStore.getState().apply((p) => setKeycodes(p, c.keymap.id, c.layer, [key.matrix!], keycode), nameOf(spec, c.project, keycode));
 }
 
 export function swapKeys(a: KeyGeom, b: KeyGeom) {

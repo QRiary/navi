@@ -138,7 +138,7 @@ function TapHoldSlots({ spec, project, tap, hold, onChange }: { spec: KeycodeSpe
       <div className="field-row">
         <span className="field-hint">{t('tap:', 'нажатие:')}</span>
         {tap <= 0xff && <BasicKeySelect spec={spec} value={tap} label={t('Tap key', 'Клавиша нажатия')} onChange={(v) => onChange(v, hold)} />}
-        <KeycodeField value={tap} label={t('Tap: any keycode', 'Нажатие: любой keycode')} onChange={(v) => onChange(v, hold)} />
+        <KeycodeField fromKeyboard={false} value={tap} label={t('Tap: any keycode', 'Нажатие: любой keycode')} onChange={(v) => onChange(v, hold)} />
       </div>
       <div className="field-row">
         <span className="field-hint">{t('hold:', 'удержание:')}</span>
@@ -162,7 +162,7 @@ function TapHoldSlots({ spec, project, tap, hold, onChange }: { spec: KeycodeSpe
       )}
       {hold.type === 'key' && (
         <div className="field-row">
-          <KeycodeField value={hold.keycode} label={t('Hold: any keycode', 'Удержание: любой keycode')} onChange={(v) => onChange(tap, { type: 'key', keycode: v })} />
+          <KeycodeField fromKeyboard={false} value={hold.keycode} label={t('Hold: any keycode', 'Удержание: любой keycode')} onChange={(v) => onChange(tap, { type: 'key', keycode: v })} />
           <span className="field-hint">{t('held down while you hold', 'зажата, пока держите')}</span>
         </div>
       )}

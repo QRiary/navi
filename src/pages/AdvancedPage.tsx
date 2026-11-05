@@ -5,6 +5,7 @@
  */
 import { useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import { friendlyName } from '../core/keycodes/friendly';
 import { keyLabel } from '../core/keycodes/labels';
 import { checkCombos, checkKeyOverrides, comboRefOf } from '../core/features/advanced';
 import { configParams, groupTitle } from '../core/qmk/configParams';
@@ -46,6 +47,10 @@ function CombosTab({ project }: { project: Project }) {
   const marked = new Set((combo?.keys ?? []).map(([r, c]) => `${r},${c}`));
   // Labels of combo keys: the layer combos read on layer 0.
   const labelLayer = comboRefOf(km, 0);
+  const keyName = ([r, c]: MatrixPos) => {
+    const v = km.layers[labelLayer].keys[r * cols + c];
+    return v > 1 ? friendlyName(spec, v, labelCtx).text : `[${r},${c}]`;
+  };
   const setRef = (layer: number, value: string) =>
     apply((p) => setLayerComboRef(p, km.id, layer, value === '' ? undefined : value === 'self' ? 'self' : Number(value)), t('combo reference layer', 'опорный слой комбо'));
   return (
@@ -90,10 +95,10 @@ function CombosTab({ project }: { project: Project }) {
           <div className="rows">
             {project.combos.map((c) => (
               <button key={c.id} className={`row ${c.id === current ? 'is-active' : ''}`} style={{ ['--row-cols' as string]: 'minmax(0,1fr) auto', textAlign: 'left' }} onClick={() => setCurrent(c.id)}>
-                <span>
-                  {c.name} <span className="kicker">{c.keys.length} {t('keys', 'кл.')}</span>
+                <span title={`${c.keys.map(keyName).join(' + ')} → ${friendlyName(spec, c.result, labelCtx).qmk}`}>
+                  {c.keys.map(keyName).join(' + ') || '—'} → {friendlyName(spec, c.result, labelCtx).text}
                 </span>
-                <span className="kicker">{keyLabel(spec, c.result, labelCtx).qmk}</span>
+                <span className="kicker">{c.name}</span>
               </button>
             ))}
             <div className="row" style={{ ['--row-cols' as string]: '1fr' }}>
@@ -122,7 +127,7 @@ function CombosTab({ project }: { project: Project }) {
               <LayoutPreview geometry={active.geometry} label={([r, c]) => keyLabel(spec, km.layers[labelLayer].keys[r * cols + c], labelCtx)} marked={marked} height={150} />
               <div className="field-row">
                 <span className="field-hint">
-                  {t('keys', 'клавиши')}: {combo.keys.map(([r, c]) => keyLabel(spec, km.layers[labelLayer].keys[r * cols + c], labelCtx).main || `[${r},${c}]`).join(' + ') || '—'}
+                  {t('keys', 'клавиши')}: {combo.keys.map(keyName).join(' + ') || '—'}
                 </span>
                 <button className="btn" disabled={selectedPositions.length < 2} onClick={() => set(project.combos.map((c) => (c.id === combo.id ? { ...c, keys: selectedPositions } : c)), t('combo keys', 'клавиши комбо'))} title={t('Select 2+ keys on the Keyboard page first', 'Сначала выделите 2+ клавиши в разделе «Клавиатура»')}>
                   {t(`take selected keys (${selectedPositions.length})`, `взять выбранные клавиши (${selectedPositions.length})`)}

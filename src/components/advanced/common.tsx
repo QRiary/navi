@@ -2,9 +2,13 @@
  * Shared parts of the Advanced section: a validated keycode field, a list of problems, a badge
  * “does the feature work in the current firmware and is it on in your build”.
  */
-import { useState, type ReactNode } from 'react';
-import { tryParseQmk } from '../../core/keycodes/codec';
-import { keyLabel } from '../../core/keycodes/labels';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Keyboard, LayoutGrid } from 'lucide-react';
+import { decode, tryParseQmk } from '../../core/keycodes/codec';
+import { friendlyName, type FriendlyName } from '../../core/keycodes/friendly';
+import { selectedKeycode } from '../../lib/keymapActions';
+import { useEditorStore } from '../../store/editorStore';
+import { KeycodePopover } from '../keyboard/KeycodePopover';
 import type { AdvancedIssue } from '../../core/features/advanced';
 import { featureStatus, type FeatureId } from '../../core/features/registry';
 import type { CustomAction, Project } from '../../core/project/types';
@@ -15,27 +19,90 @@ import { useSpec } from '../../store/projectStore';
 import { StatusChip } from '../inspector/KeyInspector';
 import { getLanguage, t } from '../../i18n';
 
-/** Keycode field: a validated QMK expression. */
-export function KeycodeField({ value, onChange, label }: { value: number; onChange: (v: number) => void; label: string }) {
+/**
+ * Keycode field: a validated QMK expression, what it means next to it ("Space · hold Num", "unknown" or the parse
+ * error), a button opening the keycode catalog, and (`fromKeyboard`) one taking the keycode of the key selected on
+ * the Keyboard page's shown layer.
+ */
+export function KeycodeField({ value, onChange, label, fromKeyboard = true }: { value: number; onChange: (v: number) => void; label: string; fromKeyboard?: boolean }) {
   const spec = useSpec();
   const labelCtx = useLabelContext();
-  const qmk = labelCtx ? keyLabel(spec, value, labelCtx).qmk : '';
+  const name = labelCtx ? friendlyName(spec, value, labelCtx) : null;
+  const qmk = name?.qmk ?? '';
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
+  const pickBtn = useRef<HTMLButtonElement>(null);
+  const closePicker = useCallback(() => setPicking(false), []);
+  const selection = useEditorStore((s) => s.selection);
+  const layer = useEditorStore((s) => s.layer);
+  // Recomputed when the selection or the shown layer changes (the store getter reads them).
+  const selected = useMemo(() => (fromKeyboard ? selectedKeycode() : null), [fromKeyboard, selection, layer, labelCtx]);
   const shown = text ?? (value ? qmk : '');
+  const typed = text !== null && text.trim() ? tryParseQmk(spec, text) : null;
+  const preview = (() => {
+    if (error) return error;
+    if (typed) return 'value' in typed && labelCtx ? meaning(friendlyName(spec, typed.value, labelCtx), typed.value) : '';
+    return value && name ? meaning(name, value) : '';
+  })();
   return (
-    <form
-      className={`expr-input ${error ? 'is-error' : ''}`}
-      style={{ minWidth: 150 }}
-      onSubmit={(e) => {
-        e.preventDefault();
-        commit();
-      }}
-    >
-      <input value={shown} placeholder="KC_NO" aria-label={label} spellCheck={false} onChange={(e) => setText(e.target.value)} onBlur={() => commit()} />
-      {error && <span className="expr-result">{error}</span>}
-    </form>
+    <span className="kc-field">
+      <form
+        className={`expr-input ${error ? 'is-error' : ''}`}
+        style={{ minWidth: 150 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          commit();
+        }}
+      >
+        <input value={shown} placeholder="KC_NO" aria-label={label} spellCheck={false} title={name && value ? `${name.text}\n${name.qmk}` : undefined} onChange={(e) => setText(e.target.value)} onBlur={() => commit()} />
+        {preview && (
+          <span className="expr-result" title={preview}>
+            {preview}
+          </span>
+        )}
+      </form>
+      <button ref={pickBtn} type="button" className="icon-btn" aria-label={t('Pick from the catalog', 'Выбрать из каталога')} title={t('Pick from the catalog', 'Выбрать из каталога')} aria-expanded={picking} onClick={() => setPicking((p) => !p)}>
+        <LayoutGrid size={14} strokeWidth={1.5} />
+      </button>
+      {fromKeyboard && (
+        <button
+          type="button"
+          className="icon-btn"
+          disabled={!selected}
+          aria-label={t('Take the selected key', 'Взять выбранную клавишу')}
+          title={
+            selected && labelCtx
+              ? t(`Take the key selected on the Keyboard page (layer ${selected.layer}): ${friendlyName(spec, selected.keycode, labelCtx).text}`, `Взять клавишу, выбранную на странице «Клавиатура» (слой ${selected.layer}): ${friendlyName(spec, selected.keycode, labelCtx).text}`)
+              : t('Select a key on the Keyboard page to take its keycode', 'Выберите клавишу на странице «Клавиатура», чтобы взять её keycode')
+          }
+          onClick={() => selected && set(selected.keycode)}
+        >
+          <Keyboard size={14} strokeWidth={1.5} />
+        </button>
+      )}
+      {picking && (
+        <KeycodePopover
+          anchor={pickBtn}
+          current={value}
+          onClose={closePicker}
+          onPick={(v) => {
+            set(v);
+            setPicking(false);
+          }}
+        />
+      )}
+    </span>
   );
+  function meaning(n: FriendlyName, v: number): string {
+    if (n.text !== n.qmk) return n.text;
+    return decode(spec, v).kind === 'unknown' ? t('unknown', 'неизвестно') : '';
+  }
+  function set(v: number) {
+    onChange(v);
+    setText(null);
+    setError(null);
+  }
   function commit() {
     if (text === null) return;
     if (!text.trim()) {
@@ -94,9 +161,9 @@ export function KeyChips({
         <span
           key={c.kind === 'list' ? `l:${c.id}` : `k:${i}`}
           className={`key-chip ${c.kind === 'list' ? 'key-chip--list' : ''}`}
-          title={c.kind === 'list' ? t('key list', 'список клавиш') : undefined}
+          title={c.kind === 'list' ? t('key list', 'список клавиш') : labelCtx ? friendlyName(spec, c.value, labelCtx).qmk : undefined}
         >
-          {c.kind === 'list' ? c.name || '—' : labelCtx ? keyLabel(spec, c.value, labelCtx).qmk || 'KC_NO' : ''}
+          {c.kind === 'list' ? c.name || '—' : labelCtx ? friendlyName(spec, c.value, labelCtx).text : ''}
           <button className="key-chip-x" aria-label={t('Remove', 'Убрать')} onClick={() => onRemove(i)}>
             ×
           </button>

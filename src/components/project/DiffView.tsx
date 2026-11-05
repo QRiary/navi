@@ -2,10 +2,12 @@
  * Changes between two project versions: keys (layer, position, before → after), encoders, sections.
  */
 import type { ProjectDiff } from '../../core/project/diff';
-import { keyLabel } from '../../core/keycodes/labels';
+import { friendlyName } from '../../core/keycodes/friendly';
 import type { Project } from '../../core/project/types';
-import { useLabelContext } from '../../lib/projectContext';
+import { labelContext, useLabelContext } from '../../lib/projectContext';
 import { useSpec } from '../../store/projectStore';
+import { useSettingsStore } from '../../store/settingsStore';
+import { KeyName } from '../KeyName';
 import { t } from '../../i18n';
 
 const SECTION_NAMES = (): Record<string, string> => ({
@@ -31,8 +33,12 @@ const SECTION_NAMES = (): Record<string, string> => ({
 export function DiffView({ diff, before, limit = 80 }: { diff: ProjectDiff; before: Project; limit?: number }) {
   const spec = useSpec();
   const labelCtx = useLabelContext();
+  const keyboard = useSettingsStore((s) => s.settings.keyboard);
   if (!labelCtx) return null;
-  const name = (v: number) => keyLabel(spec, v, labelCtx).qmk;
+  // The old side is named by the old version (its tap-hold actions, aliases, tap dance names), the new one by the current.
+  const beforeCtx = labelContext(before, spec, keyboard);
+  const was = (v: number) => <KeyName className="d-del" name={friendlyName(spec, v, beforeCtx)} />;
+  const now = (v: number) => <KeyName className="d-add" name={friendlyName(spec, v, labelCtx)} />;
   const layerName = (keymapId: string, l: number) => before.keymaps.find((k) => k.id === keymapId)?.layers[l]?.name ?? `L${l}`;
   const empty = diff.keys.length === 0 && diff.encoders.length === 0 && diff.sections.length === 0 && !diff.layersAdded && !diff.layersRemoved;
   if (empty) return <p className="status-ok">{t('No differences.', 'Отличий нет.')}</p>;
@@ -52,13 +58,13 @@ export function DiffView({ diff, before, limit = 80 }: { diff: ProjectDiff; befo
         <div className="diff" style={{ maxHeight: 260 }}>
           {diff.keys.slice(0, limit).map((k, i) => (
             <div key={`k${i}`}>
-              {layerName(k.keymapId, k.layer)} [{k.pos[0]},{k.pos[1]}] <span className="d-del">{name(k.before)}</span> → <span className="d-add">{name(k.after)}</span>
+              {layerName(k.keymapId, k.layer)} [{k.pos[0]},{k.pos[1]}] {was(k.before)} → {now(k.after)}
             </div>
           ))}
           {diff.keys.length > limit && <div className="d-hunk">⋯ +{diff.keys.length - limit}</div>}
           {diff.encoders.map((e, i) => (
             <div key={`e${i}`}>
-              {layerName(e.keymapId, e.layer)} E{e.encoder} {e.dir === 'cw' ? '↻' : '↺'} <span className="d-del">{name(e.before)}</span> → <span className="d-add">{name(e.after)}</span>
+              {layerName(e.keymapId, e.layer)} E{e.encoder} {e.dir === 'cw' ? '↻' : '↺'} {was(e.before)} → {now(e.after)}
             </div>
           ))}
         </div>
