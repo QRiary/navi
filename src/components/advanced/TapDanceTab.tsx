@@ -2,7 +2,7 @@
  * Advanced → Tap dance. Three kinds: slots (tap / hold / double tap / tap-then-hold, any keycode), every tap (steps
  * played at once, by the tap count, with Shift / Ctrl variants) and own C (the user's own functions).
  */
-import { Fragment, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { checkTapDances } from '../../core/features/advanced';
 import { newId } from '../../core/layout/geometry';
@@ -64,7 +64,7 @@ export function TapDanceTab({ project }: { project: Project }) {
           {project.tapDances.map((td) => {
             const kind = tapDanceKind(td);
             return (
-              <Fragment key={td.id}>
+              <div key={td.id} className="row-group">
                 <div className="row" style={{ ['--row-cols' as string]: COLS }}>
                   <span className="num">{td.index}</span>
                   <input className="input" value={td.name} onChange={(e) => patch(td.id, { name: e.target.value.replace(/[^A-Za-z0-9_]/g, '_') }, t('rename tap dance', 'имя tap dance'), `tdname:${td.id}`)} aria-label={t('Name', 'Имя')} />
@@ -123,7 +123,7 @@ export function TapDanceTab({ project }: { project: Project }) {
                     )}
                   </p>
                 )}
-              </Fragment>
+              </div>
             );
           })}
         </div>
