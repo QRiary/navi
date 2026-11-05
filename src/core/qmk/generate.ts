@@ -16,7 +16,7 @@ import { FEATURE_BY_ID, type FeatureId } from '../features/registry';
 import { checkCombos, checkKeyOverrides, checkLeaderSequences, checkTapDances, checkUnicodeMap, leaderFunction, type AdvancedIssue } from '../features/advanced';
 import { configParams, configValueType } from './configParams';
 import { layerOnTopCallback, layerOnTopState, layerOnTopStubs } from './layerOnTop';
-import { checkCustom, customBlock, CUSTOM_FILES, hasCustomCode, NAVI_HOOKS, PIPELINE_MAX_HEADERS, safeHeaderName, unsafeDefineValue, validCIdentifier, type CustomFile } from './customCode';
+import { checkCustom, customBlock, CUSTOM_FILES, GENERATED_SYMBOLS, hasCustomCode, NAVI_HOOKS, PIPELINE_MAX_HEADERS, PIPELINE_SYMBOLS, safeHeaderName, unsafeDefineValue, validCIdentifier, type CustomFile } from './customCode';
 import { requiredFeatures } from '../features/required';
 import { RGB_MATRIX_EFFECTS } from '../lighting/effects';
 import { effectiveMaxBrightness, rgbTargetDefaults } from '../lighting/buildDefaults';
@@ -25,7 +25,8 @@ import { activeGeometry } from '../project/ops';
 import { checkKeyAliases } from '../project/aliases';
 import { checkTapHolds, effectiveTapHolds } from '../project/tapHolds';
 import { checkTapHoldActions, effectiveTapHoldActions, projectOwnCodeRefs, type OwnCodeFile } from '../project/tapHoldActions';
-import { hasHoldKeys, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, replayTracked, standInCheckCode, tapHoldsCode, type StandIn } from './tapHold';
+import { hasHoldKeys, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, naviSendCode, replayTracked, standInCheckCode, tapHoldsCode, type StandIn } from './tapHold';
+import { tapDanceCode } from './tapDance';
 import { layoutMacro, renderLayers, textLayout } from './layoutText';
 
 export interface GeneratedFile {
@@ -51,6 +52,14 @@ const HEADER = (project: Project) =>
  */
 export function commentText(s: string): string {
   return s.replace(/[\x00-\x1f\x7f]+/g, ' ').replace(/\\/g, '/').replace(/\/\*|\*\//g, ' ').slice(0, 200);
+}
+
+/**
+ * Names an own-C tap dance function must not take: NAVI's symbols, layer / keycode / unicode names (navi_… names are
+ * refused by checkTapDances anyway).
+ */
+export function tapDanceReservedNames(project: Project, keymap: Keymap, extra: Iterable<string> = []): Set<string> {
+  return new Set<string>([...GENERATED_SYMBOLS, ...PIPELINE_SYMBOLS, ...extra, ...layerIdentifiers(keymap), ...project.customKeycodes.map((x) => x.name), ...project.unicodeMap.map((u) => u.name), 'NAVI_SAFE_RANGE']);
 }
 
 /**
@@ -192,8 +201,10 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const rawKc = (v: number) => toQmk(spec, v, rawCtx, { unicode: project.firmware.unicode });
   const holdText = (h: HoldAction) =>
     h.type === 'mods' ? modsToConstExpr(h.mods) : h.type === 'layer' ? `layer ${layerIds[h.layer] ?? h.layer}${h.mods ? ` + ${modsToConstExpr(h.mods)}` : ''}` : kc(h.keycode);
+  const tdC = tapDanceCode(tdSorted, kc, cString);
+  const tdReserved = tapDanceReservedNames(project, keymap, [...tdC.symbols, 'navi_send', 'navi_sending', ...standInName.values()]);
   const issues: AdvancedIssue[] = [
-    ...checkTapDances(spec, project.tapDances),
+    ...checkTapDances(spec, project.tapDances, tdReserved),
     ...checkCombos(project, project.combos),
     ...checkKeyOverrides(project.keyOverrides),
     ...checkLeaderSequences(spec, project),
@@ -206,6 +217,10 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   issues.push(...checkTapHoldActions(spec, project, projectOwnCodeRefs(spec, project, ownCode)));
   const tapHold = planTapHolds(effectiveTapHolds(spec, project), kc);
   const tracked = replayTracked(tapHold);
+  const replay = tracked.length > 0;
+  const tapHoldInCode = thActions.length > 0 || replay;
+  // navi_send is shared by tap-hold keys with actions and tap dances; navi_sending only where navi_tap_holds reads it.
+  const sendingFlag = (tdC.sends || thActions.length > 0) && tapHoldInCode;
   // “Own pipeline”: the hooks get a _navi suffix, enums and prototypes go to navi.h, build settings to navi_*.
   const pipeline = project.firmware.pipeline?.enabled === true;
   const hookName = (qmk: keyof typeof NAVI_HOOKS) => (pipeline ? NAVI_HOOKS[qmk] : qmk);
@@ -360,66 +375,10 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   }
 
   if (hasTd) {
-    c.push('// ── Tap dance ─────────────────────────────────────────────────────────');
-    c.push('typedef enum { NAVI_TD_NONE, NAVI_TD_TAP, NAVI_TD_HOLD, NAVI_TD_DOUBLE_TAP, NAVI_TD_TAP_HOLD } navi_td_state_t;');
-    c.push('typedef struct {');
-    c.push('    uint16_t tap, hold, double_tap, tap_hold;');
-    c.push('    uint16_t active; // what was pressed, to release it on reset');
-    c.push('} navi_td_t;');
-    c.push('');
-    c.push('static navi_td_state_t navi_td_state(tap_dance_state_t *state) {');
-    c.push('    if (state->count == 1) return (state->interrupted || !state->pressed) ? NAVI_TD_TAP : NAVI_TD_HOLD;');
-    c.push('    if (state->count == 2) return state->pressed ? NAVI_TD_TAP_HOLD : NAVI_TD_DOUBLE_TAP;');
-    c.push('    return NAVI_TD_NONE;');
-    c.push('}');
-    c.push('');
-    c.push('static void navi_td_press(uint16_t kc) {');
-    c.push('    if (kc == KC_NO) return;');
-    c.push('    if (IS_QK_MOMENTARY(kc)) layer_on(QK_MOMENTARY_GET_LAYER(kc));');
-    c.push('    else if (IS_QK_TOGGLE_LAYER(kc)) layer_invert(QK_TOGGLE_LAYER_GET_LAYER(kc));');
-    c.push('    else if (IS_QK_TO(kc)) layer_move(QK_TO_GET_LAYER(kc));');
-    c.push('    else if (IS_QK_DEF_LAYER(kc)) default_layer_set((layer_state_t)1 << QK_DEF_LAYER_GET_LAYER(kc));');
-    c.push('    else if (IS_QK_ONE_SHOT_MOD(kc)) set_oneshot_mods(QK_ONE_SHOT_MOD_GET_MODS(kc) & 0x10 ? (QK_ONE_SHOT_MOD_GET_MODS(kc) & 0x0F) << 4 : QK_ONE_SHOT_MOD_GET_MODS(kc));');
-    c.push('    else register_code16(kc);');
-    c.push('}');
-    c.push('');
-    c.push('static void navi_td_release(uint16_t kc) {');
-    c.push('    if (kc == KC_NO) return;');
-    c.push('    if (IS_QK_MOMENTARY(kc)) layer_off(QK_MOMENTARY_GET_LAYER(kc));');
-    c.push('    else if (IS_QK_TOGGLE_LAYER(kc) || IS_QK_TO(kc) || IS_QK_DEF_LAYER(kc) || IS_QK_ONE_SHOT_MOD(kc)) return;');
-    c.push('    else unregister_code16(kc);');
-    c.push('}');
-    c.push('');
-    c.push('static void navi_td_finished(tap_dance_state_t *state, void *user_data) {');
-    c.push('    navi_td_t *td = (navi_td_t *)user_data;');
-    c.push('    switch (navi_td_state(state)) {');
-    c.push('        case NAVI_TD_TAP: td->active = td->tap; break;');
-    c.push('        case NAVI_TD_HOLD: td->active = td->hold ? td->hold : td->tap; break;');
-    c.push('        case NAVI_TD_DOUBLE_TAP:');
-    c.push('            if (td->double_tap) td->active = td->double_tap;');
-    c.push('            else { tap_code16(td->tap); td->active = td->tap; }');
-    c.push('            break;');
-    c.push('        case NAVI_TD_TAP_HOLD: td->active = td->tap_hold ? td->tap_hold : (td->hold ? td->hold : td->tap); break;');
-    c.push('        default: td->active = KC_NO; break;');
-    c.push('    }');
-    c.push('    navi_td_press(td->active);');
-    c.push('}');
-    c.push('');
-    c.push('static void navi_td_reset(tap_dance_state_t *state, void *user_data) {');
-    c.push('    navi_td_t *td = (navi_td_t *)user_data;');
-    c.push('    navi_td_release(td->active);');
-    c.push('    td->active = KC_NO;');
-    c.push('}');
-    c.push('');
-    const maxIndex = Math.max(...tdSorted.map((t) => t.index));
-    c.push(`static navi_td_t navi_td_data[${maxIndex + 1}] = {`);
-    tdSorted.forEach((t) => c.push(`    [${t.name}] = { ${kc(t.tap)}, ${kc(t.hold)}, ${kc(t.doubleTap)}, ${kc(t.tapHold)}, KC_NO },`));
-    c.push('};');
-    c.push('');
-    c.push('tap_dance_action_t tap_dance_actions[] = {');
-    tdSorted.forEach((t) => c.push(`    [${t.name}] = { .fn = { .on_dance_finished = navi_td_finished, .on_reset = navi_td_reset }, .user_data = (void *)&navi_td_data[${t.name}] },`));
-    c.push('};');
-    c.push('');
+    if (tdC.sends) c.push(...naviSendCode({ flag: sendingFlag, guard: false }));
+    c.push(...tdC.lines);
+    if (!pipeline && tdC.prototypes.length) c.push('// Your own tap dance functions (define them in your own lines below):', ...tdC.prototypes, '');
+    c.push(...tdC.actions);
   }
 
   if (hasCombos) {
@@ -489,7 +448,6 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const quickTap = tapHold.quick.length > 0;
   const holdPress = tapHold.holdPress.length > 0;
   const permissive = tapHold.permissive.length > 0;
-  const replay = tracked.length > 0;
   const preProcess = holdKeys || replay;
   if (preProcess) c.push(...preProcessHook(hookName('pre_process_record_user'), { lastPressed: holdKeys, replay, interrupters: holdKeys && tracked.some((h) => h.holdKeys.length > 0) }));
   if (quickTap) c.push(...quickTapHook(hookName('get_quick_tap_term'), tapHold));
@@ -516,22 +474,30 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push(...layerOnTopCallback(hookName('layer_state_set_user')));
   }
   const keysInCode = sendStringCustoms.length > 0 || macroHandledInCode;
-  const tapHoldInCode = thActions.length > 0 || replay;
   if (tapHoldInCode) {
     const standIns: StandIn[] = thActions.map((a) => ({
       name: standInName.get(a.keycode)!,
       tap: kc(a.tap),
       hold: a.hold.type === 'key' ? { type: 'key', key: kc(a.hold.keycode) } : a.hold.type === 'layer' ? { type: 'layer', mask: a.hold.mods ? modMask(a.hold.mods) : null } : { type: 'mods', mask: modMask(a.hold.mods) },
     }));
-    c.push(...tapHoldsCode({ standIns, tracked, interrupters: tracked.some((h) => h.holdKeys.length > 0), layerOff: layersOnTop ? 'navi_layer_off' : 'layer_off' }));
+    if (thActions.length && !tdC.sends) c.push(...naviSendCode({ flag: sendingFlag, guard: true }));
+    c.push(...tapHoldsCode({ standIns, tracked, interrupters: tracked.some((h) => h.holdKeys.length > 0), layerOff: layersOnTop ? 'navi_layer_off' : 'layer_off', sending: sendingFlag }));
   }
   // For the user's own C: which MT / LT values are NAVI's stand-ins (their base key isn't what they tap).
   const standInCheck = pipeline || thActions.length > 0;
   if (standInCheck) c.push(...standInCheckCode([...standInName.values()]));
-  const recordHook = keysInCode || layersOnTop || tapHoldInCode;
+  const recordHook = keysInCode || layersOnTop || tapHoldInCode || tdC.keys;
   if (recordHook) {
     c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
     if (layersOnTop) c.push('    navi_layer_keys(keycode, record); // layer keys bring their layer to the top');
+    if (tdC.keys) {
+      c.push(
+        '    // Tap dances play their keys at the dance key\'s position (QMK runs the dance after this hook).',
+        '    if (IS_QK_TAP_DANCE(keycode) && record->event.pressed && QK_TAP_DANCE_GET_INDEX(keycode) < ARRAY_SIZE(navi_td_keys)) {',
+        '        navi_td_keys[QK_TAP_DANCE_GET_INDEX(keycode)] = record->event.key;',
+        '    }',
+      );
+    }
     if (tapHoldInCode) c.push('    if (!navi_tap_holds(keycode, record)) return false; // tap-hold keys: actions and the replay fix');
   }
   if (keysInCode) {
@@ -613,6 +579,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     h.push('void navi_layer_off(uint8_t layer); // also turns off a hidden layer');
     h.push('bool navi_is_stand_in(uint16_t keycode); // a stand-in MT / LT of a tap-hold key with actions: its base key is not its tap');
     h.push('');
+    if (tdC.prototypes.length) h.push('// Your own tap dance functions (tap dances of the “own C” kind): define them in your code.', '#ifdef TAP_DANCE_ENABLE', ...tdC.prototypes, '#endif', '');
   }
 
   // ── rules.mk ────────────────────────────────────────────────────────
@@ -701,7 +668,9 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const custom = pendingReview ? {} : (project.firmware.custom ?? {});
   const generatedSymbols = new Set<string>(['keymaps']);
   if (hasEncoders) generatedSymbols.add('encoder_map');
-  if (hasTd) generatedSymbols.add('tap_dance_actions');
+  if (hasTd) for (const name of ['tap_dance_actions', ...tdC.symbols]) generatedSymbols.add(name);
+  if (tdC.sends) generatedSymbols.add('navi_send');
+  if (sendingFlag) generatedSymbols.add('navi_sending');
   if (hasCombos) generatedSymbols.add('key_combos');
   if (!pipeline && comboTerms.length) generatedSymbols.add('get_combo_term');
   if (!pipeline && comboLayers.length) generatedSymbols.add('combo_should_trigger');
@@ -716,7 +685,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (replay) for (const name of ['navi_down', 'navi_interrupted', 'navi_interrupter', 'navi_watch_presses', 'navi_held_tap', 'navi_forces_hold', 'navi_hold']) generatedSymbols.add(name);
   if (tapHoldInCode) generatedSymbols.add('navi_tap_holds');
   if (standInCheck) generatedSymbols.add('navi_is_stand_in');
-  if (thActions.length) for (const name of ['navi_sending', 'navi_send', ...standInName.values()]) generatedSymbols.add(name);
+  if (thActions.length) for (const name of ['navi_send', ...standInName.values()]) generatedSymbols.add(name);
   if (!pipeline && leaders.length) generatedSymbols.add('leader_end_user');
   if (!pipeline && layersOnTop) generatedSymbols.add('layer_state_set_user');
   if (pipeline || layersOnTop) for (const name of ['navi_layers_on', 'navi_layer_off']) generatedSymbols.add(name);
@@ -745,6 +714,13 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const withCustom = (file: CustomFile, lines: string[]) => [...lines, ...customBlock(file, custom[file])];
 
   if (keymap.layers.length > 32) issues.push({ level: 'error', where: 'layers', message: { en: 'QMK supports at most 32 layers.', ru: 'QMK поддерживает не больше 32 слоёв.' } });
+  if (!pipeline && tdC.prototypes.length && !custom['keymap.c']?.trim()) {
+    issues.push({
+      level: 'warning',
+      where: 'tap dance · own C',
+      message: { en: `Define these functions in your own lines (Firmware → keymap.c): ${tdC.prototypes.join(' ')}`, ru: `Определите эти функции в своих строках (Прошивка → keymap.c): ${tdC.prototypes.join(' ')}` },
+    });
+  }
   if (!via && macros.length) issues.push({ level: 'warning', where: 'macros', message: { en: 'Without VIA, macros are compiled into keymap.c (send_string / tap_code).', ru: 'Без VIA макросы вкомпилируются в keymap.c (send_string / tap_code).' } });
   if (via) issues.push({ level: 'warning', where: 'VIA', message: { en: 'After flashing a new build, VIA resets the keyboard memory to this keymap.c (that is why it is generated from the project).', ru: 'После прошивки новой сборки VIA сбрасывает память клавиатуры к этому keymap.c (поэтому он и генерируется из проекта).' } });
 
@@ -755,8 +731,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
         hook: 'process_record_user',
         call: 'if (!process_record_navi(keycode, record)) return false;',
         why: {
-          en: [keysInCode && 'custom keycodes and macros', tapHoldInCode && 'tap-hold keys (call it first: it plays their actions)', layersOnTop && 'layer keys bring their layer to the top: it must see layer key releases'].filter(Boolean).join('; '),
-          ru: [keysInCode && 'свои keycodes и макросы', tapHoldInCode && 'тап-холд клавиши (вызывайте её первой: она играет их действия)', layersOnTop && 'клавиши слоёв поднимают свой слой наверх: она должна видеть отпускание клавиш слоёв'].filter(Boolean).join('; '),
+          en: [keysInCode && 'custom keycodes and macros', tdC.keys && 'tap dances play their keys at the dance key position', tapHoldInCode && 'tap-hold keys (call it first: it plays their actions)', layersOnTop && 'layer keys bring their layer to the top: it must see layer key releases'].filter(Boolean).join('; '),
+          ru: [keysInCode && 'свои keycodes и макросы', tdC.keys && 'tap dance играют свои клавиши на месте клавиши TD', tapHoldInCode && 'тап-холд клавиши (вызывайте её первой: она играет их действия)', layersOnTop && 'клавиши слоёв поднимают свой слой наверх: она должна видеть отпускание клавиш слоёв'].filter(Boolean).join('; '),
         },
       },
       { hook: 'get_tapping_term', call: 'return get_tapping_term_navi(keycode, record);', why: { en: 'TAPPING_TERM_PER_KEY is on — without it the build fails', ru: 'включён TAPPING_TERM_PER_KEY — без неё сборка не пройдёт' } },

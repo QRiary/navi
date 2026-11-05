@@ -13,7 +13,7 @@ import { createDilemmaProject } from './factory';
 import { migrateProject } from './migrate';
 import { activeKeymap, moveLayer, removeLayer, setKeycodes } from './ops';
 import { checkTapHoldActions, ensureTapHold, plainTapHold, pruneTapHoldActions, STAND_IN_BASES, tapHoldSlots } from './tapHoldActions';
-import type { HoldAction, Project } from './types';
+import { PROJECT_SCHEMA_VERSION, type HoldAction, type Project } from './types';
 import { serializeProject, validateProject } from './validate';
 
 const spec = loadSpec('latest');
@@ -36,7 +36,7 @@ describe('tap-hold keys with actions: model', () => {
     const v7 = JSON.parse(serializeProject(createDilemmaProject()));
     v7.schemaVersion = 7;
     delete v7.tapHoldActions;
-    expect(migrateProject(v7)).toMatchObject({ from: 7, data: { schemaVersion: 8, tapHoldActions: [] } });
+    expect(migrateProject(v7)).toMatchObject({ from: 7, data: { schemaVersion: PROJECT_SCHEMA_VERSION, tapHoldActions: [] } });
     const { project, issues } = validateProject(v7);
     expect(issues.filter((i) => i.level === 'error')).toEqual([]);
     expect(project?.tapHoldActions).toEqual([]);
@@ -89,10 +89,12 @@ describe('tap-hold keys with actions: model', () => {
     expect(() => ensureTapHold(spec, p, q('KC_A'), layer(16))).toThrow();
   });
 
-  it('a stand-in in a combo or tap dance is an error; a hand-edited one that does not match its hold too', () => {
+  it('a stand-in in a combo is an error, in a tap dance it is fine; a hand-edited one that does not match its hold is an error', () => {
     const a = put(createDilemmaProject(), [1, 1], q('C(KC_Z)'), mods(0x01));
     const combo = { ...a.p, combos: [{ id: 'c1', name: 'C_ONE', keys: [[1, 1], [1, 2]] as [number, number][], result: a.keycode }] };
     expect(checkTapHoldActions(spec, combo).some((i) => i.level === 'error')).toBe(true);
+    const td = { ...a.p, tapDances: [{ id: 't', index: 0, name: 'TD_A', tap: a.keycode, hold: 0, doubleTap: 0, tapHold: 0 }] };
+    expect(checkTapHoldActions(spec, td).filter((i) => i.level === 'error')).toEqual([]);
     const wrong = { ...a.p, tapHoldActions: [{ ...a.p.tapHoldActions[0], hold: mods(0x02) }] };
     expect(checkTapHoldActions(spec, wrong).some((i) => i.level === 'error')).toBe(true);
     // The generator leaves an invalid action out instead of writing broken C.
@@ -148,7 +150,7 @@ describe('tap-hold keys with actions: generator', () => {
     expect(c).toMatch(/#define NAVI_TH_0 LT\(L_\w+, 0x02\) \/\/ tap: LCTL\(KC_Z\) · hold: layer L_\w+ \+ MOD_LCTL/);
     expect(c).toContain('NAVI_TH_0,');
     expect(c).toContain('if (!navi_tap_holds(keycode, record)) return false;');
-    expect(c).toContain('navi_send(record->tap.count ? KC_A : LCTL(KC_X), record, record->event.pressed);');
+    expect(c).toContain('navi_send(record->tap.count ? KC_A : LCTL(KC_X), record, record->event.pressed, 0);');
     expect(c).toContain('if (record->event.pressed) register_mods(0x01); else unregister_mods(0x01);');
     expect(gen(p).rules.REPEAT_KEY_ENABLE).toBe('yes');
     expect(requiredFeatures(p, activeKeymap(p), spec).get('repeat_key')).toBe('tap-hold keys with actions');

@@ -6,6 +6,9 @@
 import { decode } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
 import type { Combo, KeyOverride, Project, TapDance } from '../project/types';
+import { TAP_DANCE_MAX_STEPS, TAP_DANCE_VARIANTS } from '../project/types';
+import { tapDanceKind } from '../project/tapDances';
+import { validCIdentifier } from '../qmk/customCode';
 import type { Text } from './registry';
 
 export interface AdvancedIssue {
@@ -15,8 +18,8 @@ export interface AdvancedIssue {
 }
 
 /**
- * Which keycodes can be run from a tap dance (the generated code calls register_code16
- * or layer functions). The rest (QK_BOOT, macros, RGB…) is not called from a tap dance.
+ * Which keycodes a leader action can run (the generated code calls tap_code16). The rest (QK_BOOT, macros, RGB…)
+ * is not. Tap dances play any keycode as a key event (checkTapDances).
  */
 export function tapDanceActionSupported(spec: KeycodeSpec, value: number): boolean {
   if (value === 0) return true;
@@ -37,10 +40,17 @@ export function tapDanceActionSupported(spec: KeycodeSpec, value: number): boole
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-export function checkTapDances(spec: KeycodeSpec, tds: TapDance[]): AdvancedIssue[] {
+const NESTED_TD = { en: 'A tap dance can’t be inside another tap dance.', ru: 'Tap dance не может быть внутри другого tap dance.' };
+
+/**
+ * Tap dance checks. Slots and every-tap steps take any keycode (played as a key event), except another TD(…).
+ * reserved: names an own-C function must not take (NAVI's generated symbols, layer / keycode / tap dance names).
+ */
+export function checkTapDances(spec: KeycodeSpec, tds: TapDance[], reserved: ReadonlySet<string> = new Set()): AdvancedIssue[] {
   const out: AdvancedIssue[] = [];
   const names = new Set<string>();
   const indexes = new Set<number>();
+  const isTd = (v: number) => v !== 0 && decode(spec, v).kind === 'tap-dance';
   for (const td of tds) {
     const where = `TD(${td.name})`;
     if (!IDENT.test(td.name)) out.push({ level: 'error', where, message: { en: 'Name must be a C identifier (letters, digits, _).', ru: 'Имя — C-идентификатор (буквы, цифры, _).' } });
@@ -48,17 +58,31 @@ export function checkTapDances(spec: KeycodeSpec, tds: TapDance[]): AdvancedIssu
     if (indexes.has(td.index)) out.push({ level: 'error', where, message: { en: 'Duplicate index.', ru: 'Номер повторяется.' } });
     names.add(td.name);
     indexes.add(td.index);
-    if (!td.tap && !td.hold && !td.doubleTap && !td.tapHold) out.push({ level: 'warning', where, message: { en: 'No actions set.', ru: 'Не задано ни одного действия.' } });
-    for (const [field, v] of [['tap', td.tap], ['hold', td.hold], ['doubleTap', td.doubleTap], ['tapHold', td.tapHold]] as const) {
-      if (!tapDanceActionSupported(spec, v)) {
-        out.push({
-          level: 'error',
-          where: `${where}.${field}`,
-          message: {
-            en: 'Inside tap dance only keys, modifier combos, one-shot mods and MO/TG/TO/DF layers are supported.',
-            ru: 'Внутри tap dance поддерживаются только клавиши, сочетания с модификаторами, one-shot модификаторы и слои MO/TG/TO/DF.',
-          },
-        });
+    const kind = tapDanceKind(td);
+    if (kind === 'slots') {
+      if (!td.tap && !td.hold && !td.doubleTap && !td.tapHold) out.push({ level: 'warning', where, message: { en: 'No actions set.', ru: 'Не задано ни одного действия.' } });
+      for (const [field, v] of [['tap', td.tap], ['hold', td.hold], ['doubleTap', td.doubleTap], ['tapHold', td.tapHold]] as const) {
+        if (isTd(v)) out.push({ level: 'error', where: `${where}.${field}`, message: NESTED_TD });
+      }
+    } else if (kind === 'every-tap') {
+      const steps = td.steps ?? [];
+      if (steps.length < 1 || steps.length > TAP_DANCE_MAX_STEPS) {
+        out.push({ level: 'error', where, message: { en: `An every-tap dance has 1–${TAP_DANCE_MAX_STEPS} steps.`, ru: `У tap dance «каждое нажатие» 1–${TAP_DANCE_MAX_STEPS} шага.` } });
+      }
+      steps.forEach((st, i) => {
+        for (const v of TAP_DANCE_VARIANTS) {
+          if ((st[v] ?? []).some((s) => (s.type === 'tap' || s.type === 'down' || s.type === 'up') && isTd(s.keycode))) out.push({ level: 'error', where: `${where} · step ${i + 1} · ${v}`, message: NESTED_TD });
+        }
+      });
+    } else {
+      const fns = [td.ownC?.onEachTap, td.ownC?.onFinished, td.ownC?.onReset].filter((f): f is string => f !== undefined && f !== '');
+      if (!fns.length) out.push({ level: 'error', where, message: { en: 'Name at least one of your own C functions.', ru: 'Укажите хотя бы одну свою функцию C.' } });
+      for (const f of fns) {
+        if (!validCIdentifier(f)) {
+          out.push({ level: 'error', where: `${where} · ${f}`, message: { en: `“${f}” is not a C identifier (letters, digits, _; not starting with a digit; not a C keyword; up to 64 characters).`, ru: `«${f}» — не идентификатор C (буквы, цифры, _; не с цифры; не ключевое слово C; до 64 символов).` } });
+        } else if (reserved.has(f) || /^navi_/i.test(f) || tds.some((t) => t.name === f)) {
+          out.push({ level: 'error', where: `${where} · ${f}`, message: { en: `“${f}” is already a name NAVI generates (a layer, keycode, tap dance or NAVI function; navi_… names are NAVI's).`, ru: `«${f}» уже занято тем, что создаёт NAVI (слой, keycode, tap dance или функция NAVI; имена navi_… — для NAVI).` } });
+        }
       }
     }
   }

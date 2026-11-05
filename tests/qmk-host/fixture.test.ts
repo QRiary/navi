@@ -10,18 +10,19 @@ import { loadSpec } from '../../src/core/keycodes/spec';
 import { createBlankProject } from '../../src/core/project/factory';
 import { activeKeymap, setKeycodes } from '../../src/core/project/ops';
 import { ensureTapHold, pruneTapHoldActions } from '../../src/core/project/tapHoldActions';
-import type { HoldAction, Project } from '../../src/core/project/types';
+import type { HoldAction, MacroStep, Project, TapDance } from '../../src/core/project/types';
 import { generateKeymap } from '../../src/core/qmk/generate';
 
 const out = process.env.NAVI_QMK_OUT;
 const spec = loadSpec('latest');
 const q = (s: string) => parseQmk(spec, s);
 
-/** Row 0 of layer 0 (the test matrix is 4x10); qmk_host_test.cpp names the same positions. */
+/** Keys of the test matrix (4x10, position n = row n / 10, column n % 10); qmk_host_test.cpp names the same positions. */
 export function hostProject(): Project {
   let p = createBlankProject('qmk host test', 4, 10, false);
   const id = activeKeymap(p).id;
-  const put = (layer: number, col: number, v: number) => (p = setKeycodes(p, id, layer, [[0, col]], v));
+  // Position n = row n / 10, column n % 10.
+  const put = (layer: number, n: number, v: number) => (p = setKeycodes(p, id, layer, [[Math.floor(n / 10), n % 10]], v));
   const putTh = (col: number, tap: string, hold: HoldAction) => {
     const r = ensureTapHold(spec, p, q(tap), hold);
     p = r.project;
@@ -31,7 +32,7 @@ export function hostProject(): Project {
   put(0, 0, q('LT(1, KC_SPC)'));
   put(0, 1, q('LSFT_T(KC_P)'));
   put(0, 2, q('KC_C'));
-  putTh(3, 'C(KC_Z)', { type: 'layer', layer: 2, mods: 0x01 });
+  const ctrlLayerStandIn = putTh(3, 'C(KC_Z)', { type: 'layer', layer: 2, mods: 0x01 });
   const altStandIn = putTh(4, 'S(KC_1)', { type: 'mods', mods: 0x04 });
   putTh(5, 'KC_A', { type: 'key', keycode: q('C(KC_X)') });
   put(0, 6, q('LCTL_T(KC_D)'));
@@ -43,8 +44,48 @@ export function hostProject(): Project {
   put(0, 8, r8.keycode);
   put(2, 2, q('KC_V'));
   p = pruneTapHoldActions(p);
+  // Tap dances on rows 1 and 2 (positions 10…23, qmk_host_test.cpp names them).
+  const td = (index: number, col: number, d: Partial<TapDance>): TapDance => {
+    put(0, col, q(`TD(${index})`));
+    return { id: `td-${index}`, index, name: `TD_H${index}`, tap: 0, hold: 0, doubleTap: 0, tapHold: 0, ...d };
+  };
+  const text = (s: string): MacroStep[] => [{ type: 'text', text: s }];
+  const hostKey = q('QK_USER_0');
+  const tapDances = [
+    td(0, 10, { tap: q('C(KC_C)') }),
+    td(1, 11, { tap: q('KC_Q'), hold: q('LM(1, MOD_LSFT)') }),
+    td(2, 12, { tap: q('KC_SPC'), hold: q('KC_LSFT') }),
+    td(3, 14, { tap: q('KC_T'), doubleTap: q('TG(1)') }),
+    td(4, 15, { tap: q('LT(1, KC_X)') }),
+    td(5, 16, { kind: 'every-tap', steps: [{ none: text('!'), shift: text('->') }, { none: text('=') }] }),
+    td(6, 17, { kind: 'every-tap', steps: [{ none: text('a') }] }),
+    td(7, 18, { kind: 'every-tap', steps: [{ none: text('a'), shift: [] }] }),
+    td(8, 19, { kind: 'every-tap', steps: [{ none: [{ type: 'tap', keycode: hostKey }] }] }),
+    td(9, 20, { kind: 'own-c', ownC: { onEachTap: 'host_each' } }),
+    td(10, 22, { kind: 'every-tap', steps: [{ none: [{ type: 'tap', keycode: q('KC_A') }] }, { none: [{ type: 'tap', keycode: q('KC_B') }] }] }),
+    td(11, 23, { tap: ctrlLayerStandIn, hold: altStandIn }),
+  ];
+  put(0, 13, q('KC_N'));
+  put(1, 13, q('KC_A'));
+  put(1, 14, q('KC_B'));
+  put(0, 21, q('KC_LSFT'));
   return {
     ...p,
+    tapDances,
+    customKeycodes: [{ id: 'ck-host', name: 'HOST_KEY', description: 'handled by the own lines', action: { type: 'none' } }],
+    firmware: {
+      ...p.firmware,
+      custom: {
+        'keymap.c': [
+          'void post_process_record_user(uint16_t keycode, keyrecord_t *record) {',
+          '    if (keycode == HOST_KEY && record->event.pressed) tap_code(KC_Z);',
+          '}',
+          'void host_each(tap_dance_state_t *state, void *user_data) {',
+          '    if (state->count == 2) tap_code(KC_X);',
+          '}',
+        ].join('\n'),
+      },
+    },
     tapHolds: [
       { id: 'th-p', keycode: q('LSFT_T(KC_P)'), flavor: 'hold-preferred' },
       { id: 'th-alt', keycode: altStandIn, flavor: 'hold-preferred' },

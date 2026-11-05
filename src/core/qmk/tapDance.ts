@@ -1,0 +1,303 @@
+/**
+ * Tap dances → C for keymap.c (model: core/project/tapDances.ts, checks: features/advanced.ts checkTapDances).
+ *
+ * - slots: tap / hold / double tap / tap-then-hold, any keycode, played as a key event at the dance key's position
+ *   (navi_send). Holds are pressed in on_dance_finished and released in on_reset; taps run in on_reset, i.e. on the
+ *   dance key's release: a layer change made while QMK handles a press makes QMK look that key up again on the new
+ *   layer (process_record_quantum after preprocess_tap_dance, process_record_handler's store_or_get_action).
+ *   A dance with no double tap and no tap-then-hold taps on release (on_each_release sets state->finished).
+ * - every-tap: on_each_tap plays steps[(count - 1) % n] at once, by Shift / Ctrl held at that tap.
+ * - own-c: the user's functions, ACTION_TAP_DANCE_FN_ADVANCED.
+ */
+import type { MacroStep, TapDance, TapDanceStep } from '../project/types';
+import { tapDanceKind, tapDanceSends, tapOnlyDance } from '../project/tapDances';
+
+export interface TapDanceC {
+  /** Lines before tap_dance_actions[] (navi_send must come before them). */
+  lines: string[];
+  /** tap_dance_actions[] itself. */
+  actions: string[];
+  /** Own-C prototypes (navi.h in own pipeline mode, else right before tap_dance_actions[]). */
+  prototypes: string[];
+  /** process_record_user must record where each dance key is (navi_td_keys). */
+  keys: boolean;
+  /** The C uses navi_send. */
+  sends: boolean;
+  /** Generated names (own lines must not define them). */
+  symbols: string[];
+}
+
+const VARIANT_COND = {
+  ctrlShift: '(mods & MOD_MASK_SHIFT) && (mods & MOD_MASK_CTRL)',
+  shift: '(mods & MOD_MASK_SHIFT) && !(mods & MOD_MASK_CTRL)',
+  ctrl: '!(mods & MOD_MASK_SHIFT) && (mods & MOD_MASK_CTRL)',
+} as const;
+
+const steps = (st: TapDanceStep) => [st.none, st.shift, st.ctrl, st.ctrlShift].filter((v): v is MacroStep[] => v !== undefined);
+const hasKeySteps = (list: MacroStep[], types: MacroStep['type'][]) => list.some((s) => types.includes(s.type));
+
+export function tapDanceCode(tds: TapDance[], kc: (v: number) => string, cString: (s: string) => string): TapDanceC {
+  const out: TapDanceC = { lines: [], actions: [], prototypes: [], keys: false, sends: false, symbols: [] };
+  if (!tds.length) return out;
+  const slots = tds.filter((t) => tapDanceKind(t) === 'slots');
+  const everyTap = tds.filter((t) => tapDanceKind(t) === 'every-tap');
+  const ownC = tds.filter((t) => tapDanceKind(t) === 'own-c');
+  const everySteps = everyTap.flatMap((t) => (t.steps ?? []).flatMap(steps));
+  const tapOnly = slots.filter(tapOnlyDance);
+  out.sends = tds.some(tapDanceSends);
+  out.keys = out.sends;
+  const needTap = slots.length > 0 || everySteps.some((l) => hasKeySteps(l, ['tap']));
+  const needSend = slots.length > 0 || everySteps.some((l) => hasKeySteps(l, ['tap', 'down', 'up']));
+  const everyStep = everyTap.flatMap((t) => t.steps ?? []);
+  const modsUsed = everyStep.some((st) => st.shift !== undefined || st.ctrl !== undefined || st.ctrlShift !== undefined);
+  const variants = everyStep.some((st) => st.shift?.length || st.ctrl?.length || st.ctrlShift?.length);
+  const c = out.lines;
+  const sym = (...names: string[]) => out.symbols.push(...names);
+  const maxIndex = Math.max(...tds.map((t) => t.index));
+
+  c.push('// ── Tap dance ─────────────────────────────────────────────────────────');
+  if (needSend) {
+    sym('navi_td_keys', 'navi_td_send');
+    c.push(
+      '// Slots and steps are played as key events at the dance key\'s position (navi_send), like keys of the keymap.',
+      `static keypos_t navi_td_keys[${maxIndex + 1}]; // where each tap dance key was pressed last (process_record_user)`,
+      '',
+      'static void navi_td_send(uint8_t index, uint16_t keycode, bool pressed, uint8_t taps) {',
+      '    keyrecord_t record = {.event = MAKE_KEYEVENT(navi_td_keys[index].row, navi_td_keys[index].col, pressed)};',
+      '    navi_send(keycode, &record, pressed, taps);',
+      '}',
+      '',
+    );
+  }
+  if (needTap) {
+    sym('navi_td_tap');
+    c.push(
+      '// A tap: press and release (as a tap: MT / LT / OSM do their tap side).',
+      'static void navi_td_tap(uint8_t index, uint16_t keycode) {',
+      '    if (keycode == KC_NO) return;',
+      '    navi_td_send(index, keycode, true, 1);',
+      // like tap_code16; wait_ms() is a macro: a ?: of constants inside it is -Werror=int-in-bool-context
+      '    if (keycode == KC_CAPS_LOCK) {',
+      '        wait_ms(TAP_HOLD_CAPS_DELAY);',
+      '    } else {',
+      '        wait_ms(TAP_CODE_DELAY);',
+      '    }',
+      '    navi_td_send(index, keycode, false, 1);',
+      '}',
+      '',
+    );
+  }
+
+  if (slots.length) {
+    sym('navi_td_t', 'navi_td_finished', 'navi_td_reset', 'navi_td_data');
+    c.push(
+      'typedef struct {',
+      '    uint16_t tap, hold, double_tap, tap_hold;',
+      '    uint16_t held;        // the slot held down, released on reset',
+      '    uint8_t  held_taps;   // 1: held as a tap (the tap slot standing in for an unset hold)',
+      '    uint16_t later;       // a tap played on reset, i.e. on the key\'s release',
+      '    uint8_t  later_count; // how many times',
+      '} navi_td_t;',
+      '',
+      '// Holds press now; taps wait for navi_td_reset (the key\'s release): a layer change while QMK handles a key press',
+      '// makes QMK look that key up again on the new layer.',
+      'static void navi_td_finished(tap_dance_state_t *state, void *user_data) {',
+      '    navi_td_t *td   = (navi_td_t *)user_data;',
+      '    td->held        = KC_NO;',
+      '    td->held_taps   = 0;',
+      '    td->later       = KC_NO;',
+      '    td->later_count = 0;',
+      '    if (state->count == 1) {',
+      '        if (state->interrupted || !state->pressed) {',
+      '            td->later       = td->tap;',
+      '            td->later_count = 1;',
+      '        } else if (td->hold) {',
+      '            td->held = td->hold;',
+      '        } else {',
+      '            td->held      = td->tap;',
+      '            td->held_taps = 1;',
+      '        }',
+      '    } else if (state->count == 2) {',
+      '        if (state->pressed) {',
+      '            td->held      = td->tap_hold ? td->tap_hold : td->hold ? td->hold : td->tap;',
+      '            td->held_taps = !td->tap_hold && !td->hold;',
+      '        } else if (td->double_tap) {',
+      '            td->later       = td->double_tap;',
+      '            td->later_count = 1;',
+      '        } else {',
+      '            td->later       = td->tap;',
+      '            td->later_count = 2;',
+      '        }',
+      '    }',
+      '    if (td->held) navi_td_send(state->index, td->held, true, td->held_taps);',
+      '}',
+      '',
+      '// Taken out first: a key played here may reach QMK\'s tap dance code again (it ends the active dance on a press).',
+      'static void navi_td_reset(tap_dance_state_t *state, void *user_data) {',
+      '    navi_td_t *td        = (navi_td_t *)user_data;',
+      '    uint8_t    index     = state->index;',
+      '    uint16_t   later     = td->later;',
+      '    uint8_t    count     = td->later_count;',
+      '    uint16_t   held      = td->held;',
+      '    uint8_t    held_taps = td->held_taps;',
+      '    td->later_count      = 0;',
+      '    td->held             = KC_NO;',
+      '    for (; count; count--) navi_td_tap(index, later);',
+      '    if (held) navi_td_send(index, held, false, held_taps);',
+      '}',
+      '',
+    );
+    if (tapOnly.length) {
+      sym('navi_td_each_release');
+      c.push(
+        '// No double tap and no tap-then-hold: a release before the tapping term is a tap, and the dance ends there',
+        '// (the next press starts a new one). reset_tap_dance clears QMK\'s active dance first, then calls navi_td_reset,',
+        '// so the tap played there isn\'t taken for another key interrupting this dance.',
+        'static void navi_td_each_release(tap_dance_state_t *state, void *user_data) {',
+        '    if (state->finished) return;',
+        '    navi_td_t *td   = (navi_td_t *)user_data;',
+        '    td->held        = KC_NO;',
+        '    td->later       = td->tap;',
+        '    td->later_count = 1;',
+        '    reset_tap_dance(state);',
+        '}',
+        '',
+      );
+    }
+    c.push(`static navi_td_t navi_td_data[${maxIndex + 1}] = {`);
+    slots.forEach((t) => c.push(`    [${t.name}] = { ${kc(t.tap)}, ${kc(t.hold)}, ${kc(t.doubleTap)}, ${kc(t.tapHold)} },`));
+    c.push('};', '');
+  }
+
+  if (everyTap.length) {
+    if (modsUsed) {
+      sym('navi_td_mods');
+      c.push(
+        '// The modifiers held at a tap: real, weak and one-shot.',
+        'static uint8_t navi_td_mods(void) {',
+        '    uint8_t mods = get_mods() | get_weak_mods();',
+        '#ifndef NO_ACTION_ONESHOT',
+        '    mods |= get_oneshot_mods();',
+        '#endif',
+        '    return mods;',
+        '}',
+        '',
+      );
+    }
+    if (variants) {
+      sym('navi_td_cs_t', 'navi_td_cs_off', 'navi_td_cs_on');
+      c.push(
+        '// A step chosen by Shift / Ctrl plays without them (real, weak and one-shot); navi_td_cs_on puts them back.',
+        'typedef struct {',
+        '    uint8_t mods, weak, oneshot;',
+        '} navi_td_cs_t;',
+        '',
+        'static navi_td_cs_t navi_td_cs_off(void) {',
+        '    navi_td_cs_t cs = {get_mods() & MOD_MASK_CS, get_weak_mods() & MOD_MASK_CS, 0};',
+        '    del_mods(cs.mods);',
+        '    del_weak_mods(cs.weak);',
+        '#ifndef NO_ACTION_ONESHOT',
+        '    cs.oneshot = get_oneshot_mods() & MOD_MASK_CS;',
+        '    del_oneshot_mods(cs.oneshot);',
+        '#endif',
+        '    return cs;',
+        '}',
+        '',
+        'static void navi_td_cs_on(navi_td_cs_t cs) {',
+        '    add_mods(cs.mods);',
+        '    add_weak_mods(cs.weak);',
+        '#ifndef NO_ACTION_ONESHOT',
+        '    add_oneshot_mods(cs.oneshot);',
+        '#endif',
+        '    send_keyboard_report();',
+        '}',
+        '',
+      );
+    }
+    sym('navi_td_every_tap');
+    const play = (list: MacroStep[], indent: string) =>
+      list.map((s) => {
+        switch (s.type) {
+          case 'text':
+            return `${indent}send_string(${cString(s.text)});`;
+          case 'delay':
+            return `${indent}wait_ms(${s.ms});`;
+          case 'tap':
+            return `${indent}navi_td_tap(state->index, ${kc(s.keycode)});`;
+          case 'down':
+            return `${indent}navi_td_send(state->index, ${kc(s.keycode)}, true, 0);`;
+          case 'up':
+            return `${indent}navi_td_send(state->index, ${kc(s.keycode)}, false, 0);`;
+        }
+      });
+    c.push(
+      '// Every tap plays the next step at once (tap n: step (n - 1) % steps), by Shift / Ctrl held at that tap.',
+      'static void navi_td_every_tap(tap_dance_state_t *state, void *user_data) {',
+    );
+    if (modsUsed) c.push('    uint8_t mods = navi_td_mods();');
+    c.push(
+      '    // QMK would put the mods of this tap back as weak mods when the dance ends: nothing is left to play then.',
+      '    state->weak_mods = 0;',
+      '#ifndef NO_ACTION_ONESHOT',
+      '    state->oneshot_mods = 0;',
+      '#endif',
+      '    switch (state->index) {',
+    );
+    for (const t of everyTap) {
+      const list = (t.steps ?? []).slice(0, 4);
+      c.push(`        case ${t.name}:`);
+      if (list.length) {
+        c.push(`            switch ((state->count - 1) % ${list.length}) {`);
+        list.forEach((st, i) => {
+          c.push(`                case ${i}:`);
+          for (const v of ['ctrlShift', 'shift', 'ctrl'] as const) {
+            const variant = st[v];
+            if (variant === undefined) continue;
+            if (!variant.length) {
+              c.push(`                    if (${VARIANT_COND[v]}) break; // ${v}: nothing`);
+              continue;
+            }
+            c.push(`                    if (${VARIANT_COND[v]}) {`, '                        navi_td_cs_t cs = navi_td_cs_off();');
+            c.push(...play(variant, '                        '));
+            c.push('                        navi_td_cs_on(cs);', '                        break;', '                    }');
+          }
+          c.push(...play(st.none ?? [], '                    '));
+          c.push('                    break;');
+        });
+        c.push('            }');
+      }
+      c.push('            break;');
+    }
+    c.push('    }');
+    if (everySteps.some((l) => hasKeySteps(l, ['tap', 'down', 'up']))) {
+      c.push(
+        '    // A key pressed above reached QMK\'s tap dance code, which ends the active dance on any other key\'s press, as if',
+        '    // interrupted (preprocess_tap_dance; the mods it would add back are 0 above). This dance goes on.',
+        '    state->finished    = false;',
+        '    state->interrupted = false;',
+      );
+    }
+    c.push('}', '');
+  }
+
+  const fnNames = new Set<string>();
+  for (const t of ownC) for (const f of [t.ownC?.onEachTap, t.ownC?.onFinished, t.ownC?.onReset]) if (f) fnNames.add(f);
+  out.prototypes = [...fnNames].map((f) => `void ${f}(tap_dance_state_t *state, void *user_data);`);
+
+  const a = out.actions;
+  a.push('tap_dance_action_t tap_dance_actions[] = {');
+  for (const t of tds) {
+    const kind = tapDanceKind(t);
+    if (kind === 'slots') {
+      const release = tapOnlyDance(t) ? '.on_each_release = navi_td_each_release, ' : '';
+      a.push(`    [${t.name}] = { .fn = { ${release}.on_dance_finished = navi_td_finished, .on_reset = navi_td_reset }, .user_data = (void *)&navi_td_data[${t.name}] },`);
+    } else if (kind === 'every-tap') {
+      a.push(`    [${t.name}] = { .fn = { .on_each_tap = navi_td_every_tap } },`);
+    } else {
+      const f = (n?: string) => n || 'NULL';
+      a.push(`    [${t.name}] = ACTION_TAP_DANCE_FN_ADVANCED(${f(t.ownC?.onEachTap)}, ${f(t.ownC?.onFinished)}, ${f(t.ownC?.onReset)}),`);
+    }
+  }
+  a.push('};', '');
+  return out;
+}

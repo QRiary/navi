@@ -3,6 +3,12 @@
 //   0 LT(1, KC_SPC)   1 LSFT_T(KC_P) hold-preferred   2 KC_C (layer 2: KC_V)
 //   3 tap C(KC_Z) / hold layer 2 + Ctrl   4 tap S(KC_1) / hold Alt, hold-preferred   5 tap KC_A / hold C(KC_X)
 //   6 LCTL_T(KC_D) holds when KC_C is pressed   7 KC_E   8 tap C(KC_C) / hold Ctrl, a stand-in on KC_ALTERNATE_ERASE
+// Tap dances on rows 1 and 2 (position n = row n / 10, column n % 10):
+//   10 tap C(KC_C)   11 tap KC_Q / hold LM(1, MOD_LSFT)   12 tap KC_SPC / hold KC_LSFT   13 KC_N (layer 1: KC_A)
+//   14 tap KC_T / double tap TG(1) (layer 1: KC_B)   15 tap LT(1, KC_X)
+//   16 every tap: "!" (Shift: "->"), "="   17 every tap: "a"   18 every tap: "a" (Shift: nothing)
+//   19 every tap: HOST_KEY (the own lines tap KC_Z)   20 own C: host_each taps KC_X on the second tap   21 KC_LSFT
+//   22 every tap: tap KC_A, tap KC_B   23 tap: the stand-in at 3 / hold: the stand-in at 4
 #include <string>
 #include <vector>
 
@@ -47,7 +53,8 @@ class NaviHost : public TestFixture {
    public:
     NaviHost() {
         for (uint8_t layer = 0; layer < keymap_layer_count_raw(); layer++)
-            for (uint8_t col = 0; col < MATRIX_COLS; col++) add_key(KeymapKey(layer, col, 0, keycode_at_keymap_location_raw(layer, 0, col)));
+            for (uint8_t row = 0; row < MATRIX_ROWS; row++)
+                for (uint8_t col = 0; col < MATRIX_COLS; col++) add_key(KeymapKey(layer, col, row, keycode_at_keymap_location_raw(layer, row, col)));
         ON_CALL(driver, send_keyboard_mock(_)).WillByDefault(Invoke([this](report_keyboard_t &r) {
             std::string t = report_text(r);
             if (reports.empty() || reports.back() != t) reports.push_back(t);
@@ -55,21 +62,22 @@ class NaviHost : public TestFixture {
     }
 
    protected:
-    // Presses (+col) and releases (-col) one scan apart; "wait" waits out the tapping term.
-    std::string play(const std::vector<std::string> &steps) {
+    // Presses (+n) and releases (-n) one scan apart, n = row * 10 + col; "wait" waits out the tapping term.
+    // settle: wait out the tapping term at the end too (false: the reports as they are right after the last step).
+    std::string play(const std::vector<std::string> &steps, bool settle = true) {
         for (auto &s : steps) {
             if (s == "wait") {
                 idle_for(TAPPING_TERM + 1);
                 continue;
             }
-            KeymapKey key(0, (uint8_t)std::stoi(s.substr(1)), 0, KC_NO);
+            int n = std::stoi(s.substr(1));
             if (s[0] == '+')
-                press_key(key.position.col, key.position.row);
+                press_key(n % 10, n / 10);
             else
-                release_key(key.position.col, key.position.row);
+                release_key(n % 10, n / 10);
             run_one_scan_loop();
         }
-        idle_for(TAPPING_TERM + 1);
+        if (settle) idle_for(TAPPING_TERM + 1);
         std::string joined;
         for (auto &r : reports) joined += (joined.empty() ? "" : " ") + r;
         return joined;
@@ -135,4 +143,86 @@ TEST_F(NaviHost, stand_in_on_a_real_key_taps_its_tap) {
 
 TEST_F(NaviHost, stand_in_on_a_real_key_holds_ctrl) {
     EXPECT_EQ(play({"+8", "wait", "+7", "-7", "-8"}), "LCTL LCTL+E LCTL -");
+}
+
+// ── Tap dances ──
+
+// H1: a modded key in a slot
+TEST_F(NaviHost, tap_dance_tap_slot_sends_ctrl_c) {
+    EXPECT_EQ(play({"+10", "-10"}), "LCTL LCTL+C LCTL -");
+}
+
+// H2: a layer + mods key in the hold slot
+TEST_F(NaviHost, tap_dance_hold_slot_holds_layer_1_with_shift) {
+    EXPECT_EQ(play({"+11", "wait", "+13", "-13", "-11"}), "LSFT LSFT+A LSFT -");
+}
+
+// H3: no double tap and no tap-hold: the tap fires on release, before the tapping term ends
+TEST_F(NaviHost, tap_only_dance_taps_on_release) {
+    EXPECT_EQ(play({"+12", "-12"}, false), "0x2C -");
+    EXPECT_EQ(play({"+12", "-12"}, false), "0x2C - 0x2C -"); // a new dance, not a double tap
+    EXPECT_EQ(play({}), "0x2C - 0x2C -");
+}
+
+TEST_F(NaviHost, tap_only_dance_holds_after_the_term) {
+    EXPECT_EQ(play({"+12", "wait", "+13", "-13", "-12"}), "LSFT LSFT+N LSFT -");
+}
+
+// H4: a layer toggle on double tap doesn't press the key at the dance's spot on the new layer
+TEST_F(NaviHost, tap_dance_double_tap_toggles_layer_1_without_its_key) {
+    EXPECT_EQ(play({"+14", "-14", "+14", "-14", "wait"}), "");
+    EXPECT_EQ(play({"+13", "-13"}), "A -");
+}
+
+// H5: a layer-tap in the tap slot taps its key
+TEST_F(NaviHost, tap_dance_layer_tap_in_tap_slot_taps_x) {
+    EXPECT_EQ(play({"+15", "-15"}), "X -");
+}
+
+// H6: every tap plays the next step at once, adding to what the earlier taps typed, then starts again
+TEST_F(NaviHost, every_tap_dance_cycles_its_steps) {
+    EXPECT_EQ(play({"+16", "-16"}, false), "LSFT LSFT+1 LSFT -");
+    EXPECT_EQ(play({"+16", "-16", "+16", "-16"}), "LSFT LSFT+1 LSFT - 0x2E - LSFT LSFT+1 LSFT -");
+}
+
+TEST_F(NaviHost, every_tap_dance_shift_variant_plays_without_shift) {
+    EXPECT_EQ(play({"+21", "+16", "-16", "-21"}), "LSFT 0x2D - LSFT LSFT+0x37 LSFT - LSFT -");
+}
+
+// H7: a variant not set falls back to no mods with the mods kept; one set empty types nothing
+TEST_F(NaviHost, every_tap_dance_unset_shift_variant_keeps_shift) {
+    EXPECT_EQ(play({"+21", "+17", "-17", "-21"}), "LSFT LSFT+A LSFT -");
+}
+
+TEST_F(NaviHost, every_tap_dance_empty_shift_variant_types_nothing) {
+    EXPECT_EQ(play({"+21", "+18", "-18", "-21"}), "LSFT -");
+}
+
+// H8: a custom keycode played by a step reaches the own lines
+TEST_F(NaviHost, every_tap_dance_custom_keycode_runs_own_code) {
+    EXPECT_EQ(play({"+19", "-19"}), "Z -");
+}
+
+// H9: an own-C dance calls the user's function
+TEST_F(NaviHost, own_c_dance_calls_own_function) {
+    EXPECT_EQ(play({"+20", "-20", "+20", "-20"}), "X -");
+}
+
+// Keys an every-tap step plays don't end the dance (QMK takes any other key's press for an interruption)
+TEST_F(NaviHost, every_tap_dance_with_key_steps_keeps_cycling) {
+    EXPECT_EQ(play({"+22", "-22", "+22", "-22", "+22", "-22"}), "A - B - A -");
+}
+
+// Interrupted by another key = a tap, played on the dance key's release
+TEST_F(NaviHost, tap_only_dance_interrupted_taps_on_release) {
+    EXPECT_EQ(play({"+12", "+13", "-13", "-12"}), "N - 0x2C -");
+}
+
+// Stand-ins of tap-hold keys with actions in the slots: their tap and hold sides
+TEST_F(NaviHost, tap_dance_stand_in_in_tap_slot_taps_its_tap) {
+    EXPECT_EQ(play({"+23", "-23"}), "LCTL LCTL+Z LCTL -");
+}
+
+TEST_F(NaviHost, tap_dance_stand_in_in_hold_slot_holds_its_hold) {
+    EXPECT_EQ(play({"+23", "wait", "+7", "-7", "-23"}), "LALT LALT+E LALT -");
 }

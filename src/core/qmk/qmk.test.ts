@@ -60,7 +60,7 @@ describe('keymap.c generator', () => {
     const res = generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: true, encoderCount: 2 });
     const c = res.files.find((f) => f.name === 'keymap.c')!.text;
     expect(c).toContain('TD_ESC = 0');
-    expect(c).toContain('[TD_ESC] = { KC_ESC, MO(L_LOWER), KC_CAPS, KC_NO, KC_NO }');
+    expect(c).toContain('[TD_ESC] = { KC_ESC, MO(L_LOWER), KC_CAPS, KC_NO },');
     expect(c).toContain('.fn = { .on_dance_finished = navi_td_finished, .on_reset = navi_td_reset }');
     expect(c).toContain('case TD(TD_ESC): return 250;');
     expect(c).toContain('const uint16_t PROGMEM esc_one_keys[] = { KC_ESC, KC_1, COMBO_END };');

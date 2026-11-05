@@ -33,6 +33,8 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
   6: (d) => ({ ...d, schemaVersion: 7, tapHolds: Array.isArray(d.tapHolds) ? d.tapHolds : [] }),
   // 7 → 8: tap-hold keys with any action in each slot (tapHoldActions).
   7: (d) => ({ ...d, schemaVersion: 8, tapHoldActions: Array.isArray(d.tapHoldActions) ? d.tapHoldActions : [] }),
+  // 8 → 9: tap dance kinds (TapDance.kind, steps, ownC); all optional, undefined kind = the old slots.
+  8: (d) => ({ ...d, schemaVersion: 9 }),
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {

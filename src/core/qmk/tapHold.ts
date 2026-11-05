@@ -122,35 +122,50 @@ export function standInCheckCode(names: string[]): string[] {
  * stand-in MT / LT as usual; the tap (and a key hold) is played as its own record (navi_send), the stand-in base key
  * is never sent. Needs record->keycode to be honored: REPEAT_KEY_ENABLE (rules.mk).
  */
+/**
+ * navi_send(): plays a keycode on the key position of a record as a key event of its own, like a key of the keymap
+ * (stand-in slots, tap dances). taps > 0: as a tap (MT / LT / OSM do their tap side). Needs record->keycode
+ * (REPEAT_KEY_ENABLE). flag: navi_sending, read by navi_tap_holds (the replay fix leaves played keys alone).
+ * guard: only under #ifndef NO_ACTION_TAPPING (when only tap-hold keys use it).
+ */
+export function naviSendCode(o: { flag: boolean; guard: boolean }): string[] {
+  const out: string[] = [];
+  if (o.guard) out.push('#ifndef NO_ACTION_TAPPING');
+  if (o.flag) out.push('static bool navi_sending = false; // navi_send is playing a key', '');
+  out.push(
+    '// Plays a keycode on the key position of the record, like a key of the keymap (taps > 0: as a tap).',
+    'static void navi_send(uint16_t keycode, keyrecord_t *record, bool pressed, uint8_t taps) {',
+    '    if (keycode == KC_NO) return;',
+    '    keyrecord_t r   = *record;',
+    '    r.keycode       = keycode;',
+    '    r.event.pressed = pressed;',
+    '#ifndef NO_ACTION_TAPPING',
+    '    r.tap.count       = taps;',
+    '    r.tap.interrupted = false;',
+    '#else',
+    '    (void)taps;',
+    '#endif',
+  );
+  if (o.flag) out.push('    bool was     = navi_sending;', '    navi_sending = true;', '    process_record(&r);', '    navi_sending = was;');
+  else out.push('    process_record(&r);');
+  out.push('}');
+  if (o.guard) out.push('#endif');
+  out.push('');
+  return out;
+}
+
 export function tapHoldsCode(o: {
   standIns: StandIn[];
   tracked: TapHoldPlan['holdPress'];
   interrupters: boolean;
   layerOff: string;
+  /** navi_sending exists (navi_send is emitted with its flag). */
+  sending: boolean;
 }): string[] {
   const out: string[] = [];
   const replay = o.tracked.length > 0;
   out.push('#ifndef NO_ACTION_TAPPING');
-  if (o.standIns.length) {
-    out.push(
-      '// ── Tap-hold keys with actions: NAVI_TH_n are stand-in MT / LT keycodes, QMK decides tap or hold on them ──',
-      'static bool navi_sending = false;',
-      '',
-      '// Plays a keycode on the key position of the record, like a key of the keymap.',
-      'static void navi_send(uint16_t keycode, keyrecord_t *record, bool pressed) {',
-      '    if (keycode == KC_NO) return;',
-      '    keyrecord_t r     = *record;',
-      '    r.keycode         = keycode;',
-      '    r.event.pressed   = pressed;',
-      '    r.tap.count       = 0;',
-      '    r.tap.interrupted = false;',
-      '    navi_sending      = true;',
-      '    process_record(&r);',
-      '    navi_sending = false;',
-      '}',
-      '',
-    );
-  }
+  if (o.standIns.length) out.push('// ── Tap-hold keys with actions: NAVI_TH_n are stand-in MT / LT keycodes, QMK decides tap or hold on them ──', '');
   if (replay) {
     out.push('static matrix_row_t navi_held_tap[MATRIX_ROWS]; // a tap NAVI turned into a hold, until its release', '');
     const needGlobal = o.tracked.some((h) => h.flavor === undefined && h.holdKeys.length > 0);
@@ -179,7 +194,7 @@ export function tapHoldsCode(o: {
     if (special.length) {
       out.push('    switch (keycode) {');
       for (const s of special) {
-        if (s.hold.type === 'key') out.push(`        case ${s.name}: navi_send(${s.hold.key}, record, pressed); return;`);
+        if (s.hold.type === 'key') out.push(`        case ${s.name}: navi_send(${s.hold.key}, record, pressed, 0); return;`);
         else if (s.hold.type === 'layer') out.push(`        case ${s.name}: if (pressed) register_mods(${s.hold.mask}); else unregister_mods(${s.hold.mask}); break;`);
       }
       out.push('    }');
@@ -198,12 +213,11 @@ export function tapHoldsCode(o: {
     );
   }
   out.push('static bool navi_tap_holds(uint16_t keycode, keyrecord_t *record) {');
-  if (o.standIns.length) out.push('    if (navi_sending) return true; // a slot NAVI plays');
   if (replay) {
     out.push(
       '    uint8_t row = record->event.key.row;',
       '    uint8_t col = record->event.key.col;',
-      '    if (IS_KEYEVENT(record->event) && row < MATRIX_ROWS && col < MATRIX_COLS) {',
+      `    if (${o.sending ? '!navi_sending && ' : ''}IS_KEYEVENT(record->event) && row < MATRIX_ROWS && col < MATRIX_COLS) {`, // keys NAVI plays aren't real presses
       '        matrix_row_t bit = (matrix_row_t)1 << col;',
       '        if (record->event.pressed && record->tap.count == 1 && navi_forces_hold(keycode, row, col)) {',
       '            navi_held_tap[row] |= bit; // replay trap: QMK made it a tap',
@@ -222,10 +236,10 @@ export function tapHoldsCode(o: {
     out.push('    switch (keycode) {');
     for (const s of o.standIns) {
       if (s.hold.type === 'key') {
-        out.push(`        case ${s.name}: // tap ${s.tap}, hold ${s.hold.key}`, `            navi_send(record->tap.count ? ${s.tap} : ${s.hold.key}, record, record->event.pressed);`, '            return false;');
+        out.push(`        case ${s.name}: // tap ${s.tap}, hold ${s.hold.key}`, `            navi_send(record->tap.count ? ${s.tap} : ${s.hold.key}, record, record->event.pressed, 0);`, '            return false;');
         continue;
       }
-      out.push(`        case ${s.name}: // tap ${s.tap}`, '            if (record->tap.count) {', `                navi_send(${s.tap}, record, record->event.pressed);`, '                return false;', '            }');
+      out.push(`        case ${s.name}: // tap ${s.tap}`, '            if (record->tap.count) {', `                navi_send(${s.tap}, record, record->event.pressed, 0);`, '                return false;', '            }');
       if (s.hold.type === 'layer' && s.hold.mask) out.push(`            if (record->event.pressed) register_mods(${s.hold.mask}); else unregister_mods(${s.hold.mask});`);
       out.push('            return true; // QMK holds the modifiers / the layer');
     }
