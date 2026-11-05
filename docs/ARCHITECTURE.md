@@ -52,6 +52,10 @@ build/           app icon (icon.svg is the source)
 | Own QMK target (board pins → `keyboard.json`/`config.h`) | `src/core/qmk/keyboardDef.ts`, `components/firmware/OwnTarget.tsx`, `components/hardware/PinsTab.tsx` |
 | Reading QMK sources, build log, file diff | `src/core/qmk/sources.ts`, `buildLog.ts`, `textDiff.ts` |
 | Main process: window, `app://`, WebHID permissions, IPC | `electron/main.cjs`, bridge `electron/preload.cjs` ⇄ `src/desktop/bridge.ts` |
+| Closing with unsaved changes: the main process holds `close`, the interface asks (Save / Don't save / Cancel), a native box only if the page doesn't answer in 5 s; the renderer reports language + unsaved state | `electron/closeGuard.cjs` ⇄ `src/components/project/CloseDialog.tsx` |
+| Right-click menu (Cut / Copy / Paste / Select all for text fields and selected text, in the UI language) | `electron/contextMenu.cjs` |
+| Dialog box (Esc, focus trap and return, rest of the app `inert`, global shortcuts paused) | `src/components/Modal.tsx` |
+| Shortcuts; Ctrl+C/V/X/A go to selected text or a focused control, to the keys only from the drawing / picker / nothing focused | `src/lib/useShortcuts.ts`, `src/lib/clipboardTarget.ts` |
 | Projects on disk (draft, save, 50 versions, trash) | `electron/projects.cjs` ⇄ `src/platform/projectRepo.ts` (in a browser — localStorage) |
 | Project linked to a file the user picked: the link (`<userData>/project-links.json`, never in the file), Save writes the file back, a file changed outside NAVI is loaded (no unsaved edits) or shown in a dialog before anything is overwritten; own code changed in it waits for “allow” | `electron/links.cjs`, `src/core/project/link.ts`, `projectStore.ts` (`checkLink`, `writeLink`), `components/project/LinkConflictDialog.tsx` |
 | QMK CLI: finding MSYS/qmk, sources, writing the keymap with a backup, compile, firmware archive; External Userspace: keymap lookup like QMK's `locate_keymap`, a `qmk compile -n` dry run refuses a build when QMK would use another folder, only firmware this build made is taken | `electron/qmk.cjs`, `electron/runner.cjs` (only validated arguments) |
