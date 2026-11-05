@@ -44,6 +44,20 @@ describe('own lines: rules.mk', () => {
     }
   });
 
+  it('own pipeline: the include of navi_rules.mk next to the makefile passes, other includes do not', () => {
+    expect(errors('rules.mk', 'include $(dir $(lastword $(MAKEFILE_LIST)))navi_rules.mk\nCOMBO_ENABLE = yes')).toEqual([]);
+    for (const bad of [
+      'include $(dir $(lastword $(MAKEFILE_LIST)))navi_rules.mk $(shell calc)',
+      'include $(dir $(lastword $(MAKEFILE_LIST)))../navi_rules.mk',
+      'include $(dir $(lastword $(MAKEFILE_LIST)))other.mk',
+      '-include $(dir $(lastword $(MAKEFILE_LIST)))navi_rules.mk',
+      'include $(shell calc)navi_rules.mk',
+      'include navi_rules.mk',
+    ]) {
+      expect(errors('rules.mk', bad).length, bad).toBeGreaterThan(0);
+    }
+  });
+
   it('list of make variables', () => {
     expect(allowedMakeVar('RGB_MATRIX_ENABLE')).toBe(true);
     expect(allowedMakeVar('CONVERT_TO')).toBe(true);
@@ -95,6 +109,8 @@ describe('own lines: config.h and keymap.c', () => {
     expect(errors('keymap.c', code, new Set(['process_record_user'])).length).toBe(1);
     expect(errors('keymap.c', code, new Set(['keymaps']))).toEqual([]);
     expect(errors('keymap.c', '// process_record_user(keycode, record) {', new Set(['process_record_user']))).toEqual([]);
+    expect(errors('keymap.c', 'void leader_end_user(void) {}', new Set(['leader_end_user'])).length).toBe(1);
+    expect(errors('keymap.c', 'const uint32_t PROGMEM unicode_map[] = { 0x41 };', new Set(['unicode_map'])).length).toBe(1);
   });
 
   it('#define values from Advanced without code blocks', () => {

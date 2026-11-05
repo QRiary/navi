@@ -123,6 +123,14 @@ describe('scanning a folder against the allowlist', () => {
     expect(files).toEqual(['extra/post_rules.mk', 'other.mk', 'rules.mk'].map((f) => path.join(...f.split('/'))).sort());
   });
 
+  it('own pipeline: rules.mk including navi_rules.mk next to it passes without trust', () => {
+    const dir = kmDir(home, 'acme/split', 'mine');
+    stock(dir);
+    put(path.join(dir, 'rules.mk'), 'include $(dir $(lastword $(MAKEFILE_LIST)))navi_rules.mk\nCONSOLE_ENABLE = yes\n');
+    put(path.join(dir, 'navi_rules.mk'), '# NAVI\nCOMBO_ENABLE = yes\n');
+    expect(scanFolders([dir])).toEqual([]);
+  });
+
   it('C includes that leave the folder fail in every text file, nested ones and non-.c/.h ones too', () => {
     const dir = kmDir(home, 'acme/split', 'mine');
     stock(dir);
