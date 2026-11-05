@@ -78,6 +78,7 @@ function LayersCell() {
   const redo = useProjectStore((s) => s.redo);
   const layer = useEditorStore((s) => s.layer);
   const setLayer = useEditorStore((s) => s.setLayer);
+  const setHoverLayer = useEditorStore((s) => s.setHoverLayer);
   if (!project) return <div className="deck-cell deck-cell--center" />;
   const km = activeKeymap(project);
   const lastUndo = past[past.length - 1]?.label;
@@ -86,7 +87,19 @@ function LayersCell() {
     <div className="deck-cell deck-cell--center">
       <div className="deck-layers" role="tablist" aria-label={t('Layers', 'Слои')}>
         {km.layers.map((l, i) => (
-          <button key={l.id} role="tab" aria-selected={i === layer} className={`deck-layer ${i === layer ? 'is-active' : ''}`} onClick={() => setLayer(i)} title={`${i} · ${l.name}`}>
+          <button
+            key={l.id}
+            role="tab"
+            aria-selected={i === layer}
+            className={`deck-layer ${i === layer ? 'is-active' : ''}`}
+            onClick={() => setLayer(i)}
+            // As on the Keyboard page's layer tabs: the keys leading to this layer light up on the keyboard.
+            onMouseEnter={() => setHoverLayer(i)}
+            onMouseLeave={() => setHoverLayer(null)}
+            onFocus={() => setHoverLayer(i)}
+            onBlur={() => setHoverLayer(null)}
+            title={`${i} · ${l.name}`}
+          >
             {i}
           </button>
         ))}

@@ -4,13 +4,12 @@
  * “how to reach a layer” — which keys lead to it (MO/TG/TO/TT/OSL/LT/LM…).
  * Layer numbers in references are renumbered on moving and deleting (core/project/ops.ts).
  */
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { ArrowDown, ArrowUp, Copy, CopyPlus, Eraser, Plus, SquareDashed, Star, Trash2 } from 'lucide-react';
 import { LayoutPreview } from '../components/keyboard/LayoutPreview';
 import { KeymapManager } from '../components/project/KeymapManager';
 import { LayerKeysOnTopRow } from '../components/advanced/LayerKeysOnTop';
-import { decode } from '../core/keycodes/codec';
-import { friendlyName } from '../core/keycodes/friendly';
+import { LayerRoutes, useLayerRefs } from '../components/layers/LayerRoutes';
 import { keyLabel } from '../core/keycodes/labels';
 import { KC_NO, KC_TRNS } from '../core/project/factory';
 import { compareLayers, copyLayerKeys, duplicateLayer, fillLayer, insertLayer, moveLayer, removeLayer, renameLayer, setDefaultLayer, setLayerColor, setLayerCName } from '../core/project/ops';
@@ -40,21 +39,7 @@ export function LayersPage() {
   const [cmpB, setCmpB] = useState(1);
   const [copyFrom, setCopyFrom] = useState(0);
 
-  /** Which keys lead to each layer. */
-  const reach = useMemo(() => {
-    const map = new Map<number, { from: number; text: string; qmk: string }[]>();
-    if (!active || !labelCtx) return map;
-    active.keymap.layers.forEach((l, li) =>
-      l.keys.forEach((v) => {
-        const d = decode(spec, v);
-        const target = d.kind === 'layer' || d.kind === 'layer-tap' || d.kind === 'layer-mod' ? d.layer : null;
-        if (target === null) return;
-        if (!map.has(target)) map.set(target, []);
-        map.get(target)!.push({ from: li, ...friendlyName(spec, v, labelCtx) });
-      }),
-    );
-    return map;
-  }, [active, spec, labelCtx]);
+  const refs = useLayerRefs();
 
   if (!active || !labelCtx) return null;
   const { project, keymap, geometry } = active;
@@ -110,7 +95,6 @@ export function LayersPage() {
       <div className="panel-box">
         <div className="rows">
           {keymap.layers.map((l, i) => {
-            const refs = reach.get(i) ?? [];
             return (
               <div key={l.id} className="row" style={{ ['--row-cols' as string]: '34px minmax(0,1fr) minmax(0,2fr) auto', alignItems: 'start', paddingTop: 12, paddingBottom: 12 }}>
                 <span className="num" style={{ paddingTop: 6 /* grid-ok: lines the number up with the 30px inputs beside it */ }}>
@@ -151,13 +135,10 @@ export function LayersPage() {
                       </button>
                     ))}
                   </div>
-                  <span className="field-hint" title={refs.length ? [...new Set(refs.map((r) => `L${r.from}: ${r.qmk}`))].join('\n') : undefined}>
-                    {refs.length
-                      ? `${t('reached by', 'вход')}: ${[...new Set(refs.map((r) => `${r.text} (L${r.from})`))].slice(0, 6).join(', ')}`
-                      : i === keymap.defaultLayer
-                        ? t('always active as the base layer', 'всегда включён как базовый')
-                        : t('⚠ no key leads to this layer', '⚠ ни одна клавиша не ведёт на этот слой')}
-                  </span>
+                  <div className="field">
+                    <span className="kicker">{t('how to get here', 'как сюда попасть')}</span>
+                    <LayerRoutes layer={i} refs={refs} compact />
+                  </div>
                 </div>
                 <button
                   onClick={() => {

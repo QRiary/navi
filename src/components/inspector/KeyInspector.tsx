@@ -18,6 +18,7 @@ import { useSpec } from '../../store/projectStore';
 import { getLanguage, t, count } from '../../i18n';
 import { KeycodeComposer } from '../keyboard/KeycodeComposer';
 import { KeyName } from '../KeyName';
+import { LayerRoutes, useLayerRefs } from '../layers/LayerRoutes';
 import { toast } from '../../store/toastStore';
 import { whyDisabled } from '../../lib/whyDisabled';
 
@@ -48,6 +49,7 @@ export function KeyInspector() {
   const clipboard = useEditorStore((s) => s.clipboard);
 
   const selectedKeys = useMemo(() => (active ? active.geometry.keys.filter((k) => selection.includes(k.id)) : []), [active, selection]);
+  const refs = useLayerRefs();
 
   if (!active || !labelCtx) return null;
   const { project, keymap } = active;
@@ -73,6 +75,10 @@ export function KeyInspector() {
   if (selectedKeys.length === 0) {
     return (
       <div className="inspector-body">
+        <div className="kicker">
+          {t('how to get to', 'как попасть на')} {keymap.layers[layer]?.name || `L${layer}`}
+        </div>
+        <LayerRoutes layer={layer} refs={refs} />
         <div className="empty-state" style={{ padding: 0 }}>
           <p>
             {t('Click a key on the layout to edit it. Shift+click or drag a frame to select several.', 'Щёлкните клавишу на схеме, чтобы изменить её. Shift+щелчок или рамка — выбрать несколько.')}

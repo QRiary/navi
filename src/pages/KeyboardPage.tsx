@@ -15,6 +15,8 @@ import { friendlyName } from '../core/keycodes/friendly';
 import { keyLabel } from '../core/keycodes/labels';
 import { keycodeNeeds, needStatus } from '../core/keycodes/requirements';
 import { effectiveKeycode, getKeycode } from '../core/project/ops';
+import { keysLeadingTo } from '../core/project/layerRefs';
+import { useLayerRefs } from '../components/layers/LayerRoutes';
 import type { EncoderGeom, KeyGeom } from '../core/project/types';
 import { hardwareFacts } from '../lib/hardwareFacts';
 import { whyDisabled } from '../lib/whyDisabled';
@@ -32,6 +34,7 @@ export function LayerTabs() {
   const active = useActive();
   const layer = useEditorStore((s) => s.layer);
   const setLayer = useEditorStore((s) => s.setLayer);
+  const setHoverLayer = useEditorStore((s) => s.setHoverLayer);
   if (!active) return null;
   return (
     <div className="layer-tabs" role="tablist" aria-label={t('Layers', 'Слои')}>
@@ -42,6 +45,11 @@ export function LayerTabs() {
           aria-selected={i === layer}
           className={`layer-tab ${i === layer ? 'is-active' : ''}`}
           onClick={() => setLayer(i)}
+          // Pointing at a tab highlights the keys of the shown layer that lead to it.
+          onMouseEnter={() => setHoverLayer(i)}
+          onMouseLeave={() => setHoverLayer(null)}
+          onFocus={() => setHoverLayer(i)}
+          onBlur={() => setHoverLayer(null)}
           title={`${t('Layer', 'Слой')} ${i}${i === active.keymap.defaultLayer ? t(' · base', ' · базовый') : ''}`}
         >
           <span className="layer-tab-num">{i}</span>
@@ -87,6 +95,13 @@ export function KeyboardPage() {
     [active, hw, spec, warnCache],
   );
 
+  // A layer tab under the mouse: the keys of the shown layer that lead to it.
+  const refs = useLayerRefs();
+  const hoverKeys = useMemo(
+    () => new Set(editor.hoverLayer === null || editor.hoverLayer === layer ? [] : keysLeadingTo(refs, editor.hoverLayer, layer).map((p) => `${p[0]},${p[1]}`)),
+    [refs, editor.hoverLayer, layer],
+  );
+
   const keyView = useCallback(
     (k: KeyGeom): KeyView => {
       if (!active || !labelCtx || !k.matrix) {
@@ -121,7 +136,7 @@ export function KeyboardPage() {
         changed,
         warn: isWarn(value),
         pressed: editor.pressed.has(mk),
-        highlighted: editor.highlight.some((h) => h[0] === pos[0] && h[1] === pos[1]),
+        highlighted: editor.highlight.some((h) => h[0] === pos[0] && h[1] === pos[1]) || hoverKeys.has(mk),
       };
     },
     [
@@ -134,6 +149,7 @@ export function KeyboardPage() {
       editor.compareLayer,
       editor.pressed,
       editor.highlight,
+      hoverKeys,
       spec,
       settings.showTransparentSource,
       savedKeymap,
