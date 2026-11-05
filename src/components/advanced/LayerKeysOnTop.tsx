@@ -5,6 +5,7 @@
 import type { Project } from '../../core/project/types';
 import { useProjectStore } from '../../store/projectStore';
 import { t } from '../../i18n';
+import { InfoTip } from '../InfoTip';
 
 export function LayerKeysOnTopRow({ project }: { project: Project }) {
   const apply = useProjectStore((s) => s.apply);
@@ -19,7 +20,13 @@ export function LayerKeysOnTopRow({ project }: { project: Project }) {
           {t(
             'The layer turned on last wins: layers above it are hidden while it is on. Without this, QMK shows the highest layer, so a key for a lower layer seems to do nothing.',
             'Побеждает слой, включённый последним: слои выше него скрыты, пока он включён. Без этого QMK показывает самый верхний слой, и клавиша нижнего слоя будто не работает.',
-          )}
+          )}{' '}
+          <InfoTip label={title}>
+            {t(
+              'NAVI’s own C code in keymap.c remembers which layers your layer keys (MO, LT, TG, OSL…) turned on and in what order, and shows the newest one with the layers above it hidden. A hidden layer comes back when the newer layer is turned off.',
+              'Собственный код NAVI на C в keymap.c помнит, какие слои включили клавиши слоёв (MO, LT, TG, OSL…) и в каком порядке, и показывает самый новый, скрывая слои выше него. Скрытый слой возвращается, когда новый слой выключают.',
+            )}
+          </InfoTip>
         </span>
       </span>
       <code className="kicker">{t('NAVI (keymap.c)', 'NAVI (keymap.c)')}</code>
