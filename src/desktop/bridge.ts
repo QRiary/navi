@@ -161,6 +161,13 @@ export interface NaviBridge {
   info(): Promise<NaviInfo>;
   readConfig(): Promise<string | null>;
   writeConfig(text: string): Promise<void>;
+  /** The user's own themes: <userData>/themes/<id>.navi-theme.json (electron/themes.cjs). */
+  themes: {
+    list(): Promise<{ id: string; text: string }[]>;
+    write(id: string, text: string): Promise<void>;
+    /** Moves the file to themes/.trash; its text, or null when there was none. */
+    remove(id: string): Promise<string | null>;
+  };
   onConfigChanged(cb: (text: string) => void): () => void;
   setTitleBarColors(colors: { color: string; symbolColor: string }): Promise<void>;
   /** Interface size: the window's zoom factor (0.8…2). */

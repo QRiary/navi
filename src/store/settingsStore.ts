@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { DEFAULT_CONFIG_TEXT, parseConfig, setConfigValue, type ConfigIssue } from '../config/configFile';
 import { DEFAULT_SETTINGS, type AppSettings } from '../config/theme.config';
+// First: its cache fills the palette registry before the config below is parsed (no flash of another palette).
+import { useThemesStore } from './themesStore';
 
 /**
  * App settings (look, keyboard, device, QMK paths).
@@ -18,6 +20,8 @@ interface SettingsState {
   applyConfig: (text: string) => ConfigIssue[];
   /** Change one value in the config: setValue('theme', 'amber'). */
   setValue: (key: string, value: string | boolean | number | null) => void;
+  /** Several values in one step (one config parse): setValues([['theme', 'x'], ['colors.text', null]]). */
+  setValues: (edits: [string, string | boolean | number | null][]) => void;
   reset: () => void;
 }
 
@@ -34,6 +38,9 @@ export const useSettingsStore = create<SettingsState>()(
       setValue: (key, value) => {
         get().applyConfig(setConfigValue(get().configText, key, value));
       },
+      setValues: (edits) => {
+        get().applyConfig(edits.reduce((text, [key, value]) => setConfigValue(text, key, value), get().configText));
+      },
       reset: () => set({ configText: DEFAULT_CONFIG_TEXT, settings: DEFAULT_SETTINGS }),
     }),
     {
@@ -49,3 +56,9 @@ export const useSettingsStore = create<SettingsState>()(
     },
   ),
 );
+
+// A theme saved, renamed, removed or read from disk: parse the config again, so "theme": "<own id>" resolves
+// (and a changed theme's colors are applied).
+useThemesStore.subscribe((state, prev) => {
+  if (state.themes !== prev.themes) useSettingsStore.getState().applyConfig(useSettingsStore.getState().configText);
+});

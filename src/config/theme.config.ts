@@ -3,8 +3,8 @@
  *  THEME CONFIG — palettes and the settings schema of NAVI (the palettes are the same as in the CARRIER player).
  * ═══════════════════════════════════════════════════════════════════════
  *
- *  • THEME_PRESETS     — ready-made palettes. Add your own — it becomes available
- *                         in the config ("theme": "your-id") and in the preset list.
+ *  • THEME_PRESETS     — built-in palettes. The user's own themes (Settings → palette → save) are
+ *                         added at run time (setOwnPresets); allPresets() is both.
  *  • AppSettings       — all settings. Exactly this structure is written in the config
  *                         in the app (Settings → Config). Every field is described
  *                         with comments in default.config.jsonc.
@@ -52,6 +52,8 @@ export interface ThemePreset {
   /** Description in two languages: { en, ru }. */
   description: { en: string; ru: string };
   palette: ThemePalette;
+  /** The user's own theme (src/theme/userThemes.ts), not a built-in palette. */
+  own?: boolean;
 }
 
 export const THEME_PRESETS: ThemePreset[] = [
@@ -217,7 +219,7 @@ export interface AppSettings {
     asciiFont: AsciiFont;
     asciiFontSmall: AsciiFont;
   };
-  /** Palette id from THEME_PRESETS. */
+  /** Palette id: a built-in one or the user's own theme (allPresets). */
   theme: string;
   /** Palette color overrides. null — take from the palette. */
   colors: Partial<Record<PaletteKey, string | null>>;
@@ -372,7 +374,19 @@ export const SETTINGS_RANGES: Record<string, [number, number]> = {
   'editor.snap': [0, 1],
 };
 
+let ownPresets: ThemePreset[] = [];
+
+/** The user's own themes, set by src/store/themesStore.ts (before the config is parsed). */
+export function setOwnPresets(presets: ThemePreset[]) {
+  ownPresets = presets;
+}
+
+/** Built-in palettes first, then the user's own themes. */
+export function allPresets(): ThemePreset[] {
+  return ownPresets.length ? [...THEME_PRESETS, ...ownPresets] : THEME_PRESETS;
+}
+
 export function getPreset(id: string): ThemePreset {
   const realId = THEME_ALIASES[id] ?? id;
-  return THEME_PRESETS.find((p) => p.id === realId) ?? THEME_PRESETS[0];
+  return allPresets().find((p) => p.id === realId) ?? THEME_PRESETS[0];
 }

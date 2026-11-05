@@ -20,7 +20,8 @@
     "asciiFontSmall": "Calvin S"    // small (sidebar)
   },
 
-  // Palette: "mono" | "phosphor" | "amber" | "alert" | "paper"
+  // Palette: "mono" | "phosphor" | "amber" | "alert" | "paper", or the id of your own theme
+  // (Settings → palette → save as new theme; the files are in the themes folder next to this one)
   "theme": "mono",
 
   // Own colors on top of the palette (#rrggbb). null — the palette color.

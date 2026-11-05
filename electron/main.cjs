@@ -17,6 +17,7 @@ const { readTextIfExists, safeFileName, writeFileAtomic } = require('./safety.cj
 const { registerQmkIpc } = require('./qmk.cjs');
 const { registerFlashIpc } = require('./flash.cjs');
 const { registerLinkIpc } = require('./links.cjs');
+const { registerThemeIpc } = require('./themes.cjs');
 const { cancelAll } = require('./runner.cjs');
 const { registerCloseGuard } = require('./closeGuard.cjs');
 const { attachContextMenu } = require('./contextMenu.cjs');
@@ -193,6 +194,7 @@ function watchConfig() {
 
 function registerIpc() {
   const store = createProjectStore(projectsDir);
+  registerThemeIpc({ ipcMain, dataDir });
   const links = registerLinkIpc({ ipcMain, dialog, getWindow: () => win, dataDir });
   closeGuard = registerCloseGuard({ ipcMain, dialog, getWindow: () => win });
 

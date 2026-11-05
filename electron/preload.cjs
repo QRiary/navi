@@ -18,6 +18,11 @@ contextBridge.exposeInMainWorld('navi', {
   info: invoke('navi:info'),
   readConfig: invoke('navi:read-config'),
   writeConfig: invoke('navi:write-config'),
+  themes: {
+    list: invoke('navi:themes:list'),
+    write: invoke('navi:themes:write'),
+    remove: invoke('navi:themes:remove'),
+  },
   onConfigChanged: (cb) => subscribe('navi:config-changed', cb),
   setTitleBarColors: invoke('navi:titlebar'),
   setZoom: invoke('navi:set-zoom'),

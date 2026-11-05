@@ -303,8 +303,39 @@
   flex-direction: column;
   gap: 8px;
   padding: 12px;
-  border: 1px solid;
+  border: 1px solid var(--border-color);
   text-align: left;
+}
+
+.theme-card.is-active {
+  border-color: var(--text-primary);
+}
+
+/* The card's own button (preview, name, description); own themes add .theme-actions under it */
+.theme-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.theme-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: auto;
+}
+
+/* Removing is apart from rename / export, on the right */
+.theme-actions .theme-remove {
+  margin-left: auto;
+}
+
+.theme-actions .theme-remove:hover:not(:disabled) {
+  color: var(--danger-color);
+}
+
+.theme-desc.is-unsaved {
+  color: var(--text-primary);
 }
 
 .theme-preview {

@@ -8,7 +8,8 @@ import { CodeEditor } from '../components/CodeEditor';
 import { InterfaceSizeControl } from '../components/InterfaceSizeControl';
 import { DEFAULT_CONFIG_TEXT, parseConfig } from '../config/configFile';
 import { ColorsSection, SelectRow, SliderRow } from '../components/SettingsControls';
-import { SETTINGS_ENUMS, THEME_PRESETS } from '../config/theme.config';
+import { SETTINGS_ENUMS } from '../config/theme.config';
+import { PaletteSection } from '../components/ThemePalettes';
 import { listLanguages } from '../core/keycodes/spec';
 import { navi } from '../desktop/bridge';
 import { JSON_FILTERS, openTextFile, saveTextFile } from '../lib/files';
@@ -18,7 +19,7 @@ import { Hint } from '../components/InfoTip';
 import { whyDisabled } from '../lib/whyDisabled';
 import { useSettingsStore } from '../store/settingsStore';
 import { toast } from '../store/toastStore';
-import { getLanguage, t } from '../i18n';
+import { t } from '../i18n';
 
 const ICON = { size: 15, strokeWidth: 1.5 };
 
@@ -124,7 +125,6 @@ const FONT_LABEL: Record<string, () => string> = {
 function QuickTab() {
   const settings = useSettingsStore((s) => s.settings);
   const setValue = useSettingsStore((s) => s.setValue);
-  const lang = getLanguage();
   const toggle = (key: string, value: boolean, label: string, hint?: string) => (
     <div className="row" style={{ ['--row-cols' as string]: 'minmax(0,1fr) auto' }}>
       <span>
@@ -138,33 +138,7 @@ function QuickTab() {
   );
   return (
     <div className="page">
-      <section className="section" style={{ marginTop: 0 }}>
-        <div className="section-head">
-          <h2>
-            <Hint
-              tip={t(
-                'A palette sets all colors at once. Single colors can be changed below the palette; they stay when you switch palettes until you reset them.',
-                'Палитра задаёт сразу все цвета. Отдельные цвета можно изменить ниже; они остаются при смене палитры, пока вы их не сбросите.',
-              )}
-            >
-              {t('palette', 'палитра')}
-            </Hint>
-          </h2>
-        </div>
-        <div className="theme-grid">
-          {THEME_PRESETS.map((p) => (
-            <button key={p.id} className={`theme-card ${settings.theme === p.id ? 'is-active' : ''}`} onClick={() => setValue('theme', p.id)} aria-pressed={settings.theme === p.id}>
-              <div className="theme-preview" style={{ background: p.palette.background, borderColor: p.palette.border }}>
-                <i style={{ background: p.palette.text }} />
-                <i style={{ background: p.palette.meterFrom }} />
-                <i style={{ background: p.palette.meterTo }} />
-              </div>
-              <span className="theme-name">{p.name}</span>
-              <span className="theme-desc">{lang === 'ru' ? p.description.ru : p.description.en}</span>
-            </button>
-          ))}
-        </div>
-      </section>
+      <PaletteSection />
       <ColorsSection />
       {navi && (
         <section className="section">

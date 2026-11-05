@@ -74,6 +74,7 @@ build/           app icon (icon.svg is the source)
 | Toasts: info ones fade (hover pauses), errors stay until closed with Copy and raw details (`toastError`); a portal into `body`, so they stay clickable over a `<Modal>`. Every delete calls `deletedToast(what)` right after its `apply`: Undo reverts only while that delete is still the newest history entry | `src/store/toastStore.ts`, `components/Toasts.tsx`, `src/lib/undoToast.ts` |
 | Right panel only on Keyboard, Hardware, Firmware (`WITH_INSPECTOR`) | `src/App.tsx`, `components/inspector/Inspector.tsx` |
 | Settings (the JSONC text is the source of truth); Settings → main edits colors, effects and sizes through it (one write per frame while dragging) | `src/config/theme.config.ts` + `default.config.jsonc` (a test keeps them in sync), `components/SettingsControls.tsx` |
+| Own themes (13 colors + look effects, not `animations`): files `<userData>/themes/<id>.navi-theme.json` (removed ones → `themes/.trash`), cached in localStorage so the palette is there before the files are read; registered at run time (`setOwnPresets` / `allPresets`), so `"theme": "<own id>"` works in the config (an unknown id is only a warning). Color and effect edits stay loose until “save to” / “save as new”; export / import use the same file | `src/theme/userThemes.ts` (format, names, ids), `themeActions.ts`, `src/store/themesStore.ts`, `components/ThemePalettes.tsx`, `electron/themes.cjs` |
 | Interface language | `src/i18n/index.ts` — visible text is written as `t('English', 'Русский')` |
 
 ## Build safety

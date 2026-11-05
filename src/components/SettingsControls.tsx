@@ -5,7 +5,9 @@
  */
 import { RotateCcw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { PALETTE_KEYS, SETTINGS_RANGES, THEME_PRESETS, type PaletteKey } from '../config/theme.config';
+import { PALETTE_KEYS, SETTINGS_RANGES, getPreset, type PaletteKey } from '../config/theme.config';
+import { useThemesStore } from '../store/themesStore';
+import { revertToTheme, unsavedChanges } from '../theme/themeActions';
 import { useSettingsStore } from '../store/settingsStore';
 import { t } from '../i18n';
 import { whyDisabled } from '../lib/whyDisabled';
@@ -122,21 +124,25 @@ function ColorRow({ name, override, base }: { name: PaletteKey; override: string
 }
 
 export function ColorsSection() {
-  const theme = useSettingsStore((s) => s.settings.theme);
-  const colors = useSettingsStore((s) => s.settings.colors);
-  const setValue = useSettingsStore((s) => s.setValue);
-  const palette = (THEME_PRESETS.find((p) => p.id === theme) ?? THEME_PRESETS[0]).palette;
-  const overridden = PALETTE_KEYS.filter((k) => colors[k]);
+  const settings = useSettingsStore((s) => s.settings);
+  const themes = useThemesStore((s) => s.themes);
+  const colors = settings.colors;
+  const own = themes.find((th) => th.id === settings.theme);
+  const palette = getPreset(settings.theme).palette;
+  const changes = unsavedChanges(settings, own);
   return (
     <section className="section">
       <div className="section-head">
         <h2>{t('colors', 'цвета')}</h2>
         <button
           className="btn"
-          {...whyDisabled(overridden.length === 0 && t('No color differs from the palette', 'Ни один цвет не отличается от палитры'))}
-          onClick={() => overridden.forEach((k) => setValue(`colors.${k}`, null))}
+          {...whyDisabled(
+            !changes.colors && !changes.effects && (own ? t(`Colors and effects are the same as in “${own.name}”`, `Цвета и эффекты те же, что в «${own.name}»`) : t('No color differs from the palette', 'Ни один цвет не отличается от палитры')),
+            own ? t(`Colors and effects as saved in “${own.name}”`, `Цвета и эффекты как сохранены в «${own.name}»`) : t('Colors of the palette', 'Цвета палитры'),
+          )}
+          onClick={revertToTheme}
         >
-          <RotateCcw size={14} strokeWidth={1.5} /> {t('reset all colors', 'сбросить все цвета')}
+          <RotateCcw size={14} strokeWidth={1.5} /> {own ? t('back to the theme', 'вернуть тему') : t('reset all colors', 'сбросить все цвета')}
         </button>
       </div>
       <div className="panel-box rows">
