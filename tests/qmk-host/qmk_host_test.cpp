@@ -213,9 +213,23 @@ TEST_F(NaviHost, every_tap_dance_with_key_steps_keeps_cycling) {
     EXPECT_EQ(play({"+22", "-22", "+22", "-22", "+22", "-22"}), "A - B - A -");
 }
 
-// Interrupted by another key = a tap, played on the dance key's release
-TEST_F(NaviHost, tap_only_dance_interrupted_taps_on_release) {
-    EXPECT_EQ(play({"+12", "+13", "-13", "-12"}), "N - 0x2C -");
+// Interrupted by another key = a tap, typed before that key (fast typing: dance down, N down, dance up, N up)
+TEST_F(NaviHost, tap_only_dance_interrupted_taps_before_the_other_key) {
+    EXPECT_EQ(play({"+12", "+13", "-12", "-13"}), "0x2C - N -");
+    reports.clear();
+    EXPECT_EQ(play({"+12", "+13", "-13", "-12"}), "0x2C - N -");
+}
+
+// A dance with a double tap, interrupted after one tap (released or still held): the tap, then the other key
+TEST_F(NaviHost, double_tap_dance_interrupted_after_one_tap_taps_first) {
+    EXPECT_EQ(play({"+14", "-14", "+13", "-13"}), "T - N -");
+    reports.clear();
+    EXPECT_EQ(play({"+14", "+13", "-14", "-13"}), "T - N -");
+}
+
+// Interrupted on the second tap: the double tap plays first (TG(1): the other key comes from layer 1)
+TEST_F(NaviHost, double_tap_dance_interrupted_on_the_second_tap_plays_the_double_tap_first) {
+    EXPECT_EQ(play({"+14", "-14", "+14", "+13", "-13", "-14"}), "A -");
 }
 
 // Stand-ins of tap-hold keys with actions in the slots: their tap and hold sides

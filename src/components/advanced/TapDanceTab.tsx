@@ -16,7 +16,9 @@ import { MacroSteps } from '../macros/MacroSteps';
 import { FeatureNote, IssueList, KeycodeField } from './common';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
-const COLS = '40px minmax(120px,1fr) 112px repeat(4, minmax(130px, 1fr)) 90px auto';
+const COLS = '40px minmax(120px,1fr) 150px 90px 32px';
+// The slots / own C fields go on a line of their own under the name, wrapping when the panel is narrow.
+const SLOT_GRID = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', gap: 'var(--gap)', padding: '0 var(--gap) var(--gap) calc(40px + var(--gap))' } as const;
 type Variant = (typeof TAP_DANCE_VARIANTS)[number];
 
 const kindTitle = (k: TapDanceKind) => (k === 'slots' ? t('Slots', 'Слоты') : k === 'every-tap' ? t('Every tap', 'Каждое нажатие') : t('Own C', 'Свой C'));
@@ -56,10 +58,6 @@ export function TapDanceTab({ project }: { project: Project }) {
             <span>#</span>
             <span>{t('name', 'имя')}</span>
             <span>{t('kind', 'вид')}</span>
-            <span>{t('tap', 'нажатие')}</span>
-            <span>{t('hold', 'удержание')}</span>
-            <span>{t('double tap', 'двойное')}</span>
-            <span>{t('tap + hold', 'нажатие+удерж.')}</span>
             <span>{t('term, ms', 'время, мс')}</span>
             <span />
           </div>
@@ -77,36 +75,6 @@ export function TapDanceTab({ project }: { project: Project }) {
                       </option>
                     ))}
                   </select>
-                  {kind === 'slots' && (
-                    <>
-                      <KeycodeField value={td.tap} label={t('tap', 'нажатие')} onChange={(v) => patch(td.id, { tap: v }, 'TD tap')} />
-                      <KeycodeField value={td.hold} label={t('hold', 'удержание')} onChange={(v) => patch(td.id, { hold: v }, 'TD hold')} />
-                      <KeycodeField value={td.doubleTap} label={t('double tap', 'двойное')} onChange={(v) => patch(td.id, { doubleTap: v }, 'TD double')} />
-                      <KeycodeField value={td.tapHold} label={t('tap + hold', 'нажатие+удержание')} onChange={(v) => patch(td.id, { tapHold: v }, 'TD tap-hold')} />
-                    </>
-                  )}
-                  {kind === 'every-tap' && (
-                    <span className="field-hint" style={{ gridColumn: 'span 4' }}>
-                      {t(`${td.steps?.length ?? 0} of ${TAP_DANCE_MAX_STEPS} steps, below`, `шагов: ${td.steps?.length ?? 0} из ${TAP_DANCE_MAX_STEPS}, ниже`)}
-                    </span>
-                  )}
-                  {kind === 'own-c' && (
-                    <div className="field-row" style={{ gridColumn: 'span 4', flexWrap: 'nowrap' }}>
-                      {OWN_C_FIELDS.map((f) => (
-                        <input
-                          key={f.key}
-                          className="input mono"
-                          style={{ flex: 1, minWidth: 0 }}
-                          value={td.ownC?.[f.key] ?? ''}
-                          placeholder={f.label()}
-                          title={f.label()}
-                          aria-label={f.label()}
-                          spellCheck={false}
-                          onChange={(e) => patch(td.id, { ownC: { ...td.ownC, [f.key]: e.target.value.replace(/[^A-Za-z0-9_]/g, '') || undefined } }, t('own C function', 'своя функция C'), `tdc:${td.id}:${f.key}`)}
-                        />
-                      ))}
-                    </div>
-                  )}
                   <input
                     className="input input--num"
                     type="number"
@@ -121,6 +89,31 @@ export function TapDanceTab({ project }: { project: Project }) {
                     <Trash2 {...ICON} />
                   </button>
                 </div>
+                {kind === 'slots' && (
+                  <div style={SLOT_GRID}>
+                    <SlotField title={t('tap', 'нажатие')} value={td.tap} onChange={(v) => patch(td.id, { tap: v }, 'TD tap')} />
+                    <SlotField title={t('hold', 'удержание')} value={td.hold} onChange={(v) => patch(td.id, { hold: v }, 'TD hold')} />
+                    <SlotField title={t('double tap', 'двойное')} value={td.doubleTap} onChange={(v) => patch(td.id, { doubleTap: v }, 'TD double')} />
+                    <SlotField title={t('tap + hold', 'нажатие+удержание')} value={td.tapHold} onChange={(v) => patch(td.id, { tapHold: v }, 'TD tap-hold')} />
+                  </div>
+                )}
+                {kind === 'own-c' && (
+                  <div style={SLOT_GRID}>
+                    {OWN_C_FIELDS.map((f) => (
+                      <label key={f.key} className="field">
+                        <span className="kicker">{f.label()}</span>
+                        <input
+                          className="input mono"
+                          value={td.ownC?.[f.key] ?? ''}
+                          placeholder="—"
+                          aria-label={f.label()}
+                          spellCheck={false}
+                          onChange={(e) => patch(td.id, { ownC: { ...td.ownC, [f.key]: e.target.value.replace(/[^A-Za-z0-9_]/g, '') || undefined } }, t('own C function', 'своя функция C'), `tdc:${td.id}:${f.key}`)}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                )}
                 {kind === 'every-tap' && <EveryTapSteps td={td} onSteps={(steps, label, coalesce) => patch(td.id, { steps }, label, coalesce)} />}
                 {kind === 'own-c' && (
                   <p className="field-hint" style={{ padding: '0 var(--gap) var(--gap)' }}>
@@ -150,6 +143,15 @@ export function TapDanceTab({ project }: { project: Project }) {
         </span>
       </div>
       <IssueList issues={issues} />
+    </div>
+  );
+}
+
+function SlotField({ title, value, onChange }: { title: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <div className="field">
+      <span className="kicker">{title}</span>
+      <KeycodeField value={value} label={title} onChange={onChange} />
     </div>
   );
 }
@@ -184,7 +186,7 @@ function EveryTapSteps({ td, onSteps }: { td: TapDance; onSteps: (steps: TapDanc
               <Trash2 {...ICON} />
             </button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'var(--gap)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(440px, 100%), 1fr))', gap: 'var(--gap)' }}>
             {TAP_DANCE_VARIANTS.map((v) => (
               <div key={v} className="panel-box">
                 <div className="panel-box-head">

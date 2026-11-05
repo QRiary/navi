@@ -20,6 +20,7 @@ function StepEditor({ step, keys, onChange }: { step: MacroStep; keys: StepKeys;
   const typeSelect = (
     <select
       className="select"
+      style={{ flexShrink: 0 }}
       value={step.type}
       onChange={(e) => {
         const type = e.target.value as MacroStep['type'];
