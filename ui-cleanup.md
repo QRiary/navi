@@ -275,12 +275,21 @@ No search in combos, tap dances, tap-hold, overrides, macros, behavior params (~
 titles are defined twice (`Sidebar.tsx:9-21`, `TopBar.tsx:10-22`) and tab lists inline in each page.
 
 **Do**
-1. One registry of sections and tabs (titles en/ru, icon, route) feeding sidebar, top bar and search.
-2. Per-tab filter box on every list tab and on Behavior; Ctrl+F focuses it.
-3. Global search, Ctrl+K: pages/tabs, settings, config params (title, define, hint), layers, keys (by friendly
+1. ✅ One registry of sections and tabs (titles en/ru, icon, route) feeding sidebar, top bar and search.
+2. ✅ Per-tab filter box on every list tab and on Behavior; Ctrl+F focuses it.
+3. ✅ Global search, Ctrl+K: pages/tabs, settings, config params (title, define, hint), layers, keys (by friendly
    name, alias or keycode → "layer Nav, left hand row 2"), combos, tap dances, tap-hold settings, macros,
    aliases, custom keycodes. Enter jumps there and highlights the item.
 4. Check in after a few days of use.
+   Done as: `src/lib/sections.ts` holds sections and tabs; pages take their tab bars from it. Filter boxes on tap
+   dance, tap-hold (one box for key lists and settings), combos (its search box), overrides, leader, custom
+   keycodes, aliases, unicode, QMK settings, macros, layers, projects; Esc clears, a count shows shown / total.
+   Ctrl+F on a tab without one opens the global search. The search also finds encoders, key lists, overrides,
+   leader sequences, unicode entries and other projects, in both languages at once ("живая" finds Live write in
+   English). A key result opens its layer with the key highlighted (as Step 7's links); others land on the row,
+   scroll it below the sticky blocks and flash it.
+   Left over: no filter on Encoders, Lighting, Hardware, Firmware (features table) and NAVI additions; the search
+   doesn't look inside the config JSONC text.
 
 ## Not in this plan
 - A redesign or new visual style: the look stays.

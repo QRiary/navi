@@ -5,18 +5,9 @@ import { useEffect, useState } from 'react';
  * The Back/Forward buttons (mouse, Alt+←) just work.
  */
 
-export type Section =
-  | 'keyboard'
-  | 'layers'
-  | 'encoders'
-  | 'macros'
-  | 'advanced'
-  | 'lighting'
-  | 'hardware'
-  | 'firmware'
-  | 'device'
-  | 'projects'
-  | 'settings';
+import { SECTION_IDS, type Section } from './sections';
+
+export type { Section };
 
 export interface Route {
   section: Section;
@@ -24,11 +15,9 @@ export interface Route {
   tab?: string;
 }
 
-const SECTIONS: Section[] = ['keyboard', 'layers', 'encoders', 'macros', 'advanced', 'lighting', 'hardware', 'firmware', 'device', 'projects', 'settings'];
-
 export function parseHash(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('?')[0].split('/').filter(Boolean);
-  const section = (SECTIONS as string[]).includes(parts[0]) ? (parts[0] as Section) : 'keyboard';
+  const section = (SECTION_IDS as readonly string[]).includes(parts[0]) ? (parts[0] as Section) : 'keyboard';
   return { section, tab: parts[1] ? decodeURIComponent(parts[1]) : undefined };
 }
 

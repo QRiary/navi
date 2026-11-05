@@ -23,6 +23,8 @@ import { deletedToast } from '../lib/undoToast';
 import { QMK_DOCS } from '../lib/qmkDocs';
 import { whyDisabled } from '../lib/whyDisabled';
 import { Hint, InfoTip } from '../components/InfoTip';
+import { ListFilter } from '../components/ListFilter';
+import { findAttr, matchesQuery, useListFilter } from '../lib/find';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 const COLORS = ['', '#6ec6ff', '#7fe3a8', '#ffb000', '#ff5d6c', '#c792ea', '#e8e8e8'];
@@ -40,6 +42,7 @@ export function LayersPage() {
   const [copyFrom, setCopyFrom] = useState(0);
 
   const refs = useLayerRefs();
+  const [query, setQuery] = useListFilter();
 
   if (!active || !labelCtx) return null;
   const { project, keymap, geometry } = active;
@@ -50,6 +53,7 @@ export function LayersPage() {
   const n = keymap.layers.length;
   const diff = cmpA < n && cmpB < n ? compareLayers(project, keymap, cmpA, cmpB) : [];
   const diffSet = new Set(diff.map((p) => `${p[0]},${p[1]}`));
+  const shownLayers = keymap.layers.map((l, i) => ({ l, i })).filter(({ l, i }) => matchesQuery(query, i, `L${i}`, l.name, l.cName, defaultIds[i]));
 
   return (
     <div className="page">
@@ -92,11 +96,20 @@ export function LayersPage() {
           </button>
         </div>
       </div>
-      <div className="panel-box">
+      <ListFilter
+        value={query}
+        onChange={setQuery}
+        label={t('Filter layers', 'Фильтр слоёв')}
+        placeholder={t('Filter by number or name', 'Фильтр по номеру или имени')}
+        shown={shownLayers.length}
+        total={n}
+      />
+      {shownLayers.length === 0 && <p className="field-hint">{t('Nothing matches the filter.', 'Под фильтр ничего не подходит.')}</p>}
+      <div className="panel-box" hidden={shownLayers.length === 0}>
         <div className="rows">
-          {keymap.layers.map((l, i) => {
+          {shownLayers.map(({ l, i }) => {
             return (
-              <div key={l.id} className="row" style={{ ['--row-cols' as string]: '34px minmax(0,1fr) minmax(0,2fr) auto', alignItems: 'start', paddingTop: 12, paddingBottom: 12 }}>
+              <div key={l.id} {...findAttr('layer:' + l.id)} className="row" style={{ ['--row-cols' as string]: '34px minmax(0,1fr) minmax(0,2fr) auto', alignItems: 'start', paddingTop: 12, paddingBottom: 12 }}>
                 <span className="num" style={{ paddingTop: 6 /* grid-ok: lines the number up with the 30px inputs beside it */ }}>
                   L{i}
                 </span>

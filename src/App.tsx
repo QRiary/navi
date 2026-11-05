@@ -12,6 +12,9 @@ import { isDesktop } from './desktop/bridge';
 import { syncTitleBar, useDesktopSync } from './desktop/useDesktopSync';
 import { href, navigate, useRoute, type Route } from './lib/router';
 import { useShortcuts } from './lib/useShortcuts';
+import { defaultTab } from './lib/sections';
+import { useFindReveal } from './lib/find';
+import { SearchPalette } from './components/SearchPalette';
 import { useScrollMemory } from './lib/scrollMemory';
 import { useInterfaceZoom } from './lib/interfaceZoom';
 import { useLiveWrite } from './lib/useLiveWrite';
@@ -31,9 +34,6 @@ import { lastProjectId, useProjectStore } from './store/projectStore';
 import { useDeviceStore } from './store/deviceStore';
 import { useSettingsStore } from './store/settingsStore';
 import { applyTheme } from './theme/applyTheme';
-
-/** The tab a section shows when the address names none (so both addresses share one remembered scroll). */
-const DEFAULT_TAB: Partial<Record<Route['section'], string>> = { advanced: 'tapdance', firmware: 'setup', projects: 'list', settings: 'quick' };
 
 /** Sections that take the whole main area (no page scrolling). */
 const FILL = new Set<Route['section']>(['keyboard', 'hardware']);
@@ -93,6 +93,7 @@ export function App() {
   useShortcuts(route);
   useInterfaceZoom();
   useLiveWrite();
+  useFindReveal();
 
   // Startup: project list, the last opened one; look for keyboards.
   useEffect(() => {
@@ -122,7 +123,7 @@ export function App() {
 
   const needsProject = NEEDS_PROJECT.has(route.section) && !project;
   const fill = FILL.has(route.section) && !needsProject;
-  const scrollRef = useScrollMemory(`${route.section}/${route.tab ?? DEFAULT_TAB[route.section] ?? ''}`);
+  const scrollRef = useScrollMemory(`${route.section}/${route.tab ?? defaultTab(route.section) ?? ''}`);
   const inspector = settings.layout.inspector && WITH_INSPECTOR.has(route.section);
 
   return (
@@ -171,6 +172,7 @@ export function App() {
       <Deck />
       <LinkConflictDialog />
       <CloseDialog />
+      <SearchPalette />
       <Toasts />
       <EffectsOverlay />
     </div>

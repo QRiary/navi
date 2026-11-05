@@ -13,6 +13,8 @@ import { resolvePalette } from '../theme/applyTheme';
 import { t } from '../i18n';
 import { whyDisabled } from '../lib/whyDisabled';
 import { Slider } from './Slider';
+import { COLOR_LABELS } from '../lib/settingsIndex';
+import { findAttr } from '../lib/find';
 
 /** Local copy of a stored value + a write function that runs once per frame with the newest value. */
 function useFrameWrite<T>(stored: T, write: (value: T) => void): [T, (value: T) => void] {
@@ -48,7 +50,7 @@ export function SliderRow({ settingKey, value, label, unit, step, percent = fals
   const [local, setLocal] = useFrameWrite(value, (v) => setValue(settingKey, v));
   const shown = percent ? `${Math.round(local * 100)}%` : `${Math.round(local * 100) / 100}${unit ? ` ${unit}` : ''}`;
   return (
-    <div className="row" style={{ ['--row-cols' as string]: 'minmax(0,1fr) minmax(120px,200px) 64px' }}>
+    <div className="row" {...findAttr(`setting:${settingKey}`)} style={{ ['--row-cols' as string]: 'minmax(0,1fr) minmax(120px,200px) 64px' }}>
       <span>{label}</span>
       <Slider value={local} min={min} max={max} step={step} label={label} valueText={shown} onChange={setLocal} />
       <span className="num">{shown}</span>
@@ -59,7 +61,7 @@ export function SliderRow({ settingKey, value, label, unit, step, percent = fals
 export function SelectRow({ settingKey, value, label, options }: { settingKey: string; value: string; label: string; options: { value: string; label: string }[] }) {
   const setValue = useSettingsStore((s) => s.setValue);
   return (
-    <div className="row" style={{ ['--row-cols' as string]: ONE_COL }}>
+    <div className="row" {...findAttr(`setting:${settingKey}`)} style={{ ['--row-cols' as string]: ONE_COL }}>
       <span>{label}</span>
       <select className="select" aria-label={label} value={value} onChange={(e) => setValue(settingKey, e.target.value)}>
         {options.map((o) => (
@@ -72,49 +74,14 @@ export function SelectRow({ settingKey, value, label, options }: { settingKey: s
   );
 }
 
-function colorLabel(key: PaletteKey): string {
-  switch (key) {
-    case 'background':
-      return t('Window background', 'Фон окна');
-    case 'panel':
-      return t('Panel background', 'Фон панелей');
-    case 'cell':
-      return t('Fields and buttons', 'Поля и кнопки');
-    case 'card':
-      return t('Boxes in panels', 'Блоки в панелях');
-    case 'hover':
-      return t('Hover highlight', 'Подсветка при наведении');
-    case 'border':
-      return t('Borders', 'Рамки');
-    case 'key':
-      return t('Keys in keyboard drawings', 'Клавиши на схемах клавиатуры');
-    case 'keyBorder':
-      return t('Key outlines', 'Рамки клавиш');
-    case 'text':
-      return t('Main text', 'Основной текст');
-    case 'textDim':
-      return t('Secondary text', 'Второстепенный текст');
-    case 'label':
-      return t('UPPERCASE labels', 'Подписи ЗАГЛАВНЫМИ');
-    case 'accent':
-      return t('Accent: active elements', 'Акцент: активные элементы');
-    case 'accentText':
-      return t('Text on the accent', 'Текст на акценте');
-    case 'meterFrom':
-      return t('Meters: gradient start', 'Шкалы: начало градиента');
-    case 'meterTo':
-      return t('Meters: gradient end', 'Шкалы: конец градиента');
-    case 'danger':
-      return t('Errors', 'Ошибки');
-  }
-}
+const colorLabel = (key: PaletteKey): string => COLOR_LABELS[key]();
 
 function ColorRow({ name, override, base }: { name: PaletteKey; override: string | undefined; base: string }) {
   const setValue = useSettingsStore((s) => s.setValue);
   const [local, setLocal] = useFrameWrite(override ?? base, (v) => setValue(`colors.${name}`, v));
   const label = colorLabel(name);
   return (
-    <div className="row" style={{ ['--row-cols' as string]: 'minmax(0,1fr) auto 64px 32px' }}>
+    <div className="row" {...findAttr(`setting:colors.${name}`)} style={{ ['--row-cols' as string]: 'minmax(0,1fr) auto 64px 32px' }}>
       <span>{label}</span>
       <input type="color" className="color-input" aria-label={label} value={local} onChange={(e) => setLocal(e.target.value)} />
       <code className="num">{local}</code>

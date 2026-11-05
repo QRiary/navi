@@ -20,6 +20,7 @@ import { JSON_FILTERS, openTextFile } from '../lib/files';
 import { hidFromCode } from '../lib/hidCodes';
 import { useActive, useLabelContext } from '../lib/projectContext';
 import { href } from '../lib/router';
+import { currentTab, tabItems, tabRoute } from '../lib/sections';
 import { useScrollMemory } from '../lib/scrollMemory';
 import { TabPanels, Tabs } from '../components/Tabs';
 import { useDeviceStore } from '../store/deviceStore';
@@ -706,16 +707,11 @@ function VariantsTab({ project }: { project: Project }) {
 
 export function HardwarePage({ tab }: { tab?: string }) {
   const project = useProjectStore((s) => s.project);
-  const current = tab === 'profile' || tab === 'variants' || tab === 'pins' ? tab : 'geometry';
+  const current = currentTab('hardware', tab);
   // A fill page: the scrolling tabs share one scroller of their own, so the position is remembered here.
   const scrollRef = useScrollMemory(`hardware/${current}`);
   if (!project) return null;
-  const tabs = [
-    { id: 'geometry', label: t('Geometry', 'Геометрия') },
-    { id: 'profile', label: t('Hardware profile', 'Профиль железа') },
-    { id: 'variants', label: t('Geometry variants', 'Варианты геометрии') },
-    { id: 'pins', label: t('Board pins (firmware)', 'Выводы платы (прошивка)') },
-  ];
+  const tabs = tabItems('hardware');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Tabs
@@ -723,7 +719,7 @@ export function HardwarePage({ tab }: { tab?: string }) {
         label={t('Hardware', 'Железо')}
         items={tabs}
         current={current}
-        href={(id) => href(id === 'geometry' ? { section: 'hardware' } : { section: 'hardware', tab: id })}
+        href={(id) => href(tabRoute('hardware', id))}
         style={{ margin: 0, padding: '0 var(--pad)' }}
       />
       <div style={{ flex: 1, minHeight: 0 }}>

@@ -24,7 +24,10 @@ import {
 } from '../../core/project/tapHolds';
 import type { KeyList, Project, TapHoldSetting } from '../../core/project/types';
 import { t } from '../../i18n';
+import { findAttr, matchesQuery, useListFilter } from '../../lib/find';
+import { useKeyWords } from '../../lib/keyFind';
 import { QMK_DOCS } from '../../lib/qmkDocs';
+import { ListFilter } from '../ListFilter';
 import { deletedToast } from '../../lib/undoToast';
 import { whyDisabled } from '../../lib/whyDisabled';
 import { EmptyState } from '../EmptyState';
@@ -52,6 +55,8 @@ const sameSet = (a: number[], b: number[]) => a.length === b.length && a.every((
 export function TapHoldTab({ project }: { project: Project }) {
   const apply = useProjectStore((s) => s.apply);
   const spec = useSpec();
+  const [query, setQuery] = useListFilter();
+  const keyWords = useKeyWords();
   const issues = useMemo(() => checkTapHolds(spec, project), [spec, project]);
   // The list whose delete button was pressed once while settings still use it: the second press deletes.
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -138,6 +143,11 @@ export function TapHoldTab({ project }: { project: Project }) {
       t('make a key list', 'список клавиш из клавиш'),
     );
   };
+  const nothingMatches = t('Nothing matches the filter.', 'Под фильтр ничего не подходит.');
+  const shownLists = project.keyLists.filter((l) => matchesQuery(query, l.name, ...l.keys.map(keyWords)));
+  const shownSettings = project.tapHolds.filter((s) =>
+    matchesQuery(query, ...s.keycodes.map(keyWords), ...(s.holdOnKeys ?? []).map(keyWords), flavorTitle(s.flavor ?? ''), s.flavor, ...(s.holdOnLists ?? []).map(listName)),
+  );
   const deleteList = (id: string) => {
     if (keyListUsage(project, id) > 0 && confirmDelete !== id) return setConfirmDelete(id);
     setConfirmDelete(null);
@@ -159,6 +169,17 @@ export function TapHoldTab({ project }: { project: Project }) {
           )}
         </InfoTip>
       </p>
+
+      {project.keyLists.length + project.tapHolds.length > 0 && (
+        <ListFilter
+          value={query}
+          onChange={setQuery}
+          label={t('Filter tap-hold', 'Фильтр тап-холд')}
+          placeholder={t('Filter by key or list name', 'Фильтр по клавише или имени списка')}
+          shown={shownLists.length + shownSettings.length}
+          total={project.keyLists.length + project.tapHolds.length}
+        />
+      )}
 
       <section className="section">
         <div className="section-head">
@@ -187,7 +208,8 @@ export function TapHoldTab({ project }: { project: Project }) {
             {addListButton}
           </EmptyState>
         )}
-        {project.keyLists.length > 0 && (
+        {project.keyLists.length > 0 && shownLists.length === 0 && <p className="field-hint">{nothingMatches}</p>}
+        {shownLists.length > 0 && (
           <div className="panel-box">
             <div className="rows">
               <div className="row kicker" style={{ ['--row-cols' as string]: LIST_COLS }}>
@@ -196,11 +218,11 @@ export function TapHoldTab({ project }: { project: Project }) {
                 <span>{t('settings', 'настроек')}</span>
                 <span />
               </div>
-              {project.keyLists.map((l) => {
+              {shownLists.map((l) => {
                 const uses = keyListUsage(project, l.id);
                 const confirming = confirmDelete === l.id;
                 return (
-                  <div key={l.id} className="row" style={{ ['--row-cols' as string]: LIST_COLS }}>
+                  <div key={l.id} className="row" {...findAttr('keylist:' + l.id)} style={{ ['--row-cols' as string]: LIST_COLS }}>
                     <input
                       className="input"
                       value={l.name}
@@ -259,7 +281,8 @@ export function TapHoldTab({ project }: { project: Project }) {
             {addSettingButton}
           </EmptyState>
         )}
-        {project.tapHolds.length > 0 && (
+        {project.tapHolds.length > 0 && shownSettings.length === 0 && <p className="field-hint">{nothingMatches}</p>}
+        {shownSettings.length > 0 && (
           <div className="panel-box">
             <div className="rows">
               <div className="row kicker" style={{ ['--row-cols' as string]: COLS }}>
@@ -312,7 +335,7 @@ export function TapHoldTab({ project }: { project: Project }) {
                 <span />
                 <span />
               </div>
-              {project.tapHolds.map((s) => {
+              {shownSettings.map((s) => {
                 const holdKeys = s.holdOnKeys ?? [];
                 const lists = s.holdOnLists ?? [];
                 const free = project.keyLists.filter((l) => !lists.includes(l.id));
@@ -340,7 +363,7 @@ export function TapHoldTab({ project }: { project: Project }) {
                   );
                 };
                 return (
-                  <div key={s.id} className="row-group">
+                  <div key={s.id} className="row-group" {...findAttr('taphold:' + s.id)}>
                     <div key={s.id} className="row" style={{ ['--row-cols' as string]: COLS }}>
                       <KeyChips
                         items={s.keycodes.map((value) => ({

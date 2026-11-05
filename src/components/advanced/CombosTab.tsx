@@ -20,6 +20,7 @@ import { anyModalOpen } from '../Modal';
 import { EmptyState } from '../EmptyState';
 import { Hint, InfoTip } from '../InfoTip';
 import { count, t } from '../../i18n';
+import { findAttr, useFindJump, useListFilter } from '../../lib/find';
 import { QMK_DOCS } from '../../lib/qmkDocs';
 import { deletedToast } from '../../lib/undoToast';
 import { whyDisabled } from '../../lib/whyDisabled';
@@ -43,7 +44,7 @@ export function CombosTab({ project, active: tabActive = true }: { project: Proj
   const [current, setCurrent] = useState<string | null>(project.combos[0]?.id ?? null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [keyFilter, setKeyFilter] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useListFilter();
   const [layerPick, setLayerFilter] = useState<ComboLayerFilter>('all');
   const [pick, setPick] = useState<Pick | null>(null);
 
@@ -120,6 +121,13 @@ export function CombosTab({ project, active: tabActive = true }: { project: Proj
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  });
+
+  useFindJump('combo:', (id) => {
+    setCurrent(id);
+    setKeyFilter(null);
+    setLayerFilter('all');
+    setPick(null);
   });
 
   if (!active || !labelCtx) return null;
@@ -271,6 +279,7 @@ export function CombosTab({ project, active: tabActive = true }: { project: Proj
               <input
                 className="input"
                 type="search"
+                data-list-filter=""
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t('Search by name, key or result', 'Поиск по имени, клавише или результату')}
@@ -311,6 +320,7 @@ export function CombosTab({ project, active: tabActive = true }: { project: Proj
             {shown.map((c) => (
               <button
                 key={c.id}
+                {...findAttr('combo:' + c.id)}
                 className={`row combo-row ${c.id === current ? 'is-active' : ''}`}
                 onClick={() => setCurrent(c.id)}
                 onMouseEnter={() => setHovered(c.id)}

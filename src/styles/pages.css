@@ -524,3 +524,47 @@
   align-items: center;
   gap: 8px;
 }
+
+/* A tab's filter box (ListFilter): the box takes the line, the count and the tab's buttons follow it. */
+.list-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.list-filter {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 200px;
+  max-width: 480px;
+  color: var(--text-label);
+}
+
+.list-filter .input {
+  flex: 1;
+}
+
+/* The item a search jump landed on flashes for a moment. */
+.is-found {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+  animation: found-flash 1.6s ease-out;
+}
+
+@keyframes found-flash {
+  0%,
+  40% {
+    outline-color: var(--accent-color);
+    background-color: color-mix(in srgb, var(--accent-color) 18%, transparent);
+  }
+  100% {
+    outline-color: transparent;
+  }
+}
+
+[data-motion='reduced'] .is-found {
+  animation: none;
+}
