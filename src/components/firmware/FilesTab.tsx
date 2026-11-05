@@ -214,7 +214,7 @@ export function FilesTab() {
         </div>
       </div>
       {matrixMismatch && (
-        <div className="notice" style={{ borderColor: 'var(--danger-color)' }}>
+        <div className="notice" role="alert" style={{ borderColor: 'var(--danger-color)' }}>
           <span>
             {t('The target matrix', 'Матрица target')} {sources!.info.matrix!.rows}×{sources!.info.matrix!.cols} {t('differs from the project', 'не совпадает с проектом')}{' '}
             {project.hardware.matrix.rows}×{project.hardware.matrix.cols} —{' '}

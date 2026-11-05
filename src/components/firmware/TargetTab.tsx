@@ -193,7 +193,7 @@ export function TargetTab() {
                   </p>
                 ) : (
                   <>
-                    <div className="notice" style={{ borderColor: 'var(--danger-color)', display: 'block' }}>
+                    <div className="notice" role="alert" style={{ borderColor: 'var(--danger-color)', display: 'block' }}>
                       <p>
                         {t(
                           "NAVI won't build this folder: these files contain code it can't check as safe (make would run it on this computer):",
@@ -286,7 +286,7 @@ export function TargetTab() {
                   </p>
                 ))}
                 {sameUsb === false && (
-                  <div className="notice" style={{ borderColor: 'var(--danger-color)' }}>
+                  <div className="notice" role="alert" style={{ borderColor: 'var(--danger-color)' }}>
                     <span>
                       {t(
                         'These sources describe a keyboard with another USB ID. Flashing firmware built for another board can make your keyboard stop working until you flash the right firmware again (on RP2040 the bootloader in ROM cannot be damaged).',
@@ -306,7 +306,7 @@ export function TargetTab() {
         </section>
       </div>
       {project.hardware.usb.vid === 0xafc5 && (
-        <div className="notice">
+        <div className="notice" role="status">
           <span>
             {t(
               'Your keyboard (lucky_studio Dilemma_4X6) is a clone with its own firmware: it is not in QMK. The closest official target is bastardkb/dilemma/4x6_4 (Dilemma Max: same 10×6 matrix, RP2040 and key positions as on your photo). Not confirmed: the board pins and the column order of the right half (in the seller’s firmware the inner column is 0, in the official one it is 5 — the right half may come out mirrored). Before trying your build on the keyboard, save its current firmware (tab “flash”) — that copy brings everything back.',

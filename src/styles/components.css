@@ -539,3 +539,12 @@
 :where([data-focus-ring]) .slider:focus-visible::-moz-range-thumb {
   opacity: 1;
 }
+
+.error-details {
+  margin-top: 4px;
+}
+
+.error-details summary {
+  cursor: pointer;
+  color: var(--text-label);
+}

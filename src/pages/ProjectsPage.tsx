@@ -44,17 +44,19 @@ import { toast, toastError } from '../store/toastStore';
 import { locale, t } from '../i18n';
 import { ListFilter } from '../components/ListFilter';
 import { findAttr, matchesQuery, useListFilter } from '../lib/find';
+import { ErrorDetails, rawError } from '../components/ErrorDetails';
 
 const ICON = { size: 15, strokeWidth: 1.5 };
 
 function Issues({ issues }: { issues: (ValidationIssue | ImportIssue)[] }) {
   if (!issues.length) return null;
   return (
-    <ul className="issue-list">
+    <ul className="issue-list" role={issues.some((i) => i.level === 'error') ? 'alert' : 'status'}>
       {issues.slice(0, 40).map((i, n) => (
         <li key={n} className={`issue issue--${i.level}`}>
           <span className="issue-where">{i.level === 'error' ? 'err' : 'warn'}</span>
           {'path' in i && i.path && <code>{i.path}</code>} {i.message}
+          {'detail' in i && <ErrorDetails text={i.detail} />}
         </li>
       ))}
       {issues.length > 40 && <li className="issue issue--warning">… +{issues.length - 40}</li>}
@@ -97,7 +99,7 @@ function NewProject() {
         if (!iss.some((i) => i.level === 'error')) navigate({ section: 'keyboard' });
       }
     } catch (err) {
-      setIssues([{ level: 'error', message: (err as Error).message }]);
+      setIssues([{ level: 'error', message: t('Couldn’t open the linked file. Check that it still exists and can be read, then try again.', 'Не удалось открыть связанный файл. Проверьте, что он на месте и читается, и повторите.'), detail: rawError(err) }]);
     }
   };
 
@@ -118,7 +120,7 @@ function NewProject() {
     try {
       json = JSON.parse(file.text);
     } catch (err) {
-      setIssues([{ level: 'error', message: `${file.name}: ${(err as Error).message}` }]);
+      setIssues([{ level: 'error', message: t(`Couldn’t read ${file.name} as JSON. Pick a NAVI project, a QMK keymap.json or info.json, a VIA backup or definition, or a KLE file.`, `Не удалось прочитать ${file.name} как JSON. Выберите проект NAVI, QMK keymap.json или info.json, резервную копию или описание VIA либо файл KLE.`), detail: rawError(err) }]);
       return;
     }
     const kind = detectFileKind(json);
@@ -169,7 +171,7 @@ function NewProject() {
         setIssues([{ level: 'error', message: t('Unknown file format', 'Неизвестный формат файла') }]);
       }
     } catch (err) {
-      setIssues([{ level: 'error', message: (err as Error).message }]);
+      setIssues([{ level: 'error', message: t('Couldn’t import this file. Check that it is a valid project, QMK, VIA or KLE file and try again.', 'Не удалось импортировать файл. Проверьте, что это корректный файл проекта, QMK, VIA или KLE, и повторите.'), detail: rawError(err) }]);
     }
   };
 
@@ -347,6 +349,7 @@ function ProjectList() {
   const currentId = useProjectStore((s) => s.project?.id);
   const open = useProjectStore((s) => s.open);
   const remove = useProjectStore((s) => s.remove);
+  const restoreRemoved = useProjectStore((s) => s.restoreRemoved);
   const create = useProjectStore((s) => s.create);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [query, setQuery] = useListFilter();
@@ -395,17 +398,33 @@ function ProjectList() {
                   className={`icon-btn ${confirm === p.id ? 'is-danger' : ''}`}
                   title={confirm === p.id ? t('Click again to delete', 'Ещё раз — удалить') : t('Delete (to trash folder)', 'Удалить (в папку .trash)')}
                   aria-label={t('Delete', 'Удалить')}
+                  aria-describedby={`delete-hint-${p.id}`}
                   onClick={() => {
                     if (confirm !== p.id) {
                       setConfirm(p.id);
                       setTimeout(() => setConfirm(null), 4000);
                       return;
                     }
-                    void remove(p.id).then(() => toast(t('Project moved to trash', 'Проект перенесён в корзину')));
+                    void remove(p.id).then(() =>
+                      toast(t('Project moved to trash', 'Проект перенесён в корзину'), 'info', {
+                        action: {
+                          label: t('Undo', 'Отменить'),
+                          run: () =>
+                            void restoreRemoved(p.id).then((ok) =>
+                              ok
+                                ? toast(t('Project restored', 'Проект восстановлен'))
+                                : toast(t('Couldn’t restore the project. Its folder is in the .trash folder of your projects.', 'Не удалось восстановить проект. Его папка лежит в .trash среди ваших проектов.'), 'error'),
+                            ),
+                        },
+                      }),
+                    );
                   }}
                 >
                   <Trash2 {...ICON} />
                 </button>
+                <span hidden id={`delete-hint-${p.id}`}>
+                  {confirm === p.id ? t('Click again to delete', 'Ещё раз — удалить') : t('Moves the project to the trash folder; Undo is offered', 'Переносит проект в папку .trash; можно отменить')}
+                </span>
               </div>
             </div>
           ))}
@@ -469,7 +488,7 @@ function CurrentProject() {
         }
       } else setIssues([{ level: 'error', message: t('Expected QMK keymap.json or a VIA layout backup', 'Ожидался QMK keymap.json или резервная копия VIA') }]);
     } catch (err) {
-      setIssues([{ level: 'error', message: (err as Error).message }]);
+      setIssues([{ level: 'error', message: t('Couldn’t import this file. Check that it is a valid QMK keymap.json or a VIA backup and try again.', 'Не удалось импортировать файл. Проверьте, что это корректный QMK keymap.json или резервная копия VIA, и повторите.'), detail: rawError(err) }]);
     }
   };
 

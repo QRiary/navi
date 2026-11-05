@@ -79,7 +79,7 @@ export function WriteDialog({ onClose }: { onClose: () => void }) {
       }
     >
       {plan.warnings.map((w, i) => (
-        <div key={i} className="notice" style={{ borderColor: w.level === 'error' ? 'var(--danger-color)' : undefined }}>
+        <div key={i} className="notice" role={w.level === 'error' ? 'alert' : 'status'} style={{ borderColor: w.level === 'error' ? 'var(--danger-color)' : undefined }}>
           <span>{lang === 'ru' ? w.message.ru : w.message.en}</span>
         </div>
       ))}
@@ -139,7 +139,7 @@ export function WriteDialog({ onClose }: { onClose: () => void }) {
         </>
       )}
       {result && (
-        <div className={`notice`} style={{ borderColor: result.verified ? 'var(--meter-to)' : 'var(--danger-color)' }}>
+        <div className="notice" role={result.verified ? 'status' : 'alert'} style={{ borderColor: result.verified ? 'var(--meter-to)' : 'var(--danger-color)' }}>
           <span>
             {result.verified
               ? t(
@@ -151,7 +151,7 @@ export function WriteDialog({ onClose }: { onClose: () => void }) {
         </div>
       )}
       {error && (
-        <div className="notice" style={{ borderColor: 'var(--danger-color)', color: 'var(--danger-color)' }}>
+        <div className="notice" role="alert" style={{ borderColor: 'var(--danger-color)', color: 'var(--danger-color)' }}>
           {error} — {t('part of the changes may have been written; reconnect and compare again.', 'часть изменений могла записаться; переподключите и сравните ещё раз.')}
         </div>
       )}

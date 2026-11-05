@@ -40,7 +40,7 @@ export function SetupTab({ active = true }: { active?: boolean }) {
 
   if (!navi) {
     return (
-      <div className="notice">
+      <div className="notice" role="status">
         <span>{t('Building and flashing need the desktop app (npm run app).', 'Сборке и прошивке нужно настольное приложение (npm run app).')}</span>
       </div>
     );

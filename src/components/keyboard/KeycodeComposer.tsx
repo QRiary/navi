@@ -4,7 +4,7 @@
  * (layers 0–15 for LT/LM, only basic keys for the tap part) are checked there too.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { decode, encode, KeycodeError, LAYER_FN_RANGES, toQmk, tryParseQmk, type Decoded, type LayerFn } from '../../core/keycodes/codec';
+import { decode, encode, LAYER_FN_RANGES, toQmk, tryParseQmk, type Decoded, type LayerFn } from '../../core/keycodes/codec';
 import type { KeycodeSpec } from '../../core/keycodes/spec';
 import { preferredName } from '../../core/keycodes/codec';
 import type { HoldAction, Project } from '../../core/project/types';
@@ -17,6 +17,7 @@ import { useQmkStore } from '../../store/qmkStore';
 import { t } from '../../i18n';
 import { QMK_DOCS } from '../../lib/qmkDocs';
 import { Hint, InfoTip } from '../InfoTip';
+import { ErrorDetails, rawError } from '../ErrorDetails';
 
 type Kind = 'basic' | 'mods' | 'tap-hold' | 'layer' | 'layer-mod' | 'one-shot' | 'tap-dance' | 'unicode' | 'raw';
 
@@ -187,6 +188,12 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
   const [kind, setKind] = useState<Kind>(kindOf(decoded));
   const [error, setError] = useState<string | null>(null);
   const [raw, setRaw] = useState(toQmk(spec, value));
+  const [errorDetail, setErrorDetail] = useState<{ for: string; text: string } | null>(null);
+  /** An error sentence with the raw text behind “Details”. */
+  const failWith = (message: string, err: unknown) => {
+    setErrorDetail({ for: message, text: rawError(err) });
+    setError(message);
+  };
   useEffect(() => {
     setKind(kindOf(decoded));
     setRaw(toQmk(spec, value));
@@ -220,7 +227,7 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
     try {
       if (plain === null || clash) ensureTapHold(spec, project, tap, hold, reservedStandInBases(spec, project)); // the slot errors
     } catch (err) {
-      return setError(err instanceof Error ? err.message : String(err));
+      return failWith(t('Couldn’t set the hold action. Pick it again or choose another key.', 'Не удалось задать действие удержания. Выберите его ещё раз или другую клавишу.'), err);
     }
     if (plain !== null && (!clash || !onTapHold)) onChange(plain);
     else if (onTapHold) onTapHold(tap, hold);
@@ -239,7 +246,7 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
       onChange(encode(spec, d));
       setError(null);
     } catch (err) {
-      setError(err instanceof KeycodeError ? err.message : String(err));
+      failWith(t('Couldn’t set this key. Check the values above and try again.', 'Не удалось задать клавишу. Проверьте значения выше и повторите.'), err);
     }
   };
 
@@ -405,10 +412,11 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
         </form>
       )}
       {error && (
-        <p className="field-hint" style={{ color: 'var(--danger-color)' }}>
+        <p className="field-hint" role="alert" style={{ color: 'var(--danger-color)' }}>
           {error}
         </p>
       )}
+      {error && errorDetail?.for === error && <ErrorDetails text={errorDetail.text} />}
     </div>
   );
 }

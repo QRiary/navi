@@ -60,6 +60,25 @@ describe('project storage', () => {
     expect(fs.readdirSync(path.join(tmp, '.trash'))).toHaveLength(1);
   });
 
+  it('restore brings the newest deleted copy back from .trash', () => {
+    const store = createProjectStore(tmp);
+    const text = (name) => JSON.stringify({ name, updatedAt: '2026-01-01' });
+    expect(store.restore('p1')).toBe(false); // nothing deleted yet
+    store.save('p1', text('A'));
+    store.remove('p1');
+    expect(store.list()).toEqual([]);
+    expect(store.restore('p1')).toBe(true);
+    expect(store.list().map((p) => p.name)).toEqual(['A']);
+    expect(fs.readdirSync(path.join(tmp, '.trash'))).toHaveLength(0);
+    // A taken id is not overwritten; another project's trash is not taken.
+    store.save('p10', text('B'));
+    store.remove('p10');
+    expect(store.restore('p1')).toBe(false);
+    store.save('p10', text('C'));
+    expect(store.restore('p10')).toBe(false);
+    expect(() => store.restore('../x')).toThrow();
+  });
+
   it('history is limited to 50 versions', () => {
     const store = createProjectStore(tmp);
     for (let i = 0; i < 55; i++) store.save('p', text(`v${i}`, String(i)));

@@ -10,6 +10,7 @@ import { CHANNEL, LIGHT_VALUE, ViaDisconnectedError, ViaError } from '../core/vi
 import { applyWrite, type ApplyResult, type WritePlan } from '../core/via/sync';
 import type { LightingState } from '../core/project/types';
 import { deviceKey, hidSupported, listViaDevices, WebHidTransport } from '../device/webhid';
+import { t } from '../i18n';
 
 export interface DeviceListItem {
   key: string;
@@ -30,6 +31,9 @@ export interface DeviceState {
   snapshot: DeviceSnapshot | null;
   progress: { part: number; what: string } | null;
   error: string | null;
+  /** The raw technical text behind `error` (which is a plain sentence). */
+  errorDetail: string | null;
+  /** The raw technical text behind `error` (a sentence). */
   lastWrite: (ApplyResult & { at: string }) | null;
   testerActive: boolean;
   /** Key tester: whether non-zero data ever came (if not, the firmware has probably disabled it). */
@@ -57,9 +61,14 @@ function describe(d: HIDDevice): DeviceListItem {
 }
 
 export const useDeviceStore = create<DeviceState>()((set, get) => {
-  const fail = (err: unknown) => {
+  const fail = (err: unknown, sentence?: string) => {
     const disconnected = err instanceof ViaDisconnectedError;
-    set({ status: disconnected ? 'disconnected' : 'error', error: (err as Error).message, progress: null });
+    set({
+      status: disconnected ? 'disconnected' : 'error',
+      error: sentence ?? t('The keyboard stopped answering. Check it is plugged in, then try again.', 'Клавиатура перестала отвечать. Проверьте подключение и повторите.'),
+      errorDetail: err instanceof Error ? err.message : String(err),
+      progress: null,
+    });
     if (disconnected) {
       client = null;
       transport = null;
@@ -68,7 +77,7 @@ export const useDeviceStore = create<DeviceState>()((set, get) => {
 
   const busy = async <T,>(what: string, fn: () => Promise<T>): Promise<T> => {
     if (!client) throw new ViaError('the keyboard is not connected');
-    set({ status: 'busy', progress: { part: 0, what }, error: null });
+    set({ status: 'busy', progress: { part: 0, what }, error: null, errorDetail: null });
     try {
       const res = await fn();
       set({ status: 'connected', progress: null });
@@ -87,7 +96,7 @@ export const useDeviceStore = create<DeviceState>()((set, get) => {
         get().stopTester();
         client = null;
         transport = null;
-        set({ status: 'disconnected', error: null, progress: null });
+        set({ status: 'disconnected', error: null, errorDetail: null, progress: null });
       }
       void get().refresh();
     });
@@ -103,6 +112,7 @@ export const useDeviceStore = create<DeviceState>()((set, get) => {
     snapshot: null,
     progress: null,
     error: null,
+    errorDetail: null,
     lastWrite: null,
     testerActive: false,
     testerSawData: false,
@@ -117,11 +127,11 @@ export const useDeviceStore = create<DeviceState>()((set, get) => {
     async connect(key) {
       const device = hidByKey.get(key);
       if (!device) {
-        set({ status: 'error', error: 'device not found — reconnect it and refresh' });
+        set({ status: 'error', error: t('Couldn’t find the keyboard. Unplug it, plug it back in and refresh the list.', 'Клавиатура не найдена. Отключите её, подключите снова и обновите список.'), errorDetail: 'device not found' });
         return false;
       }
       await get().disconnect();
-      set({ status: 'connecting', error: null, current: describe(device), progress: { part: 0, what: 'protocol' } });
+      set({ status: 'connecting', error: null, errorDetail: null, current: describe(device), progress: { part: 0, what: 'protocol' } });
       try {
         transport = await WebHidTransport.open(device);
         client = new ViaClient(transport);
@@ -137,7 +147,7 @@ export const useDeviceStore = create<DeviceState>()((set, get) => {
         set({ status: 'connected', matrix, snapshot, progress: null });
         return true;
       } catch (err) {
-        fail(err);
+        fail(err, t('Couldn’t connect to the keyboard. Unplug it and plug it back in, then try again.', 'Не удалось подключиться к клавиатуре. Отключите её и подключите снова, затем повторите.'));
         return false;
       }
     },
@@ -148,7 +158,7 @@ export const useDeviceStore = create<DeviceState>()((set, get) => {
       client = null;
       transport = null;
       if (t) await t.close();
-      set({ status: 'idle', current: null, caps: null, matrix: null, snapshot: null, progress: null, error: null });
+      set({ status: 'idle', current: null, caps: null, matrix: null, snapshot: null, progress: null, error: null, errorDetail: null });
     },
 
     async reread() {

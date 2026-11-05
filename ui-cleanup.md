@@ -314,20 +314,21 @@ Macros, Hardware, Device, Projects, Firmware, the composer and the picker). Line
 ## Step 10: errors, deletes, keyboard access (🟡 5/10)
 
 **Do**
-1. Raw `err.message` / `String(err)` still shown (Step 4.6 missed these): device connect (`deviceStore.ts:62` →
+1. ✅ Raw `err.message` / `String(err)` still shown (Step 4.6 missed these): device connect (`deviceStore.ts:62` →
    `DevicePage.tsx:203-205`), flash result (`FlashTab.tsx:163,179`, shown at `:392`), project import/open
    issues (`ProjectsPage.tsx:100,121,172,472`, `HardwarePage.tsx:620`: a raw `JSON.parse` error), composer
    (`KeycodeComposer.tsx:223,242`). A sentence saying what failed and what to do; raw text behind "details".
-2. Deletes (Step 4.5 missed these): project delete (`ProjectsPage.tsx:404`, moved to `.trash`, toast without
+2. ✅ Deletes (Step 4.5 missed these): project delete (`ProjectsPage.tsx:404`, moved to `.trash`, toast without
    Undo: add restore; the armed second click also changes `aria-label`), "remove pin description"
    (`PinsTab.tsx:342`, silent), macro "clear" (`MacrosPage.tsx`, silent): `deletedToast` with Undo.
-3. Encoder inline edit cancels on blur (`EncodersPage.tsx:60`): a right-click or stray click throws away a
+3. ✅ Encoder inline edit cancels on blur (`EncodersPage.tsx:60`): a right-click or stray click throws away a
    half-typed expression. Blur commits when valid, else keeps the text and the error.
-4. Result and error notices announce themselves: `role="status"` / `role="alert"` on the flash result
+4. ✅ Result and error notices announce themselves: `role="status"` / `role="alert"` on the flash result
    (`FlashTab.tsx:392`), device errors (`DevicePage.tsx:205`) and the other `.notice` blocks.
-5. Disabled reasons reach the keyboard and screen readers (Step 5 leftover): `whyDisabled` keeps the button
+5. ✅ Disabled reasons reach the keyboard and screen readers (Step 5 leftover): `whyDisabled` keeps the button
    focusable (`aria-disabled` + blocked click) or ties the reason with `aria-describedby`.
    `hintsConvention.test.ts` also rejects a bare `disabled` attribute, not only `disabled={…}`.
+   Done as: `ErrorDetails` (inline “Details” under a sentence; `deviceStore.error` is now the sentence, `errorDetail` the raw text; import issues carry `detail`). Project delete: `projects.restore` (newest `.trash/<id>-<time>`) via `navi:projects:restore`; Undo does not re-link the project to its file (the link is dropped on delete). Delete button `aria-label` was already stable; the armed state is in `aria-describedby`. Encoder blur: `lib/encoderEdit.ts`. `whyDisabled` returns `aria-disabled` + `title` (accessible description); `lib/ariaDisabled.ts` blocks clicks, and mouse/keys on a select. Left raw: `WriteDialog` error and `BuildTab` error (not listed).
 
 ## Step 11: structure leftovers (🟠 6/10)
 

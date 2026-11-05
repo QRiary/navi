@@ -236,7 +236,7 @@ export function FeatureNote({ project, feature, firstUse }: { project: Project; 
   const note = buildNote(project, feature, spec, hardwareFacts(project), firstUse);
   const lang = getLanguage();
   return (
-    <div className="notice">
+    <div className="notice" role="status">
       <span>
         {lang === 'ru' ? note.text.ru : note.text.en} <a href={href({ section: 'firmware', tab: 'features' })}>{t('Firmware features', 'Функции прошивки')}</a>
       </span>

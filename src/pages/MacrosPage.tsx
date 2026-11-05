@@ -19,6 +19,7 @@ import { assignToSelection } from '../lib/keymapActions';
 import { useDeviceStore } from '../store/deviceStore';
 import { useProjectStore, useSpec } from '../store/projectStore';
 import { getLanguage, t } from '../i18n';
+import { deletedToast } from '../lib/undoToast';
 import { ListFilter } from '../components/ListFilter';
 import { findAttr, matchesQuery, useFindJump, useListFilter } from '../lib/find';
 
@@ -201,7 +202,11 @@ export function MacrosPage() {
                     {recording ? <Square {...ICON} /> : <Circle {...ICON} />} {recording ? t('stop recording', 'остановить запись') : t('record keys', 'записать нажатия')}
                   </button>
                   {macro.steps.length > 0 && (
-                    <button className="btn btn--ghost" onClick={() => setSteps([], t('clear macro', 'очистить макрос'))}>
+                    <button className="btn btn--ghost" onClick={() => {
+                        const hadSteps = macro.steps.length > 0;
+                        setSteps([], t('clear macro', 'очистить макрос'));
+                        if (hadSteps) deletedToast(t(`steps of ${macro.name}`, `шаги ${macro.name}`));
+                      }}>
                       {t('clear', 'очистить')}
                     </button>
                   )}

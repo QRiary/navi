@@ -193,6 +193,8 @@ export interface NaviBridge {
     revisions(id: string): Promise<Revision[]>;
     readRevision(id: string, file: string): Promise<string>;
     remove(id: string): Promise<void>;
+    /** Undo of remove: the project comes back from the trash (not its file link). false when there is nothing to restore. */
+    restore(id: string): Promise<boolean>;
   };
   qmk: {
     detect(settings: QmkSettings): Promise<QmkEnvironment>;

@@ -14,6 +14,7 @@ import { hardwareFacts } from '../lib/hardwareFacts';
 import { useActive, useLabelContext } from '../lib/projectContext';
 import { href, navigate } from '../lib/router';
 import { QMK_DOCS } from '../lib/qmkDocs';
+import { resolveBlur } from '../lib/encoderEdit';
 import { EmptyState } from '../components/EmptyState';
 import { Hint } from '../components/InfoTip';
 import { useEditorStore } from '../store/editorStore';
@@ -44,6 +45,17 @@ function CodeCell({ value, onSet }: { value: number; onSet: (v: number) => void 
   if (!labelCtx) return null;
   const l = keyLabel(spec, value, labelCtx);
   const name = friendlyName(spec, value, labelCtx);
+  const cancel = () => {
+    setEditing(null);
+    setError(null);
+  };
+  /** Leaving the field commits a valid expression; an invalid one stays open with its error. */
+  const onBlur = () => {
+    const r = resolveBlur(spec, editing ?? '', value);
+    if (r.action === 'error') return setError(r.error);
+    if (r.action === 'commit') onSet(r.value);
+    cancel();
+  };
   if (editing !== null) {
     return (
       <form
@@ -57,7 +69,7 @@ function CodeCell({ value, onSet }: { value: number; onSet: (v: number) => void 
           setError(null);
         }}
       >
-        <input autoFocus value={editing} onChange={(e) => setEditing(e.target.value)} onBlur={() => setEditing(null)} onKeyDown={(e) => e.key === 'Escape' && setEditing(null)} spellCheck={false} />
+        <input autoFocus value={editing} onChange={(e) => setEditing(e.target.value)} onBlur={onBlur} onKeyDown={(e) => e.key === 'Escape' && cancel()} spellCheck={false} />
         <span className="expr-result">{error ?? 'enter'}</span>
       </form>
     );
@@ -116,7 +128,7 @@ export function EncodersPage() {
 
   return (
     <div className="page">
-      <div className="notice">
+      <div className="notice" role="status">
         <span>
           <strong>
             <Hint

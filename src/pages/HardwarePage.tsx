@@ -34,6 +34,7 @@ import { QMK_DOCS } from '../lib/qmkDocs';
 import { whyDisabled } from '../lib/whyDisabled';
 import { Hint } from '../components/InfoTip';
 import { PinsTab } from '../components/hardware/PinsTab';
+import { ErrorDetails, rawError } from '../components/ErrorDetails';
 
 const ICON = { size: 15, strokeWidth: 1.5 };
 
@@ -583,6 +584,7 @@ function ProfileTab({ project }: { project: Project }) {
 function VariantsTab({ project }: { project: Project }) {
   const apply = useProjectStore((s) => s.apply);
   const [msg, setMsg] = useState<string[]>([]);
+  const [msgDetail, setMsgDetail] = useState('');
   const importVariant = async () => {
     const file = await openTextFile(JSON_FILTERS);
     if (!file) return;
@@ -616,8 +618,10 @@ function VariantsTab({ project }: { project: Project }) {
         toast(t('Geometry variant added and activated', 'Вариант геометрии добавлен и выбран'));
       }
       setMsg(notes);
+      setMsgDetail('');
     } catch (err) {
-      setMsg([(err as Error).message]);
+      setMsg([t('Couldn’t read this file as a geometry. Pick a QMK info.json, a VIA definition or a KLE file.', 'Не удалось прочитать файл как геометрию. Выберите QMK info.json, описание VIA или файл KLE.')]);
+      setMsgDetail(rawError(err));
     }
   };
   return (
@@ -692,12 +696,17 @@ function VariantsTab({ project }: { project: Project }) {
         )}
       </div>
       {msg.length > 0 && (
-        <ul className="issue-list">
+        <ul className="issue-list" role={msgDetail ? 'alert' : 'status'}>
           {msg.map((m, i) => (
             <li key={i} className="issue issue--warning">
               {m}
             </li>
           ))}
+          {msgDetail && (
+            <li className="issue">
+              <ErrorDetails text={msgDetail} />
+            </li>
+          )}
         </ul>
       )}
       <p className="field-hint">{new Date(project.updatedAt).toLocaleString(locale())}</p>

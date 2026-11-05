@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('navi', {
     revisions: invoke('navi:projects:revisions'),
     readRevision: invoke('navi:projects:read-revision'),
     remove: invoke('navi:projects:remove'),
+    restore: invoke('navi:projects:restore'),
   },
   qmk: {
     detect: invoke('navi:qmk:detect'),

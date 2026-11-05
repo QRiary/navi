@@ -23,10 +23,11 @@ import { EmptyState } from '../EmptyState';
 import { Hint } from '../InfoTip';
 import { locale, t } from '../../i18n';
 import { Modal } from '../Modal';
+import { ErrorDetails, rawError } from '../ErrorDetails';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
-type FlashStep = { phase: 'idle' } | { phase: 'flashing'; detail: string } | { phase: 'waiting'; since: number } | { phase: 'done'; ok: boolean; text: string };
+type FlashStep = { phase: 'idle' } | { phase: 'flashing'; detail: string } | { phase: 'waiting'; since: number } | { phase: 'done'; ok: boolean; text: string; detail?: string };
 
 function mb(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(bytes >= 1024 * 1024 ? 0 : 2)} MB`;
@@ -152,15 +153,16 @@ export function FlashTab({ active = true }: { active?: boolean }) {
           phase: 'done',
           ok: false,
           text: t(
-            `The file was ${res.copied ? 'copied' : 'not fully copied'}, but the bootloader drive is still there — the board did not accept the firmware. ${res.copyError ?? ''}`,
-            `Файл ${res.copied ? 'скопирован' : 'скопирован не полностью'}, но диск загрузчика остался — плата не приняла прошивку. ${res.copyError ?? ''}`,
+            `The file was ${res.copied ? 'copied' : 'not fully copied'}, but the bootloader drive is still there — the board did not accept the firmware. Unplug the board, put it in bootloader mode again and retry.`,
+            `Файл ${res.copied ? 'скопирован' : 'скопирован не полностью'}, но диск загрузчика остался — плата не приняла прошивку. Отключите плату, снова переведите в режим загрузчика и повторите.`,
           ),
+          detail: res.copyError ?? undefined,
         });
         return;
       }
       await waitForKeyboard();
     } catch (err) {
-      setStep({ phase: 'done', ok: false, text: (err as Error).message });
+      setStep({ phase: 'done', ok: false, text: t('Couldn’t flash the board. Check it is still in bootloader mode and plugged in, then try again.', 'Не удалось прошить плату. Проверьте, что она всё ещё в режиме загрузчика и подключена, и повторите.'), detail: rawError(err) });
     }
   };
 
@@ -176,7 +178,7 @@ export function FlashTab({ active = true }: { active?: boolean }) {
       }
       await waitForKeyboard();
     } catch (err) {
-      setStep({ phase: 'done', ok: false, text: (err as Error).message });
+      setStep({ phase: 'done', ok: false, text: t('Couldn’t run qmk flash. Check the QMK setup (Firmware → Setup) and that the board is in bootloader mode, then try again.', 'Не удалось запустить qmk flash. Проверьте настройку QMK (Прошивка → Настройка) и что плата в режиме загрузчика, и повторите.'), detail: rawError(err) });
     }
   };
 
@@ -388,8 +390,11 @@ export function FlashTab({ active = true }: { active?: boolean }) {
             )}
             {step.phase === 'waiting' && <span className="kicker">{t('waiting for the keyboard to come back…', 'жду, пока клавиатура вернётся…')}</span>}
             {step.phase === 'done' && (
-              <div className="notice" style={{ borderColor: step.ok ? 'var(--meter-to)' : 'var(--danger-color)' }}>
-                <span>{step.text}</span>
+              <div className="notice" role={step.ok ? 'status' : 'alert'} style={{ borderColor: step.ok ? 'var(--meter-to)' : 'var(--danger-color)' }}>
+                <div>
+                  <span>{step.text}</span>
+                  {!step.ok && <ErrorDetails text={step.detail} />}
+                </div>
               </div>
             )}
           </div>

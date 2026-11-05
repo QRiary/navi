@@ -14,6 +14,7 @@ import { toast } from '../../store/toastStore';
 import { getLanguage, t } from '../../i18n';
 import { QMK_DOCS } from '../../lib/qmkDocs';
 import { whyDisabled } from '../../lib/whyDisabled';
+import { deletedToast } from '../../lib/undoToast';
 import { EmptyState } from '../EmptyState';
 import { Hint } from '../InfoTip';
 
@@ -153,7 +154,7 @@ export function PinsTab({ project }: { project: Project }) {
   return (
     <div className="page">
       {pins.source && (
-        <div className="notice" style={{ borderColor: 'var(--meter-from)' }}>
+        <div className="notice" role="status" style={{ borderColor: 'var(--meter-from)' }}>
           <span>
             {t('Pins are', 'Выводы')} {pins.source}.{' '}
             {t(
@@ -339,7 +340,11 @@ export function PinsTab({ project }: { project: Project }) {
         <a className="btn btn--primary" href={href({ section: 'firmware', tab: 'target' })}>
           {t('create the target in qmk_firmware →', 'создать target в qmk_firmware →')}
         </a>
-        <button className="btn btn--ghost" onClick={() => set(null, t('remove pins', 'убрать выводы'))}>
+        <button className="btn btn--ghost" onClick={() => {
+            apply((p) => patchProject(p, { hardware: { ...p.hardware, pins: null } }), t('remove pins', 'убрать выводы'));
+            deletedToast(t('pin description', 'описание выводов'));
+          }}
+        >
           {t('remove pin description', 'удалить описание выводов')}
         </button>
       </div>

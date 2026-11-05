@@ -136,6 +136,23 @@ function createProjectStore(projectsDir) {
       fs.renameSync(dir, path.join(trash, `${safeId(id)}-${Date.now()}`));
     },
 
+    /** Undo of `remove`: moves the newest `.trash/<id>-<time>` folder back. false when there is none or the id is taken again. */
+    restore(id) {
+      const dir = dirOf(id);
+      if (fs.existsSync(dir)) return false;
+      const trash = joinInside(projectsDir, '.trash');
+      if (!fs.existsSync(trash)) return false;
+      const prefix = `${safeId(id)}-`;
+      const stamp = (name) => (name.startsWith(prefix) && /^\d+$/.test(name.slice(prefix.length)) ? Number(name.slice(prefix.length)) : -1);
+      const newest = fs
+        .readdirSync(trash)
+        .filter((n) => stamp(n) >= 0)
+        .sort((a, b) => stamp(b) - stamp(a))[0];
+      if (!newest) return false;
+      fs.renameSync(path.join(trash, newest), dir);
+      return true;
+    },
+
     exists(id) {
       return fs.existsSync(dirOf(id));
     },

@@ -222,6 +222,7 @@ function registerIpc() {
   ipcMain.handle('navi:projects:save', (_e, id, text, label) => store.save(id, text, label));
   ipcMain.handle('navi:projects:revisions', (_e, id) => store.revisions(id));
   ipcMain.handle('navi:projects:read-revision', (_e, id, file) => store.readRevision(id, file));
+  ipcMain.handle('navi:projects:restore', (_e, id) => store.restore(id));
   ipcMain.handle('navi:projects:remove', (_e, id) => {
     store.remove(id);
     links.unlink(id);
