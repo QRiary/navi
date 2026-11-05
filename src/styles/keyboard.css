@@ -1464,3 +1464,46 @@
 :where([data-focus-ring]) .route-layer:focus-visible {
   text-decoration-thickness: 2px;
 }
+
+/* Firmware → Features: five columns (feature, now, known from, your build, needed by). In a narrow box the
+   three fixed-width columns would squeeze the two text columns to a few letters, so each row becomes two lines:
+   feature and "needed by" on top, the three settings under them. */
+.features-table {
+  container-type: inline-size;
+}
+
+.features-table > .row {
+  grid-template-columns: minmax(0, 1.4fr) 130px 150px 116px minmax(0, 1fr);
+}
+
+@container (max-width: 759px) {
+  .features-table > .row {
+    grid-template-columns: 130px 150px minmax(116px, 1fr);
+    grid-template-areas:
+      'feature feature needed'
+      'now known build';
+    row-gap: 4px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .features-table > .row > :nth-child(1) {
+    grid-area: feature;
+  }
+
+  .features-table > .row > :nth-child(2) {
+    grid-area: now;
+  }
+
+  .features-table > .row > :nth-child(3) {
+    grid-area: known;
+  }
+
+  .features-table > .row > :nth-child(4) {
+    grid-area: build;
+  }
+
+  .features-table > .row > :nth-child(5) {
+    grid-area: needed;
+  }
+}

@@ -13,6 +13,7 @@ import { isDirty, saveProject, useProjectStore } from '../../store/projectStore'
 import { WriteDialog } from '../device/WriteDialog';
 import { t } from '../../i18n';
 import { InfoTip } from '../InfoTip';
+import { Tabs } from '../Tabs';
 import { QMK_DOCS } from '../../lib/qmkDocs';
 import { whyDisabled } from '../../lib/whyDisabled';
 
@@ -85,25 +86,19 @@ function LayersCell() {
   const lastRedo = future[0]?.label;
   return (
     <div className="deck-cell deck-cell--center">
-      <div className="deck-layers" role="tablist" aria-label={t('Layers', 'Слои')}>
-        {km.layers.map((l, i) => (
-          <button
-            key={l.id}
-            role="tab"
-            aria-selected={i === layer}
-            className={`deck-layer ${i === layer ? 'is-active' : ''}`}
-            onClick={() => setLayer(i)}
-            // As on the Keyboard page's layer tabs: the keys leading to this layer light up on the keyboard.
-            onMouseEnter={() => setHoverLayer(i)}
-            onMouseLeave={() => setHoverLayer(null)}
-            onFocus={() => setHoverLayer(i)}
-            onBlur={() => setHoverLayer(null)}
-            title={`${i} · ${l.name}`}
-          >
-            {i}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        idBase="deck-layers"
+        label={t('Layers', 'Слои')}
+        className="deck-layers"
+        tabClassName="deck-layer"
+        // The layer shown changes the page itself, so the page is what these tabs control.
+        panelId="main-content"
+        items={km.layers.map((l, i) => ({ id: String(i), label: i, title: `${i} · ${l.name}` }))}
+        current={String(layer)}
+        onSelect={(id) => setLayer(Number(id))}
+        // As on the Keyboard page's layer tabs: the keys leading to this layer light up on the keyboard.
+        onHover={(id) => setHoverLayer(id === null ? null : Number(id))}
+      />
       <InfoTip label={t('layers', 'слои')} docs={QMK_DOCS.layers}>
         {t(
           'The numbers are the keymap’s layers: click one to edit that layer. Layer 0 is the lowest; keys on higher layers take over unless they are transparent.',

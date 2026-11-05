@@ -346,15 +346,24 @@ Macros, Hardware, Device, Projects, Firmware, the composer and the picker). Line
 ## Step 11: structure leftovers (🟠 6/10)
 
 **Do**
-1. The layer tab bars (Deck, Keyboard page) and the composer's kind chips onto `<Tabs>` (Step 4 leftover); tabs
+1. ✅ The layer tab bars (Deck, Keyboard page) and the composer's kind chips onto `<Tabs>` (Step 4 leftover); tabs
    not visited yet still get a panel element so `aria-controls` points somewhere.
-2. Filter boxes on Encoders, Lighting, Hardware, Firmware → Features and NAVI additions, like Step 8's (Esc
+2. ✅ Filter boxes on Encoders, Lighting, Hardware, Firmware → Features and NAVI additions, like Step 8's (Esc
    clears, shown / total count).
-3. Combos: an open combo that the filter hides closes, or the list says it's filtered out (Step 6 leftover).
-4. Firmware → Features at the smallest window (980px): "feature" and "needed by" columns keep a readable width
+3. ✅ Combos: an open combo that the filter hides closes, or the list says it's filtered out (Step 6 leftover).
+4. ✅ Firmware → Features at the smallest window (980px): "feature" and "needed by" columns keep a readable width
    (Step 5 leftover).
-5. Tips on tap dance "every tap" Shift/Ctrl columns and `ModsInput`; the Step 5 empty-state block on Hardware's
+5. ✅ Tips on tap dance "every tap" Shift/Ctrl columns and `ModsInput`; the Step 5 empty-state block on Hardware's
    "other controls", the macro step list (`MacrosPage.tsx:208`) and the build env chips (`BuildTab.tsx:120`).
+   Done as: `Tabs` got `className` / `tabClassName` / `activeClassName` (bars keep their look), `onHover` (the
+   layer tabs' key highlight), `manual` (composer: arrows only move focus, since picking a kind rewrites the key)
+   and `panelId` + `SharedTabPanel` (one panel for all tabs: the keyboard canvas, the composer's rows, the
+   generated-file views; the Deck's layer tabs control `#main-content`); `TabPanels` renders an empty hidden panel
+   for tabs not visited. Filters: Encoders (layer number/name, encoder actions by name and QMK), Hardware →
+   Variants, Firmware → Features. Skipped: Lighting (sliders, no list), Pins and Profile (forms), NAVI additions
+   (one row). Combos: the list says “The open combo … is hidden by the filters.” (kept open, not closed). Features:
+   a container query turns each row into two lines below 760px (feature + needed by, then now / known from / build),
+   measured at 980px: feature 292px, needed by 178px, no sideways scroll.
 
 ## Not in this plan
 - A redesign or new visual style: the look stays.

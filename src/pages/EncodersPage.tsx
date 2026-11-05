@@ -16,6 +16,8 @@ import { href, navigate } from '../lib/router';
 import { QMK_DOCS } from '../lib/qmkDocs';
 import { resolveBlur } from '../lib/encoderEdit';
 import { EmptyState } from '../components/EmptyState';
+import { ListFilter } from '../components/ListFilter';
+import { matchesQuery, useListFilter } from '../lib/find';
 import { Hint } from '../components/InfoTip';
 import { useEditorStore } from '../store/editorStore';
 import { useProjectStore, useSpec } from '../store/projectStore';
@@ -90,6 +92,7 @@ export function EncodersPage() {
   const setEncoderTarget = useEditorStore((s) => s.setEncoderTarget);
   const setLayer = useEditorStore((s) => s.setLayer);
   const [presetEnc, setPresetEnc] = useState(0);
+  const [query, setQuery] = useListFilter();
   const [presetLayer, setPresetLayer] = useState(0);
 
   const count = useMemo(() => {
@@ -126,6 +129,15 @@ export function EncodersPage() {
 
   const set = (layer: number, enc: number, dir: 'cw' | 'ccw', v: number) => apply((p) => setEncoder(p, keymap.id, layer, enc, dir, v), `E${enc} ${dir}`);
 
+  // A layer row matches by number, name, or what its encoders do (readable name and QMK code).
+  const actionText = (v: number) => {
+    const n = friendlyName(spec, v, labelCtx);
+    return `${n.text} ${n.qmk}`;
+  };
+  const shownLayers = keymap.layers
+    .map((l, li) => ({ l, li }))
+    .filter(({ l, li }) => matchesQuery(query, li, `L${li}`, l.name, ...Array.from({ length: count }, (_, e) => (l.encoders[e] ? `${actionText(l.encoders[e].ccw)} ${actionText(l.encoders[e].cw)}` : null))));
+
   return (
     <div className="page">
       <div className="notice" role="status">
@@ -152,7 +164,16 @@ export function EncodersPage() {
               )}
         </span>
       </div>
-      <div className="panel-box">
+      <ListFilter
+        value={query}
+        onChange={setQuery}
+        label={t('Filter encoder layers', 'Фильтр слоёв энкодеров')}
+        placeholder={t('Filter by layer or action', 'Фильтр по слою или действию')}
+        shown={shownLayers.length}
+        total={keymap.layers.length}
+      />
+      {shownLayers.length === 0 && <p className="field-hint">{t('Nothing matches the filter.', 'Под фильтр ничего не подходит.')}</p>}
+      <div className="panel-box" hidden={shownLayers.length === 0}>
         <div className="rows">
           <div className="row" style={{ ['--row-cols' as string]: `120px repeat(${count}, minmax(0, 1fr))` }}>
             <span className="kicker">{t('layer', 'слой')}</span>
@@ -165,7 +186,7 @@ export function EncodersPage() {
               );
             })}
           </div>
-          {keymap.layers.map((l, li) => (
+          {shownLayers.map(({ l, li }) => (
             <div key={l.id} className="row" style={{ ['--row-cols' as string]: `120px repeat(${count}, minmax(0, 1fr))` }}>
               <span>
                 <span className="num">L{li}</span> {l.name}

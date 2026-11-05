@@ -35,6 +35,8 @@ import { whyDisabled } from '../lib/whyDisabled';
 import { issueLevelLabel } from '../lib/issueLevel';
 import { Hint } from '../components/InfoTip';
 import { PinsTab } from '../components/hardware/PinsTab';
+import { ListFilter } from '../components/ListFilter';
+import { matchesQuery, useListFilter } from '../lib/find';
 import { ErrorDetails, rawError } from '../components/ErrorDetails';
 
 const ICON = { size: 15, strokeWidth: 1.5 };
@@ -586,6 +588,8 @@ function VariantsTab({ project }: { project: Project }) {
   const apply = useProjectStore((s) => s.apply);
   const [msg, setMsg] = useState<string[]>([]);
   const [msgDetail, setMsgDetail] = useState('');
+  const [query, setQuery] = useListFilter();
+  const shownGeometries = project.geometries.filter((g) => matchesQuery(query, g.name, g.source.kind, g.source.ref, g.keys.length));
   const importVariant = async () => {
     const file = await openTextFile(JSON_FILTERS);
     if (!file) return;
@@ -633,8 +637,17 @@ function VariantsTab({ project }: { project: Project }) {
           'У клавиатуры может быть несколько вариантов геометрии (например, примерная и измеренная). Раскладки общие — они хранятся по позициям матрицы.',
         )}
       </p>
-      <div className="panel-box rows">
-        {project.geometries.map((g) => (
+      <ListFilter
+        value={query}
+        onChange={setQuery}
+        label={t('Filter geometries', 'Фильтр геометрий')}
+        placeholder={t('Filter by name or source', 'Фильтр по имени или источнику')}
+        shown={shownGeometries.length}
+        total={project.geometries.length}
+      />
+      {shownGeometries.length === 0 && <p className="field-hint">{t('Nothing matches the filter.', 'Под фильтр ничего не подходит.')}</p>}
+      <div className="panel-box rows" hidden={shownGeometries.length === 0}>
+        {shownGeometries.map((g) => (
           <div key={g.id} className={`row ${g.id === project.activeGeometryId ? 'is-active' : ''}`} style={{ ['--row-cols' as string]: 'minmax(0,1fr) 140px 90px auto' }}>
             <input
               className="input"

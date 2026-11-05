@@ -126,7 +126,8 @@ export function MacroSteps({
           </button>
         </div>
       ))}
-      {steps.length === 0 && emptyHint && <p className="field-hint">{emptyHint}</p>}
+      {/* A text hint is a line; a block (an `EmptyState`) is shown as it is. */}
+      {steps.length === 0 && emptyHint && (typeof emptyHint === 'string' ? <p className="field-hint">{emptyHint}</p> : emptyHint)}
       <div className="field-row">
         <button className="btn" onClick={() => onChange([...steps, { type: 'text', text: '' }], t('add step', 'новый шаг'))}>
           <Plus {...ICON} /> {t('text', 'текст')}
