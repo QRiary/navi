@@ -21,7 +21,9 @@ describe('computeThemeVariables', () => {
     const follow = computeThemeVariables(withSettings({ colors: { cell: '#111111', border: '#222222' } }));
     expect(follow['--key-background']).toBe('#111111');
     expect(follow['--key-border']).toBe('#222222');
-    const own = computeThemeVariables(withSettings({ colors: { cell: '#111111', key: '#333333', keyBorder: '#444444' } }));
+    expect(follow['--card-background']).toBe('#111111');
+    const own = computeThemeVariables(withSettings({ colors: { cell: '#111111', card: '#555555', key: '#333333', keyBorder: '#444444' } }));
+    expect(own['--card-background']).toBe('#555555');
     expect(own['--key-background']).toBe('#333333');
     expect(own['--key-border']).toBe('#444444');
   });

@@ -1130,7 +1130,7 @@
 
 .panel-box {
   border: var(--border);
-  background: var(--cell-background);
+  background: var(--card-background);
 }
 
 .panel-box-head {
@@ -1207,7 +1207,7 @@
   overflow: auto;
   padding: 12px;
   border: var(--border);
-  background: var(--cell-background);
+  background: var(--card-background);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   line-height: 1.55;
@@ -1235,7 +1235,7 @@
   max-height: 46vh;
   overflow: auto;
   border: var(--border);
-  background: var(--cell-background);
+  background: var(--card-background);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   line-height: 1.5;
@@ -1365,7 +1365,7 @@
 .mono-block {
   padding: 12px;
   border: var(--border);
-  background: var(--cell-background);
+  background: var(--card-background);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   white-space: pre-wrap;

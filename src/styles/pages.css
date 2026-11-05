@@ -250,7 +250,7 @@
   gap: 4px 12px;
   padding: 8px 12px;
   border-left: 2px solid var(--danger-color);
-  background: var(--cell-background);
+  background: var(--card-background);
   color: var(--text-secondary);
 }
 

@@ -28,7 +28,8 @@
   "colors": {
     "background": null,  // window background
     "panel": null,       // panel background
-    "cell": null,        // background of cells and input fields
+    "cell": null,        // input fields, buttons and other controls
+    "card": null,        // boxes in panels: tables, lists, logs (null — follows "cell")
     "hover": null,       // hover highlight
     "border": null,      // borders
     "key": null,         // keys in keyboard drawings (null — follows "cell")

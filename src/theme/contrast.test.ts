@@ -9,7 +9,7 @@ const TEXT_COLORS = ['text', 'textDim', 'label', 'accent', 'danger', 'meterFrom'
 describe('palette contrast', () => {
   for (const preset of THEME_PRESETS) {
     const p = completePalette(preset.palette);
-    const surfaces = { background: p.background, panel: p.panel, cell: p.cell, key: p.key, hover: p.hover, selected: mixHex(p.panel, p.accent, 0.08) };
+    const surfaces = { background: p.background, panel: p.panel, cell: p.cell, card: p.card, key: p.key, hover: p.hover, selected: mixHex(p.panel, p.accent, 0.08) };
     for (const color of TEXT_COLORS) {
       it(`${preset.id}: ${color} reads on every surface`, () => {
         for (const [name, surface] of Object.entries(surfaces)) {

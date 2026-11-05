@@ -7,7 +7,7 @@ import { PALETTE_KEYS, THEME_PRESETS, completePalette, type AppSettings, type Co
 import { isHexColor, luminance } from './color';
 
 /** Colors added after the format: a theme file without them takes its cell / border. */
-const OPTIONAL_COLORS: readonly PaletteKey[] = ['key', 'keyBorder'];
+const OPTIONAL_COLORS: readonly PaletteKey[] = ['card', 'key', 'keyBorder'];
 
 export const THEME_FILE_FORMAT = 'navi.theme';
 export const THEME_FILE_EXT = 'navi-theme.json';
