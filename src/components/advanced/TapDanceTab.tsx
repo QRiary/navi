@@ -21,7 +21,7 @@ import { MacroSteps } from '../macros/MacroSteps';
 import { FeatureNote, IssueList, KeycodeField } from './common';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
-const COLS = '40px minmax(120px,1fr) 150px 90px 32px';
+const COLS = '40px minmax(120px,1fr) 150px 100px 32px';
 // The slots / own C fields go on a line of their own under the name, wrapping when the panel is narrow.
 const SLOT_GRID = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', gap: 'var(--gap)', padding: '0 var(--gap) var(--gap) calc(40px + var(--gap))' } as const;
 type Variant = (typeof TAP_DANCE_VARIANTS)[number];
@@ -91,8 +91,8 @@ export function TapDanceTab({ project }: { project: Project }) {
         {t('A tap dance key TD(name) does different things depending on how it is tapped.', 'Клавиша tap dance TD(имя) делает разное в зависимости от того, как её нажимают.')}{' '}
         <InfoTip docs={featureDocs('tap_dance')} label="Tap dance">
           {t(
-            'Slots: one action each for tap, hold, double tap and tap then hold (empty = nothing). Every tap: each tap plays its own step at once. Own C: your own functions. With no double tap and no tap + hold, a tap fires at once on release.',
-            'Слоты: по одному действию на нажатие, удержание, двойное нажатие и нажатие+удержание (пусто — ничего). Каждое нажатие: каждое нажатие сразу играет свой шаг. Свой C: ваши функции. Без двойного нажатия и нажатия+удержания нажатие срабатывает сразу при отпускании.',
+            'Three kinds:\n- Slots: one action each for tap, hold, double tap and tap then hold (empty = nothing). With no double tap and no tap + hold, a tap fires at once on release.\n- Every tap: each tap plays its own step at once.\n- Own C: your own functions.',
+            'Три вида:\n- Слоты: по одному действию на нажатие, удержание, двойное нажатие и нажатие+удержание (пусто — ничего). Без двойного нажатия и нажатия+удержания нажатие срабатывает сразу при отпускании.\n- Каждое нажатие: каждое нажатие сразу играет свой шаг.\n- Свой C: ваши функции.',
           )}
         </InfoTip>
       </p>
@@ -121,8 +121,8 @@ export function TapDanceTab({ project }: { project: Project }) {
                 <Hint
                   docs={QMK_DOCS.tapDanceHowTo}
                   tip={t(
-                    'Slots: tap / hold / double tap / tap + hold, any keycode in each. Every tap: tap 1 plays step 1, tap 2 step 2, and so on, each at once; Shift or Ctrl held picks its own column. Own C: you write the functions in C.',
-                    'Слоты: нажатие / удержание / двойное / нажатие+удержание, в каждом любой keycode. Каждое нажатие: 1-е нажатие играет шаг 1, 2-е — шаг 2 и так далее, каждое сразу; зажатый Shift или Ctrl выбирает свой столбец. Свой C: функции на C вы пишете сами.',
+                    '- Slots: tap / hold / double tap / tap + hold, any keycode in each.\n- Every tap: tap 1 plays step 1, tap 2 step 2, and so on, each at once; Shift or Ctrl held picks its own column.\n- Own C: you write the functions in C.',
+                    '- Слоты: нажатие / удержание / двойное / нажатие+удержание, в каждом любой keycode.\n- Каждое нажатие: 1-е нажатие играет шаг 1, 2-е — шаг 2 и так далее, каждое сразу; зажатый Shift или Ctrl выбирает свой столбец.\n- Свой C: функции на C вы пишете сами.',
                   )}
                 >
                   {t('kind', 'вид')}

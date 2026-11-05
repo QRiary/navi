@@ -55,7 +55,7 @@ export function FeaturesTab() {
         )}
       </p>
       <div className="panel-box rows">
-        <div className="row kicker" style={{ ['--row-cols' as string]: 'minmax(0,1.4fr) 130px 150px 90px minmax(0,1fr)' }}>
+        <div className="row kicker" style={{ ['--row-cols' as string]: 'minmax(0,1.4fr) 130px 150px 116px minmax(0,1fr)' }}>
           <span>{t('feature', 'функция')}</span>
           <span>
             <Hint
@@ -86,7 +86,7 @@ export function FeaturesTab() {
           const build = project.firmware.buildFeatures[f.id];
           const needed = need.get(f.id);
           return (
-            <div key={f.id} className="row" style={{ ['--row-cols' as string]: 'minmax(0,1.4fr) 130px 150px 90px minmax(0,1fr)' }} title={lang === 'ru' ? f.description.ru : f.description.en}>
+            <div key={f.id} className="row" style={{ ['--row-cols' as string]: 'minmax(0,1.4fr) 130px 150px 116px minmax(0,1fr)' }} title={lang === 'ru' ? f.description.ru : f.description.en}>
               <span>
                 {lang === 'ru' ? f.title.ru : f.title.en} {f.rules && <span className="kicker">{f.rules}</span>}
               </span>

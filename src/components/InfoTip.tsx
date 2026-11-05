@@ -5,6 +5,8 @@
  *  • a click (or Enter / Space) pins it and moves focus to the docs link, so the keyboard can reach it; Esc or a
  *    click elsewhere closes a pinned bubble and focus goes back to the “?”.
  * The bubble is rendered into document.body: panels use backdrop-filter, which would trap a fixed element inside.
+ * A string tip may be structured (TipText): each line is its own paragraph, and lines starting with “- ” form a list,
+ * one option per line with its “Term:” in bold. Use it whenever a tip names several options or values.
  */
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -132,7 +134,7 @@ export function InfoTip({ children, docs, label }: { children: ReactNode; docs?:
               if (pinned && !bubble.current?.contains(e.relatedTarget as Node) && e.relatedTarget !== btn.current) close(false);
             }}
           >
-            <div className="info-bubble-text">{children}</div>
+            <div className="info-bubble-text">{typeof children === 'string' ? <TipText text={children} /> : children}</div>
             {docs && (
               <button type="button" className="text-btn info-bubble-link" onClick={() => openDocs(docs)}>
                 {t('QMK docs', 'Документация QMK')} <ExternalLink size={12} strokeWidth={1.5} aria-hidden />
@@ -145,14 +147,46 @@ export function InfoTip({ children, docs, label }: { children: ReactNode; docs?:
   );
 }
 
+/** Paragraph per line; consecutive “- Term: text” lines become a list, the term in bold. */
+export function TipText({ text }: { text: string }) {
+  const blocks: ReactNode[] = [];
+  let items: ReactNode[] = [];
+  const flush = () => {
+    if (items.length) blocks.push(<ul key={blocks.length}>{items}</ul>);
+    items = [];
+  };
+  for (const line of text.split('\n')) {
+    const item = /^- (?:([^:]{1,40}): )?(.*)$/.exec(line);
+    if (item) {
+      items.push(
+        <li key={items.length}>
+          {item[1] && <strong>{item[1]}: </strong>}
+          {item[2]}
+        </li>,
+      );
+      continue;
+    }
+    flush();
+    if (line.trim()) blocks.push(<p key={blocks.length}>{line}</p>);
+  }
+  flush();
+  return <>{blocks}</>;
+}
+
 /** A label with its InfoTip after it: `<Hint tip="…" docs={…}>flavor</Hint>`. */
 export function Hint({ children, tip, docs }: { children: ReactNode; tip: ReactNode; docs?: string }) {
+  const label = typeof children === 'string' ? children : undefined;
+  const cut = label ? label.lastIndexOf(' ') + 1 : 0;
   return (
     <span className="with-tip">
-      {children}
-      <InfoTip docs={docs} label={typeof children === 'string' ? children : undefined}>
-        {tip}
-      </InfoTip>
+      {label ? label.slice(0, cut) : children}
+      {/* The last word and the “?” never part: a wrapped label keeps its “?” beside its last word. */}
+      <span className="with-tip-tail">
+        {label?.slice(cut)}
+        <InfoTip docs={docs} label={label}>
+          {tip}
+        </InfoTip>
+      </span>
     </span>
   );
 }

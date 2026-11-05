@@ -204,7 +204,12 @@ links would help (their examples are clear).
    yet: it's added when you build and flash" / "...turned off: turn on").
    Left over: no tips on tap dance "every tap" Shift/Ctrl columns and `ModsInput`; Hardware's "other controls" list
    and the macro step list keep their old empty look; a disabled button's reason is a mouse tooltip only
-   (keyboard and screen readers can't reach a disabled button).
+   (keyboard and screen readers can't reach a disabled button); at the smallest window (980 px) the Firmware →
+   Features table squeezes its "feature" and "needed by" columns to nothing (fixed columns too wide, was so before
+   step 5 too).
+   Follow-up (owner's review): a tip that lists options shows one per line with the term in bold (`TipText`), and
+   a "?" never wraps away from its label; column heads with tips stay on one line, columns widened to fit both
+   languages.
 
 ## Step 6: combos tab (🟠 7/10)
 

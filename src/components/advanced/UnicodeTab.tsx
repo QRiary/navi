@@ -129,8 +129,8 @@ export function UnicodeTab({ project }: { project: Project }) {
             <Hint
               docs={QMK_DOCS.unicodeSubsystems}
               tip={t(
-                'Two ways to put a character on a key. UC keeps the code inside the keycode (up to U+7FFF, no emoji). UM and UP look the character up in the table below, so any character works; UP holds a pair, the second one typed with Shift.',
-                'Два способа поставить символ на клавишу. UC хранит код прямо в keycode (до U+7FFF, без эмодзи). UM и UP берут символ из таблицы ниже, поэтому подходят любые символы; UP хранит пару, второй символ печатается с Shift.',
+                'Two ways to put a character on a key:\n- UC: the code sits inside the keycode (up to U+7FFF, no emoji).\n- UM and UP: the character comes from the table below, so any character works; UP holds a pair, the second one typed with Shift.',
+                'Два способа поставить символ на клавишу:\n- UC: код хранится прямо в keycode (до U+7FFF, без эмодзи).\n- UM и UP: символ берётся из таблицы ниже, поэтому подходят любые символы; UP хранит пару, второй символ печатается с Shift.',
               )}
             >
               {t('how keys carry characters', 'как клавиши хранят символы')}
