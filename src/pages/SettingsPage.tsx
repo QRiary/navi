@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Download, FolderOpen, RotateCcw, Upload } from 'lucide-react';
 import { CodeEditor } from '../components/CodeEditor';
+import { InterfaceSizeControl } from '../components/InterfaceSizeControl';
 import { DEFAULT_CONFIG_TEXT, parseConfig } from '../config/configFile';
 import { THEME_PRESETS } from '../config/theme.config';
 import { listLanguages } from '../core/keycodes/spec';
@@ -137,6 +138,16 @@ function QuickTab() {
           ))}
         </div>
       </section>
+      {navi && (
+        <section className="section">
+          <div className="section-head">
+            <h2>{t('interface', 'интерфейс')}</h2>
+          </div>
+          <div className="panel-box rows">
+            <InterfaceSizeControl />
+          </div>
+        </section>
+      )}
       <section className="section">
         <div className="section-head">
           <h2>{t('keyboard display', 'отображение клавиатуры')}</h2>

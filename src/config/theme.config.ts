@@ -68,7 +68,7 @@ export const THEME_PRESETS: ThemePreset[] = [
       border: '#262626',
       text: '#e8e8e8',
       textDim: '#9a9a9a',
-      label: '#6a6a6a',
+      label: '#878787',
       accent: '#e8e8e8',
       accentText: '#050505',
       meterFrom: '#6ec6ff',
@@ -89,7 +89,7 @@ export const THEME_PRESETS: ThemePreset[] = [
       border: '#1a281a',
       text: '#b8f5b0',
       textDim: '#6fa86a',
-      label: '#4a6e47',
+      label: '#718d6f',
       accent: '#9cff8f',
       accentText: '#031003',
       meterFrom: '#3cff7a',
@@ -110,7 +110,7 @@ export const THEME_PRESETS: ThemePreset[] = [
       border: '#2c2210',
       text: '#ffcf7a',
       textDim: '#b88f4a',
-      label: '#7a5f30',
+      label: '#957f59',
       accent: '#ffb000',
       accentText: '#120c00',
       meterFrom: '#ff8a00',
@@ -131,7 +131,7 @@ export const THEME_PRESETS: ThemePreset[] = [
       border: '#2c1212',
       text: '#ead6d6',
       textDim: '#a07f7f',
-      label: '#6e4a4a',
+      label: '#927777',
       accent: '#ff3b4e',
       accentText: '#140203',
       meterFrom: '#ff3b4e',
@@ -152,12 +152,12 @@ export const THEME_PRESETS: ThemePreset[] = [
       border: '#c9c3b6',
       text: '#161512',
       textDim: '#5a554b',
-      label: '#8a8476',
+      label: '#656056',
       accent: '#161512',
       accentText: '#f2efe8',
-      meterFrom: '#2b6cb0',
-      meterTo: '#2f9e6b',
-      danger: '#c0262d',
+      meterFrom: '#2763a1',
+      meterTo: '#206d4a',
+      danger: '#ba252c',
     },
   },
 ];
@@ -230,6 +230,8 @@ export interface AppSettings {
     statusLine: boolean;
     sidebarWidth: number;
     inspectorWidth: number;
+    /** Interface size: the window's zoom factor (Settings → main, Ctrl+= / Ctrl+- / Ctrl+0, Ctrl+wheel), 0.8…2. */
+    zoom: number;
   };
   shape: {
     /** Panel corner radius, px. */
@@ -309,6 +311,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     statusLine: true,
     sidebarWidth: 232,
     inspectorWidth: 340,
+    zoom: 1,
   },
   shape: { panelRadius: 0, keyRadius: 2 },
   typography: { font: 'mono', scale: 1 },
@@ -355,6 +358,7 @@ export const PANEL_WIDTH_LIMITS: Record<'sidebarWidth' | 'inspectorWidth', [numb
 export const SETTINGS_RANGES: Record<string, [number, number]> = {
   'layout.sidebarWidth': PANEL_WIDTH_LIMITS.sidebarWidth,
   'layout.inspectorWidth': PANEL_WIDTH_LIMITS.inspectorWidth,
+  'layout.zoom': [0.8, 2],
   'shape.panelRadius': [0, 32],
   'shape.keyRadius': [0, 30],
   'typography.scale': [0.8, 1.3],
