@@ -9,7 +9,10 @@ import { generateKeyboardTarget } from '../../core/qmk/keyboardDef';
 import { diffLines, diffStats } from '../../core/qmk/textDiff';
 import { activeGeometry, patchProject } from '../../core/project/ops';
 import { navi } from '../../desktop/bridge';
+import { QMK_DOCS } from '../../lib/qmkDocs';
 import { href } from '../../lib/router';
+import { whyDisabled } from '../../lib/whyDisabled';
+import { Hint } from '../InfoTip';
 import { TabPanel, Tabs } from '../Tabs';
 import { useProjectStore } from '../../store/projectStore';
 import { useQmkStore } from '../../store/qmkStore';
@@ -33,7 +36,9 @@ export function OwnTarget() {
     if (!navi || !env?.homeValid || !target) return setExisting(null);
     navi.qmk
       .readKeyboard(env.home!, env.userspace, target)
-      .then((src) => setExisting(Object.fromEntries(src.files.filter((f) => f.path.startsWith(`${target}/`) && !f.path.slice(target.length + 1).includes('/')).map((f) => [f.path.split('/').pop()!, f.text]))))
+      .then((src) =>
+        setExisting(Object.fromEntries(src.files.filter((f) => f.path.startsWith(`${target}/`) && !f.path.slice(target.length + 1).includes('/')).map((f) => [f.path.split('/').pop()!, f.text]))),
+      )
       .catch(() => setExisting({}));
   }, [env, target]);
 
@@ -41,7 +46,8 @@ export function OwnTarget() {
   if (!project.hardware.pins) {
     return (
       <p className="field-hint">
-        {t('To create your own target, describe the board pins first:', 'Чтобы создать свой target, сначала опишите выводы платы:')} <a href={href({ section: 'hardware', tab: 'pins' })}>{t('Hardware → pins', 'Железо → выводы')}</a>.
+        {t('To create your own target, describe the board pins first:', 'Чтобы создать свой target, сначала опишите выводы платы:')}{' '}
+        <a href={href({ section: 'hardware', tab: 'pins' })}>{t('Hardware → pins', 'Железо → выводы')}</a>.
       </p>
     );
   }
@@ -54,7 +60,11 @@ export function OwnTarget() {
     if (!navi || !env?.home) return;
     setBusy(true);
     try {
-      const res = await navi.qmk.writeKeyboard(env.home, target, gen.files.map((f) => ({ name: f.name, text: f.text })));
+      const res = await navi.qmk.writeKeyboard(
+        env.home,
+        target,
+        gen.files.map((f) => ({ name: f.name, text: f.text })),
+      );
       toast(res.backup ? t(`Target written. Backup: ${res.backup}`, `Target записан. Резервная копия: ${res.backup}`) : t('Target created', 'Target создан'));
       apply((p) => patchProject(p, { firmware: { ...p.firmware, keyboard: target } }), t('own target', 'свой target'));
       await loadKeyboards();
@@ -69,7 +79,17 @@ export function OwnTarget() {
   return (
     <section className="section">
       <div className="section-head">
-        <h2>{t('own keyboard target', 'свой target клавиатуры')}</h2>
+        <h2>
+          <Hint
+            docs={QMK_DOCS.portingKeyboard}
+            tip={t(
+              'A target is a keyboard folder in qmk_firmware/keyboards. For a board QMK does not know, NAVI writes keyboard.json, config.h and readme.md there from your hardware profile, pins and geometry; you then build a keymap for it.',
+              'Target — папка клавиатуры в qmk_firmware/keyboards. Для платы, которой QMK не знает, NAVI записывает туда keyboard.json, config.h и readme.md по вашему профилю железа, выводам и геометрии; затем для неё собирается раскладка.',
+            )}
+          >
+            {t('own keyboard target', 'свой target клавиатуры')}
+          </Hint>
+        </h2>
         <span className="kicker">keyboards/{target}/</span>
       </div>
       <ul className="issue-list" style={{ marginBottom: 8 }}>
@@ -87,10 +107,15 @@ export function OwnTarget() {
         onSelect={(id) => setFile(id as typeof file)}
         items={gen.files.map((f) => {
           const prev = existing?.[f.name] ?? null;
-          const st = prev === null ? t('new', 'новый') : prev === f.text ? t('same', 'без изм.') : (() => {
-            const s = diffStats(diffLines(prev, f.text));
-            return `+${s.added} −${s.removed}`;
-          })();
+          const st =
+            prev === null
+              ? t('new', 'новый')
+              : prev === f.text
+                ? t('same', 'без изм.')
+                : (() => {
+                    const s = diffStats(diffLines(prev, f.text));
+                    return `+${s.added} −${s.removed}`;
+                  })();
           return {
             id: f.name,
             label: (
@@ -102,29 +127,38 @@ export function OwnTarget() {
         })}
       />
       <TabPanel idBase="target-files" id={file} current={file}>
-      {d ? (
-        <div className="diff">
-          {d.map((l, i) =>
-            l.kind === 'skip' ? (
-              <div key={i} className="d-hunk">
-                ⋯ {l.count}
-              </div>
-            ) : (
-              <div key={i} className={l.kind === 'add' ? 'd-add' : l.kind === 'del' ? 'd-del' : undefined}>
-                {l.kind === 'add' ? '+ ' : l.kind === 'del' ? '- ' : '  '}
-                {l.text}
-              </div>
-            ),
-          )}
-        </div>
-      ) : (
-        <pre className="mono-block" style={{ maxHeight: '40vh', overflow: 'auto', whiteSpace: 'pre' }}>
-          {current.text}
-        </pre>
-      )}
+        {d ? (
+          <div className="diff">
+            {d.map((l, i) =>
+              l.kind === 'skip' ? (
+                <div key={i} className="d-hunk">
+                  ⋯ {l.count}
+                </div>
+              ) : (
+                <div key={i} className={l.kind === 'add' ? 'd-add' : l.kind === 'del' ? 'd-del' : undefined}>
+                  {l.kind === 'add' ? '+ ' : l.kind === 'del' ? '- ' : '  '}
+                  {l.text}
+                </div>
+              ),
+            )}
+          </div>
+        ) : (
+          <pre className="mono-block" style={{ maxHeight: '40vh', overflow: 'auto', whiteSpace: 'pre' }}>
+            {current.text}
+          </pre>
+        )}
       </TabPanel>
       <div className="field-row" style={{ marginTop: 8 }}>
-        <button className="btn btn--primary" disabled={!navi || !env?.homeValid || errors.length > 0 || busy} onClick={() => void write()}>
+        <button
+          className="btn btn--primary"
+          {...whyDisabled(
+            (!navi && t('Writing files needs the desktop app', 'Для записи файлов нужно настольное приложение')) ||
+              (!env?.homeValid && t('qmk_firmware not found: see the “setup” tab', 'qmk_firmware не найден: смотрите вкладку «окружение»')) ||
+              (errors.length > 0 && t('Fix the errors listed above first', 'Сначала исправьте ошибки выше')) ||
+              (busy && t('Wait: writing…', 'Подождите: идёт запись…')),
+          )}
+          onClick={() => void write()}
+        >
           <FilePlus2 size={14} strokeWidth={1.5} /> {busy ? t('writing…', 'запись…') : t('write target to qmk_firmware', 'записать target в qmk_firmware')}
         </button>
         {!env?.homeValid && <span className="field-hint">{t('needs QMK (tab “environment”)', 'нужен QMK (вкладка «окружение»)')}</span>}
