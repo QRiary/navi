@@ -5,8 +5,9 @@ passes, the app run in a hidden test window on the owner's real project (12 laye
 Keyboard, Advanced (tap dance, tap-hold, combos), Layers, Settings, Firmware, plus Impeccable's detector over CDP.
 Line numbers are from that commit.
 
-**Branch:** this work goes on top of `key-lists`; its PR opens only after every PR open now has merged, so it
-doesn't conflict with them. Rebase on `master` before each session if those have landed meanwhile.
+**Branch:** this work goes on top of `key-lists`, on branch `ui-cleanup`; every step merges into it (`--no-ff`,
+one merge commit per step, so the PR reads step by step) and the whole cleanup goes upstream as one PR, opened
+only after every PR open now has merged, so it doesn't conflict with them. Rebase on `master` before each session if those have landed meanwhile.
 
 **Ground rules for every session**
 - Refinement, not a restyle: keep the look (mono palette, sidebar, deck). Fix how it reads and works.
