@@ -81,6 +81,25 @@ languages (closing with unsaved changes).
    granted only through a main-process dialog) and already uses one language.
 5. ✅ Esc leaves the code editor's Tab capture (or Ctrl+Tab / Tab after Esc moves focus), as VS Code does.
 
+## Spacing pass (owner's report, added 2026-11-05) ✅
+
+**R** paddings and margins are off in many places (Settings: the "language" label touches its button).
+
+**F** (CDP audit of all 33 pages/tabs on the owner's project): 137 padding/margin/gap values off any grid (3, 5,
+6, 7, 9, 10, 14, 18, 22px); `.lang-switch` had no CSS at all; blocks inside `.section` (hint, box, field row)
+touched each other; the Keyboard page's 12 layer tabs forced the editor wider than its column (keyboard,
+legend and catalog cut at the right); long button labels ran out of their box (Firmware → keyboard); custom
+keycode and key override rows pushed their delete button out of the panel at 110% size.
+
+**Done**
+1. ✅ Every padding/margin/gap on the 4px grid (Material's 4/8dp rhythm); `--gap` 12px, `--pad` 24px; sidebar
+   items line up at 20px. `src/styles/spacing.test.ts` keeps CSS and inline styles on the grid (`grid-ok`
+   comment for alignment values that aren't spacing).
+2. ✅ Language row laid out (8px gap, label 12px from its buttons); `.section` children 12px apart.
+3. ✅ Layer tabs wrap to a second row; the editor stays inside its column.
+4. ✅ Buttons wrap a long label instead of overflowing (min height 32px).
+5. ✅ Custom keycode rows narrower; key override rows put the modifiers on a second line.
+
 ## Step 3: readable key names everywhere (🟠 6/10)
 
 **R** raw keycodes everywhere, e.g. Advanced → tap-hold shows `LT(Qwerty, 0xC3)`, not what the user put on the layer.

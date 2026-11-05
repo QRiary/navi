@@ -96,7 +96,7 @@ code {
 
 kbd {
   font-size: var(--fs-2xs);
-  padding: 1px 5px;
+  padding: 1px 4px;
   border: var(--border);
   color: var(--text-label);
 }
@@ -172,8 +172,9 @@ kbd {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 32px;
-  padding: 0 12px;
+  min-height: 32px;
+  max-width: 100%;
+  padding: 4px 12px;
   border: var(--border);
   border-radius: var(--panel-radius);
   background: var(--cell-background);
@@ -182,7 +183,8 @@ kbd {
   font-size: var(--fs-xs);
   letter-spacing: 0.08em;
   text-transform: lowercase;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: left;
   transition: all var(--dur) var(--ease);
 }
 

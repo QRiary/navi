@@ -170,7 +170,7 @@ function NewProject() {
           </div>
           <div className="panel-box-body">
             <p className="field-hint">{t('Reads everything VIA gives (read-only): matrix, layers, keymap, encoders, macros, lighting.', 'Читает всё, что отдаёт VIA (только чтение): матрицу, слои, раскладку, энкодеры, макросы, подсветку.')}</p>
-            <div className="rows" style={{ marginTop: 10 }}>
+            <div className="rows" style={{ marginTop: 12 }}>
               {devices.map((d) => (
                 <div className="row" key={d.key} style={{ ['--row-cols' as string]: 'minmax(0,1fr) auto' }}>
                   <span>
@@ -203,7 +203,7 @@ function NewProject() {
                 'Dilemma 4x6 (клон lucky_studio): матрица 10×6, 2 энкодера, RGB Matrix — как прочитано с вашей клавиатуры. Места клавиш примерные (по QMK Dilemma Max) — поправьте в «Железе».',
               )}
             </p>
-            <button className="btn btn--primary" style={{ marginTop: 10 }} onClick={() => void done(createDilemmaProject(), t('Project created', 'Проект создан'))}>
+            <button className="btn btn--primary" style={{ marginTop: 12 }} onClick={() => void done(createDilemmaProject(), t('Project created', 'Проект создан'))}>
               <Plus {...ICON} /> Dilemma 4x6
             </button>
           </div>
@@ -216,7 +216,7 @@ function NewProject() {
           </div>
           <div className="panel-box-body">
             <p className="field-hint">{t('A grid of keys for every matrix position; then shape it in the geometry editor.', 'Сетка клавиш по позициям матрицы; дальше — форма в редакторе геометрии.')}</p>
-            <div className="field-row" style={{ marginTop: 10 }}>
+            <div className="field-row" style={{ marginTop: 12 }}>
               <label className="field-hint">
                 {t('rows', 'строк')} <input className="input input--num" type="number" min={1} max={32} value={rows} onChange={(e) => setRows(Number(e.target.value))} />
               </label>
@@ -245,7 +245,7 @@ function NewProject() {
           </div>
           <div className="panel-box-body">
             <p className="field-hint">{t('NAVI project · QMK keyboard.json / info.json · VIA keyboard definition · KLE raw data.', 'Проект NAVI · QMK keyboard.json / info.json · определение клавиатуры VIA · KLE raw data.')}</p>
-            <div className="field-row" style={{ marginTop: 10 }}>
+            <div className="field-row" style={{ marginTop: 12 }}>
               <button className="btn" onClick={() => void importFile()}>
                 <FolderOpen {...ICON} /> {t('choose file…', 'выбрать файл…')}
               </button>
@@ -261,7 +261,7 @@ function NewProject() {
               </p>
             )}
             {layoutChoice && (
-              <div className="field-row" style={{ marginTop: 10 }}>
+              <div className="field-row" style={{ marginTop: 12 }}>
                 <span className="field-hint">{t('Layout:', 'Макет:')}</span>
                 {layoutChoice.layouts.map((l) => (
                   <button key={l} className="chip" onClick={() => void fromQmkInfo(layoutChoice.info, l).then(() => setLayoutChoice(null))}>

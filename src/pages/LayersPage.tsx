@@ -90,8 +90,8 @@ export function LayersPage() {
           {keymap.layers.map((l, i) => {
             const refs = reach.get(i) ?? [];
             return (
-              <div key={l.id} className="row" style={{ ['--row-cols' as string]: '34px minmax(0,1.1fr) minmax(0,1.6fr) auto', alignItems: 'start', paddingTop: 10, paddingBottom: 10 }}>
-                <span className="num" style={{ paddingTop: 6 }}>
+              <div key={l.id} className="row" style={{ ['--row-cols' as string]: '34px minmax(0,1.1fr) minmax(0,1.6fr) auto', alignItems: 'start', paddingTop: 12, paddingBottom: 12 }}>
+                <span className="num" style={{ paddingTop: 6 /* grid-ok: lines the number up with the 30px inputs beside it */ }}>
                   L{i}
                 </span>
                 <div className="field">

@@ -13,7 +13,7 @@ import { t } from '../../i18n';
 
 function Num({ label, value, onChange, step = 0.25, min, max }: { label: string; value: number; onChange: (v: number) => void; step?: number; min?: number; max?: number }) {
   return (
-    <label className="field-hint" style={{ display: 'grid', gap: 3 }}>
+    <label className="field-hint" style={{ display: 'grid', gap: 4 }}>
       <span className="field-label">{label}</span>
       <input className="input input--num" type="number" step={step} min={min} max={max} value={Math.round(value * 1000) / 1000} onChange={(e) => e.target.value !== '' && onChange(Number(e.target.value))} />
     </label>
