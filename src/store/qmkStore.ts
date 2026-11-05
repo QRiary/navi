@@ -6,7 +6,7 @@ import { create } from 'zustand';
 import { analyzeKeyboard, type KeyboardSourceInfo } from '../core/qmk/sources';
 import type { OwnCodeFile } from '../core/project/tapHoldActions';
 import { navi, type CompileResult, type FirmwareInfo, type FlashScan, type KeyboardSources, type KeymapSources, type QmkEnvironment, type TrustState } from '../desktop/bridge';
-import { getLanguage } from '../i18n';
+import { getLanguage, t } from '../i18n';
 import { useSettingsStore } from './settingsStore';
 
 export interface LogLine {
@@ -29,7 +29,9 @@ export interface QmkState {
   lastCompile: CompileResult | null;
   firmware: FirmwareInfo[];
   scan: FlashScan | null;
+  /** What went wrong, as a sentence in the interface language; the raw text is in errorDetail. */
   error: string | null;
+  errorDetail: string | null;
 
   detect(): Promise<void>;
   home(): string | null;
@@ -73,6 +75,33 @@ export function autoJobs(): number {
   return Math.max(1, Math.min(16, Number.isInteger(n) ? n : 1));
 }
 
+const rawText = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+/** A failed call as store state: the sentence shown, the raw text behind “Details”. */
+function failure(sentence: string, err: unknown): Pick<QmkState, 'error' | 'errorDetail'> {
+  return { error: sentence, errorDetail: rawText(err) };
+}
+
+/** Why a build did not start, as a sentence (the main process's refusals: trustRefusal in electron/trust.cjs, checkBuildFolder in qmk.cjs). */
+export function buildRefusalSentence(raw: string): string {
+  if (raw.includes('outside what NAVI can check as safe to build'))
+    return t(
+      'The build was refused: the keymap folder has files NAVI can’t check as safe. Fix them, or trust the folder if you know this code.',
+      'Сборка отменена: в папке keymap есть файлы, безопасность которых NAVI проверить не может. Исправьте их или доверьте папку, если знаете этот код.',
+    );
+  if (raw.includes('did not print the build command'))
+    return t(
+      'The build was refused: QMK didn’t say which keymap folder it would build (often it can’t find the keymap).',
+      'Сборка отменена: QMK не сообщил, какую папку keymap он соберёт (часто он не находит keymap).',
+    );
+  if (/QMK would build|QMK uses userspace/.test(raw))
+    return t(
+      'The build was refused: QMK would build a different keymap folder than the one NAVI shows.',
+      'Сборка отменена: QMK собрал бы другую папку keymap, не ту, что показывает NAVI.',
+    );
+  return t('The build didn’t start.', 'Сборка не запустилась.');
+}
+
 export const useQmkStore = create<QmkState>()((set, get) => {
   if (navi && !subscribed) {
     subscribed = true;
@@ -103,15 +132,16 @@ export const useQmkStore = create<QmkState>()((set, get) => {
     firmware: [],
     scan: null,
     error: null,
+    errorDetail: null,
 
     async detect() {
       if (!navi) return;
-      set({ detecting: true, error: null });
+      set({ detecting: true, error: null, errorDetail: null });
       try {
         const env = await navi.qmk.detect(qmkSettings());
         set({ env, detecting: false });
       } catch (err) {
-        set({ detecting: false, error: (err as Error).message });
+        set({ detecting: false, ...failure(t('Couldn’t check the QMK setup.', 'Не удалось проверить установку QMK.'), err) });
       }
     },
 
@@ -128,9 +158,9 @@ export const useQmkStore = create<QmkState>()((set, get) => {
       const home = get().home();
       if (!navi || !home) return;
       try {
-        set({ keyboards: await navi.qmk.listKeyboards(home), error: null });
+        set({ keyboards: await navi.qmk.listKeyboards(home), error: null, errorDetail: null });
       } catch (err) {
-        set({ error: (err as Error).message });
+        set(failure(t('Couldn’t list the QMK keyboards.', 'Не удалось получить список клавиатур QMK.'), err));
       }
     },
 
@@ -145,11 +175,11 @@ export const useQmkStore = create<QmkState>()((set, get) => {
           raw.files,
           km.files.map((f) => ({ path: f.name, text: f.text })),
         );
-        set({ sources: { keyboard, keymap, raw, info }, keymapSources: km, error: null });
+        set({ sources: { keyboard, keymap, raw, info }, keymapSources: km, error: null, errorDetail: null });
         await get().loadTrust(keyboard, keymap);
         await get().loadOwnCode(keyboard, keymap);
       } catch (err) {
-        set({ sources: null, keymapSources: null, trust: null, error: (err as Error).message });
+        set({ sources: null, keymapSources: null, trust: null, ...failure(t('Couldn’t read this keyboard’s QMK files.', 'Не удалось прочитать QMK-файлы этой клавиатуры.'), err) });
       }
     },
 
@@ -190,7 +220,7 @@ export const useQmkStore = create<QmkState>()((set, get) => {
       try {
         set({ trust: await navi.trust.state(home, get().userspace(), keyboard, keymap) });
       } catch (err) {
-        set({ trust: null, error: (err as Error).message });
+        set({ trust: null, ...failure(t('Couldn’t check whether this folder is trusted.', 'Не удалось проверить, доверена ли эта папка.'), err) });
       }
     },
 
@@ -199,7 +229,7 @@ export const useQmkStore = create<QmkState>()((set, get) => {
       try {
         set({ trustedFolders: await navi.trust.list() });
       } catch (err) {
-        set({ error: (err as Error).message });
+        set(failure(t('Couldn’t read the list of trusted folders.', 'Не удалось прочитать список доверенных папок.'), err));
       }
     },
 
@@ -212,7 +242,7 @@ export const useQmkStore = create<QmkState>()((set, get) => {
         await get().loadTrustedFolders();
         await get().loadTrust(keyboard, keymap);
       } catch (err) {
-        set({ error: (err as Error).message });
+        set(failure(t('Couldn’t trust the folder.', 'Не удалось доверить папку.'), err));
       }
     },
 
@@ -224,7 +254,7 @@ export const useQmkStore = create<QmkState>()((set, get) => {
         const s = get().sources;
         if (s) await get().loadTrust(s.keyboard, s.keymap);
       } catch (err) {
-        set({ error: (err as Error).message });
+        set(failure(t('Couldn’t revoke the trust.', 'Не удалось отозвать доверие.'), err));
       }
     },
 
@@ -233,33 +263,32 @@ export const useQmkStore = create<QmkState>()((set, get) => {
       if (!navi || !home) return null;
       const parallel = requested ?? autoJobs();
       const extra = `${parallel ? ` -j ${parallel}` : ''}${Object.entries(env ?? {}).map(([k, v]) => ` -e ${k}=${v}`).join('')}`;
-      set({ log: [{ stream: 'app', text: `$ qmk compile -kb ${keyboard} -km ${keymap}${extra}` }], lastCompile: null, error: null, job: { id: null, kind: 'compile', running: true, startedAt: Date.now() } });
+      set({ log: [{ stream: 'app', text: `$ qmk compile -kb ${keyboard} -km ${keymap}${extra}` }], lastCompile: null, error: null, errorDetail: null, job: { id: null, kind: 'compile', running: true, startedAt: Date.now() } });
       try {
         // The build must use the folder the user sees (the main process checks it against NAVI's lookup and QMK's dry run).
         const s = get().sources;
         if (!get().keymapSources || s?.keyboard !== keyboard || s.keymap !== keymap) await get().loadSources(keyboard, keymap);
         const keymapDir = get().keymapSources?.dir;
-        if (!keymapDir) throw new Error(get().error ?? 'Could not resolve the keymap folder');
+        if (!keymapDir) throw new Error(get().errorDetail ?? 'Could not resolve the keymap folder');
         const res = await navi.qmk.compile(qmkSettings(), { home, userspace: get().userspace(), keyboard, keymap, keymapDir, env, parallel });
         set({ lastCompile: res, job: { ...(get().job ?? { kind: 'compile', startedAt: Date.now() }), id: res.job, running: false } });
         await get().refreshFirmware();
         return res;
       } catch (err) {
-        const message = (err as Error).message;
         // A refused build: show the folder as it is now, so the next build is a choice made on what's on screen.
         await get().loadSources(keyboard, keymap);
-        set({ error: message, job: null });
+        set({ ...failure(buildRefusalSentence(rawText(err)), err), job: null });
         return null;
       }
     },
 
     async runDiagnostic(cmd) {
       if (!navi) return;
-      set({ log: [{ stream: 'app', text: `$ qmk ${cmd === 'version' ? '--version' : cmd}` }], error: null, job: { id: null, kind: cmd, running: true, startedAt: Date.now() } });
+      set({ log: [{ stream: 'app', text: `$ qmk ${cmd === 'version' ? '--version' : cmd}` }], error: null, errorDetail: null, job: { id: null, kind: cmd, running: true, startedAt: Date.now() } });
       try {
         await navi.qmk.run(qmkSettings(), cmd);
       } catch (err) {
-        set({ error: (err as Error).message });
+        set(failure(t('The QMK command didn’t run.', 'Команда QMK не запустилась.'), err));
       } finally {
         const job = get().job;
         if (job) set({ job: { ...job, running: false } });
@@ -286,7 +315,7 @@ export const useQmkStore = create<QmkState>()((set, get) => {
         set({ scan });
         return scan;
       } catch (err) {
-        set({ error: (err as Error).message });
+        set(failure(t('Couldn’t look for keyboards in bootloader mode.', 'Не удалось найти клавиатуры в режиме загрузчика.'), err));
         return null;
       }
     },

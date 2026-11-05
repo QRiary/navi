@@ -16,6 +16,7 @@ import { toast } from '../../store/toastStore';
 import { getLanguage, t } from '../../i18n';
 import { whyDisabled } from '../../lib/whyDisabled';
 import { InfoTip } from '../InfoTip';
+import { ErrorDetails, rawError } from '../ErrorDetails';
 
 export function WriteDialog({ onClose }: { onClose: () => void }) {
   const project = useProjectStore((s) => s.project);
@@ -48,7 +49,7 @@ export function WriteDialog({ onClose }: { onClose: () => void }) {
       if (res.verified) toast(t('Written to the keyboard and verified', 'Записано в клавиатуру и проверено'));
       else toast(t('Written, but verification found differences', 'Записано, но проверка нашла отличия'), 'error');
     } catch (err) {
-      setError((err as Error).message);
+      setError(rawError(err));
     }
   };
 
@@ -152,7 +153,15 @@ export function WriteDialog({ onClose }: { onClose: () => void }) {
       )}
       {error && (
         <div className="notice" role="alert" style={{ borderColor: 'var(--danger-color)', color: 'var(--danger-color)' }}>
-          {error} — {t('part of the changes may have been written; reconnect and compare again.', 'часть изменений могла записаться; переподключите и сравните ещё раз.')}
+          <div>
+            <span>
+              {t(
+                'The write stopped with an error. Part of the changes may have been written: reconnect and compare again.',
+                'Запись прервалась с ошибкой. Часть изменений могла записаться: переподключите и сравните ещё раз.',
+              )}
+            </span>
+            <ErrorDetails text={error} />
+          </div>
         </div>
       )}
     </Modal>

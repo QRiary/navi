@@ -39,7 +39,7 @@ export const SECTIONS: readonly SectionDef[] = [
     title: () => t('Advanced', 'Расширенное'),
     icon: Sparkles,
     tabs: [
-      { id: 'tapdance', title: () => 'Tap dance', group: keys },
+      { id: 'tapdance', title: () => t('Tap dance', 'Тап-дэнс'), group: keys },
       { id: 'taphold', title: () => t('Tap-hold', 'Тап-холд'), group: keys },
       { id: 'combos', title: () => t('Combos', 'Комбо'), group: keys },
       { id: 'overrides', title: () => t('Key overrides', 'Подмена сочетаний'), group: keys },

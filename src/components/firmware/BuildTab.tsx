@@ -13,6 +13,7 @@ import { href } from '../../lib/router';
 import { whyDisabled } from '../../lib/whyDisabled';
 import { Hint } from '../InfoTip';
 import { EmptyState } from '../EmptyState';
+import { ErrorDetails } from '../ErrorDetails';
 import { useProjectStore } from '../../store/projectStore';
 import { autoJobs, useQmkStore } from '../../store/qmkStore';
 import { BuildLog } from './BuildLog';
@@ -27,6 +28,7 @@ export function BuildTab() {
   const compile = useQmkStore((s) => s.compile);
   const last = useQmkStore((s) => s.lastCompile);
   const error = useQmkStore((s) => s.error);
+  const errorDetail = useQmkStore((s) => s.errorDetail);
   const apply = useProjectStore((s) => s.apply);
   const [optKey, setOptKey] = useState('');
   const [optValue, setOptValue] = useState('');
@@ -194,9 +196,10 @@ export function BuildTab() {
         <p className="field-hint">{t('The keymap folder does not exist yet — write the files first (tab “files”).', 'Папки keymap ещё нет — сначала запишите файлы (вкладка «файлы»).')}</p>
       )}
       {error && (
-        <p className="field-hint" style={{ color: 'var(--danger-color)' }}>
-          {error}
-        </p>
+        <div className="field-hint" role="alert">
+          <span style={{ color: 'var(--danger-color)' }}>{error}</span>
+          <ErrorDetails text={errorDetail} />
+        </div>
       )}
       {last && !running && (
         <div className="notice" role={last.code === 0 ? 'status' : 'alert'} style={{ borderColor: last.code === 0 ? 'var(--meter-to)' : 'var(--danger-color)' }}>

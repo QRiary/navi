@@ -12,6 +12,7 @@ import { toast } from '../../store/toastStore';
 import { QMK_DOCS } from '../../lib/qmkDocs';
 import { Hint } from '../InfoTip';
 import { OwnTarget } from './OwnTarget';
+import { ErrorDetails } from '../ErrorDetails';
 import { t } from '../../i18n';
 
 /** `file` relative to `dir` when it is inside it (either slash style), else unchanged. */
@@ -34,6 +35,7 @@ export function TargetTab() {
   const grantTrust = useQmkStore((s) => s.grantTrust);
   const revokeTrust = useQmkStore((s) => s.revokeTrust);
   const error = useQmkStore((s) => s.error);
+  const errorDetail = useQmkStore((s) => s.errorDetail);
   const [query, setQuery] = useState(project?.firmware.keyboard ?? '');
   const [keymap, setKeymap] = useState(project?.firmware.keymap ?? 'navi');
 
@@ -300,7 +302,10 @@ export function TargetTab() {
                 </button>
               </>
             ) : (
-              <p className="field-hint">{error ?? t('Choose a keyboard target.', 'Выберите target клавиатуры.')}</p>
+              <div className="field-hint">
+                {error ?? t('Choose a keyboard target.', 'Выберите target клавиатуры.')}
+                <ErrorDetails text={error ? errorDetail : null} />
+              </div>
             )}
           </div>
         </section>
