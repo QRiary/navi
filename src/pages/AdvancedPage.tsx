@@ -592,12 +592,11 @@ function BehaviorTab({ project }: { project: Project }) {
                     {lang === 'ru' ? p.title.ru : p.title.en}
                     {p.hint && <span className="field-hint"> — {lang === 'ru' ? p.hint.ru : p.hint.en}</span>}
                     {p.docs && (
-                      <>
-                        {' '}
+                      <span className="row-docs">
                         <button type="button" className="text-btn" onClick={() => openDocs(p.docs!)}>
                           {t('QMK docs', 'Документация QMK')} ↗
                         </button>
-                      </>
+                      </span>
                     )}
                   </span>
                   <code className="kicker">{p.define}</code>

@@ -424,6 +424,12 @@
   justify-self: start;
 }
 
+/* A row's “QMK docs” link: always on its own line under the row's text */
+.row-docs {
+  display: block;
+  margin-top: 4px;
+}
+
 /* ── Empty list: what it is, an example, the add button ───────────── */
 
 .list-empty {
