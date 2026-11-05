@@ -12,6 +12,7 @@ import { ensureTapHold, plainTapHold, tapHoldSlots } from '../../core/project/ta
 import { KeycodeField } from '../advanced/common';
 import { activeKeymap } from '../../core/project/ops';
 import { reservedStandInBases } from '../../lib/keymapActions';
+import { useEditorStore } from '../../store/editorStore';
 import { useQmkStore } from '../../store/qmkStore';
 import { t } from '../../i18n';
 import { QMK_DOCS } from '../../lib/qmkDocs';
@@ -198,16 +199,24 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
   const fn: LayerFn = decoded.kind === 'layer' ? decoded.fn : 'MO';
   const slots = tapHoldSlots(spec, project, value) ?? { tap: base, hold: { type: 'mods', mods } as HoldAction };
 
-  // The user's own C of the target: the stand-in bases it names are never taken (read again each time the tab opens).
+  // The user's own C of the target: the stand-in bases it names are never taken. Fetched ahead when the tab opens, but
+  // only when the last read may be stale (ensureOwnCode): it was re-read on every tap-hold key selected, ~350ms over WSL.
   const { keyboard, keymap: kmName } = project.firmware;
   useEffect(() => {
-    if (kind === 'tap-hold' && onTapHold && keyboard) void useQmkStore.getState().loadOwnCode(keyboard, kmName);
+    if (kind === 'tap-hold' && onTapHold && keyboard) void useQmkStore.getState().ensureOwnCode(keyboard, kmName);
   }, [kind, onTapHold, keyboard, kmName]);
 
-  const commitTapHold = (tap: number, hold: HoldAction) => {
+  const commitTapHold = async (tap: number, hold: HoldAction) => {
     const plain = plainTapHold(spec, tap, hold);
     // A plain MT / LT that is the keycode of a stand-in: the stand-in moves away first (ensureTapHold).
     const clash = plain !== null && project.tapHoldActions.some((a) => a.keycode === plain);
+    if ((plain === null || clash) && onTapHold && keyboard) {
+      // A stand-in is picked: the own code must be current (instant unless the window lost focus since the last read).
+      const selection = useEditorStore.getState().selection;
+      await useQmkStore.getState().ensureOwnCode(keyboard, kmName);
+      if (useEditorStore.getState().selection !== selection)
+        return setError(t('The selection changed while your own code was read: pick the hold action again.', 'Выбор клавиш изменился, пока читался ваш код: выберите действие удержания ещё раз.'));
+    }
     try {
       if (plain === null || clash) ensureTapHold(spec, project, tap, hold, reservedStandInBases(spec, project)); // the slot errors
     } catch (err) {

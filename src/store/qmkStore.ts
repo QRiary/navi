@@ -37,6 +37,8 @@ export interface QmkState {
   loadKeyboards(): Promise<void>;
   loadSources(keyboard: string, keymap: string): Promise<void>;
   loadOwnCode(keyboard: string, keymap: string): Promise<void>;
+  /** loadOwnCode only when the last read is for another target or may be stale (see ownCodeStale). */
+  ensureOwnCode(keyboard: string, keymap: string): Promise<void>;
   loadTrust(keyboard: string, keymap: string): Promise<void>;
   loadTrustedFolders(): Promise<void>;
   grantTrust(keyboard: string, keymap: string): Promise<void>;
@@ -58,6 +60,12 @@ function qmkSettings() {
 let subscribed = false;
 /** The own-code read in flight (loadOwnCode), keyed by keyboard + keymap. */
 let ownCodeRead: { key: string; promise: Promise<void> } | null = null;
+/**
+ * The own code may have changed since it was read. Only an editor outside NAVI changes it (NAVI's own keymap.c / navi.h
+ * are left out of it), and the user has to leave the window for that: a read stays good until the window loses focus.
+ */
+let ownCodeStale = true;
+if (typeof window !== 'undefined') window.addEventListener('blur', () => (ownCodeStale = true));
 
 /** By default the build uses the number of CPU cores (up to 16): without -j QMK builds in one thread, many times slower. */
 export function autoJobs(): number {
@@ -146,9 +154,10 @@ export const useQmkStore = create<QmkState>()((set, get) => {
     },
 
     loadOwnCode(keyboard, keymap) {
-      // Called on every tap-hold key selected: a read already running for the same target is joined, not repeated.
+      // A read already running for the same target is joined, not repeated (the Firmware page and a stand-in pick can overlap).
       const key = `${keyboard}\n${keymap}`;
       if (ownCodeRead?.key === key) return ownCodeRead.promise;
+      ownCodeStale = false; // a blur from now on makes this read stale again
       const promise = (async () => {
         if (!navi) return;
         if (!get().env && !get().detecting) await get().detect();
@@ -164,6 +173,12 @@ export const useQmkStore = create<QmkState>()((set, get) => {
       });
       ownCodeRead = { key, promise };
       return promise;
+    },
+
+    ensureOwnCode(keyboard, keymap) {
+      const own = get().ownCode;
+      if (!ownCodeStale && own?.keyboard === keyboard && own.keymap === keymap && !ownCodeRead) return Promise.resolve();
+      return get().loadOwnCode(keyboard, keymap);
     },
 
     async loadTrust(keyboard, keymap) {
