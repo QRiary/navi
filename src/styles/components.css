@@ -396,7 +396,7 @@
 
 /* ── Empty list: what it is, an example, the add button ───────────── */
 
-.empty-state {
+.list-empty {
   display: grid;
   gap: 8px;
   padding: 16px;
@@ -405,20 +405,20 @@
   font-size: var(--fs-sm);
 }
 
-.empty-state p {
+.list-empty p {
   margin: 0;
 }
 
-.empty-state-what {
+.list-empty-what {
   color: var(--text-primary);
 }
 
-.empty-state-example code {
+.list-empty-example code {
   font-family: var(--font-mono);
   color: var(--text-primary);
 }
 
-.empty-state-actions {
+.list-empty-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
