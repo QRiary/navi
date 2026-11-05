@@ -13,7 +13,8 @@ import { useProjectStore, useSpec } from '../../store/projectStore';
 import { IssueList, KeycodeField } from './common';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
-const COLS = 'minmax(130px,1fr) 150px 64px 64px minmax(180px,1.8fr) 32px 32px';
+// The number columns match .input--num (76px); the hold-keys column fits at least one key (150px field + its ×) and the +.
+const COLS = 'minmax(130px,1fr) 150px 76px 76px minmax(230px,1.8fr) 32px 32px';
 type Flavor = NonNullable<TapHoldSetting['flavor']>;
 
 const flavorTitle = (f: Flavor | '') =>
@@ -88,7 +89,7 @@ export function TapHoldTab({ project }: { project: Project }) {
               />
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
                 {(s.holdOnKeys ?? []).map((k, i) => (
-                  <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, width: 128 }}>
+                  <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, flex: 'none' }}>
                     <KeycodeField
                       value={k}
                       label={t('hold when pressed', 'удержание при нажатии')}
