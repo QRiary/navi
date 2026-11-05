@@ -30,7 +30,8 @@ function offending(test: (line: string) => boolean): string[] {
 
 describe('hints convention', () => {
   it('every disabled control goes through whyDisabled', () => {
-    expect(offending((line) => /\bdisabled=\{/.test(line) && !line.includes('disabled-ok'))).toEqual([]);
+    // `disabled={…}`, `disabled="…"`, a bare `disabled` before another attribute, at the end of a tag or alone on a line.
+    expect(offending((line) => /(\sdisabled=|\sdisabled\s+[\w-]+=|^\s*disabled\s*$|\sdisabled\s*\/?>)/.test(line) && !line.includes('disabled-ok'))).toEqual([]);
   });
 
   it('docs links are only in the QMK_DOCS registry', () => {

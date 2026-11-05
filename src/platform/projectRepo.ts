@@ -15,6 +15,8 @@ export interface ProjectRepo {
   revisions(id: string): Promise<Revision[]>;
   readRevision(id: string, file: string): Promise<string>;
   remove(id: string): Promise<void>;
+  /** Undo of `remove`: false when there is nothing to restore (or the id is taken again). */
+  restore(id: string): Promise<boolean>;
 }
 
 const LS_PREFIX = 'navi.project.';
@@ -39,6 +41,8 @@ function browserRepo(): ProjectRepo {
     }
   };
   const set = (k: string, v: string) => localStorage.setItem(k, v);
+  /** Deleted projects of this session, so “Undo” can bring one back. */
+  const trash = new Map<string, Record<string, string>>();
   const ids = () => {
     const out = new Set<string>();
     for (let i = 0; i < localStorage.length; i++) {
@@ -82,7 +86,20 @@ function browserRepo(): ProjectRepo {
       return get(`${LS_PREFIX}${id}.prev`) ?? '';
     },
     async remove(id) {
-      for (const s of ['saved', 'draft', 'prev']) localStorage.removeItem(`${LS_PREFIX}${id}.${s}`);
+      const kept: Record<string, string> = {};
+      for (const s of ['saved', 'draft', 'prev']) {
+        const v = get(`${LS_PREFIX}${id}.${s}`);
+        if (v !== null) kept[s] = v;
+        localStorage.removeItem(`${LS_PREFIX}${id}.${s}`);
+      }
+      trash.set(id, kept);
+    },
+    async restore(id) {
+      const kept = trash.get(id);
+      if (!kept || get(`${LS_PREFIX}${id}.saved`) !== null || get(`${LS_PREFIX}${id}.draft`) !== null) return false;
+      for (const [s, v] of Object.entries(kept)) set(`${LS_PREFIX}${id}.${s}`, v);
+      trash.delete(id);
+      return true;
     },
   };
 }

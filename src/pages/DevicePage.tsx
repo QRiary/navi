@@ -22,6 +22,7 @@ import { whyDisabled } from '../lib/whyDisabled';
 import { EmptyState } from '../components/EmptyState';
 import { Hint } from '../components/InfoTip';
 import { BootloaderHelp } from '../components/device/BootloaderHelp';
+import { ErrorDetails } from '../components/ErrorDetails';
 
 const ICON = { size: 15, strokeWidth: 1.5 };
 const hex4 = (n: number) => `0x${n.toString(16).toUpperCase().padStart(4, '0')}`;
@@ -90,7 +91,7 @@ function Tester() {
           </span>
         )}
         {testerActive && !sawData && elapsed > 4000 && (
-          <div className="notice">
+          <div className="notice" role="status">
             <span>
               {t(
                 'No key presses arrive over VIA. Newer QMK (≈2025+) returns an empty matrix unless built with VIA_INSECURE — the key tester is disabled in this firmware. Below are the keys the computer receives as normal typing:',
@@ -114,6 +115,7 @@ export function DevicePage() {
   const matrix = useDeviceStore((s) => s.matrix);
   const snapshot = useDeviceStore((s) => s.snapshot);
   const error = useDeviceStore((s) => s.error);
+  const errorDetail = useDeviceStore((s) => s.errorDetail);
   const lastWrite = useDeviceStore((s) => s.lastWrite);
   const refresh = useDeviceStore((s) => s.refresh);
   const connect = useDeviceStore((s) => s.connect);
@@ -138,7 +140,7 @@ export function DevicePage() {
   return (
     <div className="page">
       {!supported && (
-        <div className="notice">
+        <div className="notice" role="status">
           <span>{t('WebHID is not available here. Run the desktop app (npm run app).', 'WebHID здесь недоступен. Запустите настольное приложение (npm run app).')}</span>
         </div>
       )}
@@ -201,8 +203,11 @@ export function DevicePage() {
         )}
       </div>
       {error && (
-        <div className="notice" style={{ borderColor: 'var(--danger-color)', marginTop: 'var(--gap)' }}>
-          <span>{error}</span>
+        <div className="notice" role="alert" style={{ borderColor: 'var(--danger-color)', marginTop: 'var(--gap)' }}>
+          <div>
+            <span>{error}</span>
+            <ErrorDetails text={errorDetail} />
+          </div>
         </div>
       )}
       {status === 'disconnected' && (

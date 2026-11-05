@@ -167,7 +167,7 @@ export function UnicodeTab({ project }: { project: Project }) {
             </label>
           </div>
           {confirmMode && (
-            <div className="notice" style={{ borderColor: 'var(--danger-color)' }}>
+            <div className="notice" role="alert" style={{ borderColor: 'var(--danger-color)' }}>
               <span>
                 {t(
                   `${highKeys} keys have values 0x8000–0xFFFF: in the other mode they mean different characters. Click the mode again to switch anyway.`,

@@ -162,7 +162,7 @@ export function BuildTab() {
         </div>
       </div>
       {!ready && (
-        <div className="notice">
+        <div className="notice" role="status">
           <span>
             {!env?.runner || !env?.homeValid ? (
               <a href={href({ section: 'firmware', tab: 'setup' })}>{t('Set up QMK (environment)', 'Настройте QMK (окружение)')}</a>
@@ -173,7 +173,7 @@ export function BuildTab() {
         </div>
       )}
       {ready && stale && (
-        <div className="notice" style={{ borderColor: 'var(--danger-color)' }}>
+        <div className="notice" role="alert" style={{ borderColor: 'var(--danger-color)' }}>
           <span>
             {t(
               'The files in the keymap folder differ from the project — the build uses the files on disk, not the project.',
@@ -192,7 +192,7 @@ export function BuildTab() {
         </p>
       )}
       {last && !running && (
-        <div className="notice" style={{ borderColor: last.code === 0 ? 'var(--meter-to)' : 'var(--danger-color)' }}>
+        <div className="notice" role={last.code === 0 ? 'status' : 'alert'} style={{ borderColor: last.code === 0 ? 'var(--meter-to)' : 'var(--danger-color)' }}>
           <span>
             {last.code === 0
               ? last.firmware

@@ -16,12 +16,14 @@ import { runDeviceProbe } from './device/probeRun';
 import { useSettingsStore } from './store/settingsStore';
 import { applyTheme } from './theme/applyTheme';
 import { installFocusRing } from './lib/focusRing';
+import { installAriaDisabledGuard } from './lib/ariaDisabled';
 import { setLanguage } from './i18n';
 
 // Theme before the first render, so there is no “flash” of default colors.
 applyTheme(useSettingsStore.getState().settings);
 setLanguage(useSettingsStore.getState().settings.language);
 installFocusRing(window, document.documentElement);
+installAriaDisabledGuard(document);
 if (isDesktop) document.documentElement.setAttribute('data-desktop', navi!.platform);
 
 if (location.hash === '#/probe' && navi) {

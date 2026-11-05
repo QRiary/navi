@@ -330,7 +330,7 @@
   margin-left: auto;
 }
 
-.theme-actions .theme-remove:hover:not(:disabled) {
+.theme-actions .theme-remove:hover:not(:disabled):not([aria-disabled="true"]) {
   color: var(--danger-color);
 }
 

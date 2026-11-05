@@ -105,7 +105,7 @@ export function LightingPage() {
 
   return (
     <div className="page">
-      <div className="notice">
+      <div className="notice" role="status">
         <span>
           RGB Matrix {st && <StatusChip state={st.state} likely={st.likely} text={lang === 'ru' ? st.reason.ru : st.reason.en} />} ·{' '}
           {connected

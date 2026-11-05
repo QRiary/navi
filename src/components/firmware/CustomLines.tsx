@@ -70,7 +70,7 @@ export function CustomLines({ file, generatedSymbols }: { file: CustomFile; gene
         </button>
       </div>
       {review && (
-        <div className="notice" style={{ borderColor: 'var(--danger-color)', margin: '8px 12px' }}>
+        <div className="notice" role="alert" style={{ borderColor: 'var(--danger-color)', margin: '8px 12px' }}>
           <span>
             {t(
               'This code came with an imported project and is not used yet. Read it (all three files): it is compiled into the firmware and runs on the keyboard — a keyboard can type anything into your computer.',

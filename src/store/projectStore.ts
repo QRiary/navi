@@ -76,6 +76,8 @@ export interface ProjectState {
   dismissLinkConflict(): void;
   revertToSaved(): void;
   remove(id: string): Promise<void>;
+  /** Undo of `remove`: the project is back in the list (not opened). false when it could not be brought back. */
+  restoreRemoved(id: string): Promise<boolean>;
   close(): void;
   revisions(): Promise<Revision[]>;
   /** Open a previous version as the current state (a change that can be undone). */
@@ -355,6 +357,12 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
         rememberLast(null);
       }
       await get().refreshList();
+    },
+
+    async restoreRemoved(id) {
+      const ok = await projectRepo.restore(id);
+      await get().refreshList();
+      return ok;
     },
 
     close() {

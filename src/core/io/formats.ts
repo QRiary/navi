@@ -19,6 +19,8 @@ export type FileKind = 'navi' | 'qmk-keymap' | 'qmk-info' | 'via-definition' | '
 export interface ImportIssue {
   level: 'error' | 'warning';
   message: string;
+  /** Raw technical text (a parser error) behind the sentence: shown under “Details”. */
+  detail?: string;
 }
 
 function isObj(v: unknown): v is Record<string, unknown> {
