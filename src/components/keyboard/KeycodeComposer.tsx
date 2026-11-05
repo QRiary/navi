@@ -130,7 +130,7 @@ export function LayerSelect({ project, value, max, onChange }: { project: Projec
 }
 
 /** The two slots of a tap-hold key: tap = any keycode; hold = modifiers, a layer (+ modifiers) or any keycode. */
-function TapHoldSlots({ spec, project, tap, hold, onChange }: { spec: KeycodeSpec; project: Project; tap: number; hold: HoldAction; onChange: (tap: number, hold: HoldAction) => void }) {
+function TapHoldSlots({ project, tap, hold, onChange }: { project: Project; tap: number; hold: HoldAction; onChange: (tap: number, hold: HoldAction) => void }) {
   const holdMods = hold.type === 'key' ? 0 : hold.mods;
   const kinds: { type: HoldAction['type']; label: string; make: () => HoldAction }[] = [
     { type: 'mods', label: t('modifiers', 'модификаторы'), make: () => ({ type: 'mods', mods: (holdMods & 0x0f) === 0 ? 0x01 : holdMods }) },
@@ -141,7 +141,6 @@ function TapHoldSlots({ spec, project, tap, hold, onChange }: { spec: KeycodeSpe
     <>
       <div className="field-row">
         <span className="field-hint">{t('tap:', 'нажатие:')}</span>
-        {tap <= 0xff && <BasicKeySelect spec={spec} value={tap} label={t('Tap key', 'Клавиша нажатия')} onChange={(v) => onChange(v, hold)} />}
         <KeycodeField fromKeyboard={false} value={tap} label={t('Tap: any keycode', 'Нажатие: любой keycode')} onChange={(v) => onChange(v, hold)} />
       </div>
       <div className="field-row">
@@ -337,7 +336,7 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
           />
         </>
       )}
-      {kind === 'tap-hold' && <TapHoldSlots spec={spec} project={project} tap={slots.tap} hold={slots.hold} onChange={commitTapHold} />}
+      {kind === 'tap-hold' && <TapHoldSlots project={project} tap={slots.tap} hold={slots.hold} onChange={commitTapHold} />}
       {kind === 'layer-mod' && (
         <div className="field-row">
           <span className="field-hint">{t('hold → layer:', 'удержание → слой:')}</span>
