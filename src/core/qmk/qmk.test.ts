@@ -511,7 +511,7 @@ describe('own pipeline mode', async () => {
     };
   };
   const QMK_HOOKS = ['process_record_user', 'get_tapping_term', 'get_combo_term', 'combo_should_trigger', 'leader_end_user'];
-  const NAVI_FNS = ['process_record_navi', 'get_tapping_term_navi', 'get_combo_term_navi', 'combo_should_trigger_navi', 'leader_end_navi', 'layer_state_set_navi', 'get_quick_tap_term_navi', 'get_hold_on_other_key_press_navi', 'get_permissive_hold_navi', 'pre_process_record_navi'];
+  const NAVI_FNS = ['process_record_navi', 'get_tapping_term_navi', 'get_combo_term_navi', 'combo_should_trigger_navi', 'leader_end_navi', 'layer_state_set_navi', 'get_quick_tap_term_navi', 'get_hold_on_other_key_press_navi', 'get_permissive_hold_navi', 'pre_process_record_navi', 'combo_ref_from_layer_navi', 'process_combo_event_navi'];
   const defines = (c: string, name: string) => new RegExp(`^\\w[\\w ]*\\b${name}\\([^;]*\\)\\s*\\{`, 'm').test(c);
 
   it('file set: keymap.c, navi.h, navi_rules.mk, navi_config.h — never rules.mk / config.h', () => {
@@ -536,7 +536,7 @@ describe('own pipeline mode', async () => {
     const h = file(res, 'navi.h');
     expect(h).toContain('#pragma once');
     expect(h).toContain('    NAVI_SAFE_RANGE = SAFE_RANGE // your own keycodes start here');
-    expect(h).toMatch(/#ifdef COMBO_ENABLE\nuint16_t get_combo_term_navi\(uint16_t combo_index, combo_t \*combo\);\nbool combo_should_trigger_navi\([^)]*\);\n#endif/);
+    expect(h).toMatch(/#ifdef COMBO_ENABLE\nuint16_t get_combo_term_navi\(uint16_t combo_index, combo_t \*combo\);\nbool combo_should_trigger_navi\([^)]*\);\nuint8_t combo_ref_from_layer_navi\(uint8_t layer\);\nvoid process_combo_event_navi\(uint16_t combo_index, bool pressed\);\n#endif/);
     expect(h).toContain('#ifdef LEADER_ENABLE\nvoid leader_end_navi(void);\n#endif');
   });
 
@@ -551,7 +551,8 @@ describe('own pipeline mode', async () => {
     for (const hook of QMK_HOOKS) expect(defines(generated, hook), hook).toBe(false);
     for (const fn of NAVI_FNS) expect(defines(generated, fn), fn).toBe(true);
     expect(generated).toContain('case TD(TD_ESC): return 250;');
-    expect(generated).toContain('case 0: return layer_state_is(BASE) || layer_state_is(L_LOWER); // esc_one');
+    expect(generated).toContain('layer_state_t top = (layer_state_t)1 << get_highest_layer(layer_state | default_layer_state);');
+    expect(generated).toContain('case 0: return top & ((layer_state_t)1 << BASE | (layer_state_t)1 << L_LOWER); // esc_one');
     expect(generated).toContain('case QK_MACRO_0: // git');
     expect(generated).toContain('if (leader_sequence_two_keys(KC_G, KC_S)) {');
     expect(generated).toContain('const uint32_t PROGMEM unicode_map[] = {');

@@ -6,10 +6,10 @@
 import { useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { keyLabel } from '../core/keycodes/labels';
-import { checkCombos, checkKeyOverrides } from '../core/features/advanced';
+import { checkCombos, checkKeyOverrides, comboRefOf } from '../core/features/advanced';
 import { configParams, groupTitle } from '../core/qmk/configParams';
 import { newId } from '../core/layout/geometry';
-import { activeKeymap } from '../core/project/ops';
+import { activeKeymap, setLayerComboRef } from '../core/project/ops';
 import type { Combo, CustomKeycode, KeyAlias, KeyOverride, MatrixPos, Project } from '../core/project/types';
 import { aliasCName, ALIAS_LABEL_MAX, checkKeyAliases, KEY_ALIASES_MAX } from '../core/project/aliases';
 import { layerIdentifiers } from '../core/qmk/generate';
@@ -44,15 +44,47 @@ function CombosTab({ project }: { project: Project }) {
   const combo = project.combos.find((c) => c.id === current) ?? null;
   const selectedPositions: MatrixPos[] = active.geometry.keys.filter((k) => selection.includes(k.id) && k.matrix).map((k) => k.matrix!);
   const marked = new Set((combo?.keys ?? []).map(([r, c]) => `${r},${c}`));
+  // Labels of combo keys: the layer combos read on layer 0.
+  const labelLayer = comboRefOf(km, 0);
+  const setRef = (layer: number, value: string) =>
+    apply((p) => setLayerComboRef(p, km.id, layer, value === '' ? undefined : value === 'self' ? 'self' : Number(value)), t('combo reference layer', 'опорный слой комбо'));
   return (
     <div className="page">
       <FeatureNote project={project} feature="combo" />
       <p className="field-hint">
         {t(
-          'Press several keys together → another key. QMK matches combos by the keycodes of the base layer (layer 0), so combo keys must have unique, non-empty keycodes there.',
-          'Нажмите несколько клавиш вместе → другая клавиша. QMK узнаёт комбо по keycodes базового слоя (слой 0), поэтому у клавиш комбо там должны быть разные непустые keycodes.',
+          'Press several keys together → another key. QMK matches combos by keycodes, read on each layer from its reference layer (below; a transparent key uses the setting of the layer it falls through to): combo keys need unique, non-empty keycodes there. A combo limited to layers works when the highest active layer is one of them.',
+          'Нажмите несколько клавиш вместе → другая клавиша. QMK узнаёт комбо по keycodes, взятым на каждом слое с его опорного слоя (ниже; прозрачная клавиша берёт настройку слоя, на который проваливается): у клавиш комбо там должны быть разные непустые keycodes. Комбо, ограниченное слоями, работает, когда самый верхний активный слой — один из них.',
         )}
       </p>
+      <div className="panel-box">
+        <div className="panel-box-head">
+          <span className="cell-label">{t('Reference layers: combos on this layer read keys from', 'Опорные слои: комбо на этом слое читают клавиши со слоя')}</span>
+        </div>
+        <div className="rows">
+          {km.layers.map((l, i) => {
+            const r = comboRefOf(km, i);
+            const ref = r === 0 ? '' : r === i ? 'self' : String(r);
+            return (
+              <div key={l.id} className="row" style={{ ['--row-cols' as string]: '32px minmax(120px, 240px) minmax(160px, 240px)' }}>
+                <span className="num">{i}</span>
+                <span>{l.name}</span>
+                <select className="select" value={ref} aria-label={t(`Combo reference layer of layer ${i}`, `Опорный слой комбо для слоя ${i}`)} onChange={(e) => setRef(i, e.target.value)}>
+                  <option value="">{t('layer 0 (default)', 'слой 0 (по умолчанию)')}</option>
+                  {i !== 0 && <option value="self">{t('this layer', 'этот слой')}</option>}
+                  {km.layers.map((other, n) =>
+                    n === 0 || n === i ? null : (
+                      <option key={other.id} value={n}>
+                        {t(`layer ${n}`, `слой ${n}`)} · {other.name}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </div>
+            );
+          })}
+        </div>
+      </div>
       <div className="grid-2" style={{ gridTemplateColumns: 'minmax(240px, 340px) minmax(0, 1fr)' }}>
         <div className="panel-box">
           <div className="rows">
@@ -87,10 +119,10 @@ function CombosTab({ project }: { project: Project }) {
               </button>
             </div>
             <div className="panel-box-body field">
-              <LayoutPreview geometry={active.geometry} label={([r, c]) => keyLabel(spec, km.layers[0].keys[r * cols + c], labelCtx)} marked={marked} height={150} />
+              <LayoutPreview geometry={active.geometry} label={([r, c]) => keyLabel(spec, km.layers[labelLayer].keys[r * cols + c], labelCtx)} marked={marked} height={150} />
               <div className="field-row">
                 <span className="field-hint">
-                  {t('keys', 'клавиши')}: {combo.keys.map(([r, c]) => keyLabel(spec, km.layers[0].keys[r * cols + c], labelCtx).main || `[${r},${c}]`).join(' + ') || '—'}
+                  {t('keys', 'клавиши')}: {combo.keys.map(([r, c]) => keyLabel(spec, km.layers[labelLayer].keys[r * cols + c], labelCtx).main || `[${r},${c}]`).join(' + ') || '—'}
                 </span>
                 <button className="btn" disabled={selectedPositions.length < 2} onClick={() => set(project.combos.map((c) => (c.id === combo.id ? { ...c, keys: selectedPositions } : c)), t('combo keys', 'клавиши комбо'))} title={t('Select 2+ keys on the Keyboard page first', 'Сначала выделите 2+ клавиши в разделе «Клавиатура»')}>
                   {t(`take selected keys (${selectedPositions.length})`, `взять выбранные клавиши (${selectedPositions.length})`)}

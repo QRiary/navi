@@ -5,7 +5,8 @@
  */
 import { decode } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
-import type { Combo, KeyOverride, Project, TapDance } from '../project/types';
+import { KC_TRNS } from '../project/factory';
+import type { Combo, Keymap, KeyOverride, MatrixPos, Project, TapDance } from '../project/types';
 import { TAP_DANCE_MAX_STEPS, TAP_DANCE_VARIANTS } from '../project/types';
 import { tapDanceKind } from '../project/tapDances';
 import { validCIdentifier } from '../qmk/customCode';
@@ -89,39 +90,97 @@ export function checkTapDances(spec: KeycodeSpec, tds: TapDance[], reserved: Rea
   return out;
 }
 
-export function checkCombos(project: Project, combos: Combo[], refLayer = 0): AdvancedIssue[] {
+/**
+ * The layer combos read their keys from while `layer` serves the key (QMK's combo_ref_from_layer): Layer.comboRef,
+ * 'self' = that layer, unset = layer 0.
+ */
+export function comboRefOf(keymap: Keymap, layer: number): number {
+  const ref = keymap.layers[layer]?.comboRef;
+  if (ref === 'self') return layer;
+  return typeof ref === 'number' && ref < keymap.layers.length ? ref : 0;
+}
+
+/** Some layer reads combo keys from another layer than 0: no COMBO_ONLY_FROM_LAYER, combo_ref_from_layer instead. */
+export const comboRefsMixed = (keymap: Keymap) => keymap.layers.some((_, i) => comboRefOf(keymap, i) !== 0);
+
+/** One QMK combo: QMK matches keycodes, a NAVI combo is key positions, so one combo can need several. */
+export interface QmkCombo {
+  combo: Combo;
+  /** C name: the combo's own, then <name>_2, <name>_3… */
+  name: string;
+  /** Keycodes QMK matches, in the combo's key order. */
+  keys: number[];
+  /** Layers it works on (the highest active layer is one of them); null = every layer. */
+  layers: number[] | null;
+}
+
+/**
+ * The QMK combos of a combo. All layers reading from layer 0: one, by layer 0's keycodes (COMBO_ONLY_FROM_LAYER 0).
+ * Otherwise, for each layer L the combo works on, a key reads the reference layer of L, or of the default layer when
+ * the key is transparent on L (a static stand-in for the layer it falls through to); one QMK combo per distinct set
+ * of keycodes, limited to the layers that give it.
+ */
+export function qmkCombos(keymap: Keymap, cols: number, combo: Combo): QmkCombo[] {
+  const at = (layer: number, [r, c]: MatrixPos) => keymap.layers[layer]?.keys[r * cols + c] ?? 0;
+  const limit = combo.layers?.length ? combo.layers : null;
+  if (!comboRefsMixed(keymap)) return [{ combo, name: combo.name, keys: combo.keys.map((pos) => at(0, pos)), layers: limit }];
+  const count = keymap.layers.length;
+  const on = limit ? [...new Set(limit)].filter((l) => l < count).sort((a, b) => a - b) : keymap.layers.map((_, i) => i);
+  if (!on.length) return [{ combo, name: combo.name, keys: combo.keys.map((pos) => at(comboRefOf(keymap, 0), pos)), layers: limit }];
+  const groups = new Map<string, { keys: number[]; layers: number[] }>();
+  for (const layer of on) {
+    const keys = combo.keys.map((pos) => at(comboRefOf(keymap, at(layer, pos) === KC_TRNS ? keymap.defaultLayer : layer), pos));
+    const group = groups.get(keys.join(','));
+    if (group) group.layers.push(layer);
+    else groups.set(keys.join(','), { keys, layers: [layer] });
+  }
+  return [...groups.values()].map((g, i) => ({ combo, name: i === 0 ? combo.name : `${combo.name}_${i + 1}`, keys: g.keys, layers: !limit && g.layers.length === count ? null : g.layers }));
+}
+
+export function checkCombos(project: Project, combos: Combo[]): AdvancedIssue[] {
   const out: AdvancedIssue[] = [];
   const km = project.keymaps.find((k) => k.id === project.activeKeymapId) ?? project.keymaps[0];
   const cols = project.hardware.matrix.cols;
-  const keyOf = (r: number, c: number) => km.layers[refLayer]?.keys[r * cols + c] ?? 0;
+  const mixed = comboRefsMixed(km);
+  const allLayers = km.layers.map((_, i) => i);
+  // Combos on the same keys: allowed when their layers don't overlap (no layers = every layer).
+  const byKeys = new Map<string, { name: string; layers: Set<number> | null }[]>();
   const sets = new Map<string, string>();
-  const names = new Set<string>();
+  const names = new Set(combos.map((c) => c.name));
+  const seen = new Set<string>();
   for (const combo of combos) {
     const where = combo.name;
     if (!IDENT.test(combo.name)) out.push({ level: 'error', where, message: { en: 'Name must be a C identifier.', ru: 'Имя — C-идентификатор.' } });
-    if (names.has(combo.name)) out.push({ level: 'error', where, message: { en: 'Duplicate name.', ru: 'Имя повторяется.' } });
-    names.add(combo.name);
+    if (seen.has(combo.name)) out.push({ level: 'error', where, message: { en: 'Duplicate name.', ru: 'Имя повторяется.' } });
+    seen.add(combo.name);
     if (combo.keys.length < 2) out.push({ level: 'error', where, message: { en: 'A combo needs at least 2 keys.', ru: 'В комбо нужно минимум 2 клавиши.' } });
     if (!combo.result) out.push({ level: 'warning', where, message: { en: 'No result keycode.', ru: 'Не задан результат.' } });
     // QMK matches combos by keycodes of the reference layer: empty/transparent and identical ones do not work.
-    const codes = combo.keys.map(([r, c]) => keyOf(r, c));
-    if (codes.some((v) => v === 0 || v === 1)) {
-      out.push({
-        level: 'error',
-        where,
-        message: {
-          en: `A combo key is empty or transparent on layer ${refLayer} — QMK matches combos by keycodes of that layer.`,
-          ru: `Клавиша комбо пустая или прозрачная на слое ${refLayer} — QMK сравнивает комбо по keycodes этого слоя.`,
-        },
-      });
-    }
-    if (new Set(codes).size !== codes.length) {
-      out.push({ level: 'error', where, message: { en: 'Two combo keys have the same keycode — QMK cannot tell them apart.', ru: 'У двух клавиш комбо одинаковый keycode — QMK их не различит.' } });
+    for (const [i, q] of qmkCombos(km, cols, combo).entries()) {
+      const on = mixed ? (q.layers ?? allLayers).join(', ') : '0';
+      if (q.keys.some((v) => v === 0 || v === 1)) {
+        out.push({
+          level: 'error',
+          where,
+          message: mixed
+            ? { en: `On layer ${on} a combo key is empty or transparent on its reference layer — QMK matches combos by those keycodes.`, ru: `На слое ${on} клавиша комбо пустая или прозрачная на своём опорном слое — QMK сравнивает комбо по этим keycodes.` }
+            : { en: 'A combo key is empty or transparent on layer 0 — QMK matches combos by keycodes of that layer.', ru: 'Клавиша комбо пустая или прозрачная на слое 0 — QMK сравнивает комбо по keycodes этого слоя.' },
+        });
+      }
+      if (new Set(q.keys).size !== q.keys.length) {
+        out.push({ level: 'error', where, message: { en: `On layer ${on} two combo keys have the same keycode — QMK cannot tell them apart.`, ru: `На слое ${on} у двух клавиш комбо одинаковый keycode — QMK их не различит.` } });
+      }
+      if (i > 0 && names.has(q.name)) {
+        out.push({ level: 'error', where, message: { en: `Its keys differ on layer ${on}, so keymap.c gets a second combo “${q.name}”: another combo has that name.`, ru: `На слое ${on} у него другие клавиши, поэтому в keymap.c будет второе комбо «${q.name}» — это имя уже занято другим комбо.` } });
+      }
     }
     const keySet = [...combo.keys.map(([r, c]) => `${r},${c}`)].sort().join('|');
-    const other = sets.get(keySet);
-    if (other) out.push({ level: 'error', where, message: { en: `Same keys as combo “${other}”.`, ru: `Те же клавиши, что в комбо «${other}».` } });
-    else sets.set(keySet, combo.name);
+    const layers = combo.layers?.length ? new Set(combo.layers) : null;
+    const same = byKeys.get(keySet) ?? [];
+    const other = same.find((o) => !o.layers || !layers || [...layers].some((l) => o.layers!.has(l)));
+    if (other) out.push({ level: 'error', where, message: { en: `Same keys as combo “${other.name}” on the same layers.`, ru: `Те же клавиши, что в комбо «${other.name}», на тех же слоях.` } });
+    byKeys.set(keySet, [...same, { name: combo.name, layers }]);
+    if (!sets.has(keySet)) sets.set(keySet, combo.name);
   }
   // Overlaps: combos whose keys are part of another combo fire earlier (depends on timing).
   const list = [...sets.entries()].map(([k, name]) => ({ keys: new Set(k.split('|')), name }));

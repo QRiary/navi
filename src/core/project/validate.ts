@@ -357,16 +357,25 @@ function readKeymap(r: Reader, v: unknown, path: string, rows: number, cols: num
       else if (cNames.has(lo.cName)) r.warn(`${p}.cName`, `layer C name “${lo.cName}” is used by another layer — ignored`);
       else cNames.add((cName = lo.cName));
     }
+    // Combo reference layer: 'self' or a layer number (checked against the layer count below).
+    const comboRef = lo.comboRef === undefined ? undefined : lo.comboRef === 'self' ? ('self' as const) : r.num(lo.comboRef, `${p}.comboRef`, 0, LIMITS.maxLayers - 1, 0);
     return {
       id: r.id(lo.id, `${p}.id`, 'layer'),
       name: r.str(lo.name, `${p}.name`, `Layer ${i}`, 40),
       ...(cName ? { cName } : {}),
+      ...(comboRef !== undefined ? { comboRef } : {}),
       color: color && HEX_COLOR.test(color) ? color : undefined,
       keys,
       encoders,
     };
   });
   if (layers.length === 0) r.error(`${path}.layers`, 'a keymap needs at least one layer');
+  layers.forEach((l, i) => {
+    if (typeof l.comboRef === 'number' && l.comboRef >= layers.length) {
+      r.warn(`${path}.layers[${i}].comboRef`, `combo reference layer ${l.comboRef} does not exist — layer 0 is used`);
+      delete l.comboRef;
+    }
+  });
   return {
     id: r.id(o.id, `${path}.id`, 'keymap'),
     name: r.str(o.name, `${path}.name`, 'keymap'),

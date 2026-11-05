@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 9;
+export const PROJECT_SCHEMA_VERSION = 10;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -173,6 +173,11 @@ export interface Layer {
   cName?: string;
   /** Layer tag color (#rrggbb) or empty. */
   color?: string;
+  /**
+   * Where combos read their keys on this layer (Advanced → Combos): a layer number, or 'self' = this layer.
+   * Unset = layer 0. A key transparent here uses the setting of the layer it falls through to.
+   */
+  comboRef?: number | 'self';
   /** Keycodes row by row: keys[row * cols + col]. Length = rows × cols. */
   keys: number[];
   /** Encoder actions by encoder number. */

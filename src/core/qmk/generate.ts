@@ -13,7 +13,7 @@
 import { modsToConstExpr, toQmk, type NameContext } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
 import { FEATURE_BY_ID, type FeatureId } from '../features/registry';
-import { checkCombos, checkKeyOverrides, checkLeaderSequences, checkTapDances, checkUnicodeMap, leaderFunction, type AdvancedIssue } from '../features/advanced';
+import { checkCombos, comboRefOf, comboRefsMixed, qmkCombos, checkKeyOverrides, checkLeaderSequences, checkTapDances, checkUnicodeMap, leaderFunction, type AdvancedIssue } from '../features/advanced';
 import { configParams, configValueType } from './configParams';
 import { layerOnTopCallback, layerOnTopState, layerOnTopStubs } from './layerOnTop';
 import { checkCustom, customBlock, CUSTOM_FILES, GENERATED_SYMBOLS, hasCustomCode, NAVI_HOOKS, PIPELINE_MAX_HEADERS, PIPELINE_SYMBOLS, safeHeaderName, unsafeDefineValue, validCIdentifier, type CustomFile } from './customCode';
@@ -25,7 +25,7 @@ import { activeGeometry } from '../project/ops';
 import { checkKeyAliases } from '../project/aliases';
 import { checkTapHolds, effectiveTapHolds } from '../project/tapHolds';
 import { checkTapHoldActions, effectiveTapHoldActions, projectOwnCodeRefs, type OwnCodeFile } from '../project/tapHoldActions';
-import { hasHoldKeys, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, naviSendCode, replayTracked, standInCheckCode, tapHoldsCode, type StandIn } from './tapHold';
+import { comboEventCode, hasHoldKeys, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, naviSendCode, replayTracked, standInCheckCode, tapHoldsCode, type StandIn } from './tapHold';
 import { tapDanceCode } from './tapDance';
 import { layoutMacro, renderLayers, textLayout } from './layoutText';
 
@@ -248,8 +248,14 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const encCount = Math.max(0, encoderCount);
   const hasEncoders = encCount > 0;
   const tdTerms = tdSorted.filter((t) => t.tappingTerm);
-  const comboTerms = project.combos.filter((c) => c.term);
-  const comboLayers = project.combos.filter((c) => c.layers && c.layers.length);
+  // One combo can be several QMK combos (reference layers): hooks get QMK's combo index.
+  const qmkComboList = project.combos.flatMap((combo) => qmkCombos(keymap, cols, combo));
+  const comboRefs = hasCombos && comboRefsMixed(keymap);
+  const comboTerms = qmkComboList.filter((q) => q.combo.term);
+  const comboLayers = qmkComboList.filter((q) => q.layers);
+  const holdKeys = hasHoldKeys(tapHold);
+  // NAVI's tracking needs combo results as key presses: they become KC_NO, process_combo_event plays them.
+  const comboEvents = replay && qmkComboList.some((q) => q.combo.result !== 0);
   const macros = project.macros.filter((m) => m.steps.length > 0);
   const sendStringCustoms = customs.filter((c) => c.action.type !== 'none');
 
@@ -281,6 +287,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     h.push('//   bool combo_should_trigger(uint16_t index, combo_t *combo, uint16_t keycode, keyrecord_t *record) {');
     h.push('//       return combo_should_trigger_navi(index, combo, keycode, record);');
     h.push('//   }');
+    h.push('//   uint8_t combo_ref_from_layer(uint8_t layer) { return combo_ref_from_layer_navi(layer); }');
+    h.push('//   void process_combo_event(uint16_t index, bool pressed) { process_combo_event_navi(index, pressed); }');
     h.push('//   void leader_end_user(void) { leader_end_navi(); }');
     h.push('//   layer_state_t layer_state_set_user(layer_state_t state) { return layer_state_set_navi(state); }');
     h.push('// With “layer keys bring their layer to the top” on, process_record_navi must also see layer key releases');
@@ -382,19 +390,20 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   }
 
   if (hasCombos) {
-    c.push('// ── Combos (matched by keycodes of layer 0: COMBO_ONLY_FROM_LAYER 0) ─────');
-    project.combos.forEach((combo) => {
-      const codes = combo.keys.map(([r, col]) => kc(keymap.layers[0].keys[r * cols + col]));
-      c.push(`const uint16_t PROGMEM ${combo.name}_keys[] = { ${codes.join(', ')}, COMBO_END };`);
+    c.push(comboRefs ? '// ── Combos (each layer reads combo keys from its reference layer: combo_ref_from_layer) ──' : '// ── Combos (matched by keycodes of layer 0: COMBO_ONLY_FROM_LAYER 0) ─────');
+    qmkComboList.forEach((q) => {
+      const on = comboRefs && q.layers ? ` // on ${q.layers.map((l) => layerIds[l] ?? l).join(', ')}` : '';
+      c.push(`const uint16_t PROGMEM ${q.name}_keys[] = { ${q.keys.map(kc).join(', ')}, COMBO_END };${on}`);
     });
+    if (comboEvents) c.push('// Results are KC_NO here: process_combo_event plays them, so the tap-hold logic sees them like key presses.');
     c.push('combo_t key_combos[] = {');
-    project.combos.forEach((combo) => c.push(`    COMBO(${combo.name}_keys, ${kc(combo.result)}),`));
+    qmkComboList.forEach((q) => c.push(`    COMBO(${q.name}_keys, ${comboEvents ? 'KC_NO' : kc(q.combo.result)}),`));
     c.push('};');
     if (comboTerms.length) {
       c.push('');
       c.push(`uint16_t ${hookName('get_combo_term')}(uint16_t combo_index, combo_t *combo) {`);
       c.push('    switch (combo_index) {');
-      project.combos.forEach((combo, i) => combo.term && c.push(`        case ${i}: return ${combo.term}; // ${combo.name}`));
+      qmkComboList.forEach((q, i) => q.combo.term && c.push(`        case ${i}: return ${q.combo.term}; // ${q.name}`));
       c.push('    }');
       c.push('    return COMBO_TERM;');
       c.push('}');
@@ -402,13 +411,38 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     if (comboLayers.length) {
       c.push('');
       c.push(`bool ${hookName('combo_should_trigger')}(uint16_t combo_index, combo_t *combo, uint16_t keycode, keyrecord_t *record) {`);
+      c.push('    // A combo works on a layer when that layer is the highest active one.');
+      c.push('    layer_state_t top = (layer_state_t)1 << get_highest_layer(layer_state | default_layer_state);');
       c.push('    switch (combo_index) {');
-      project.combos.forEach((combo, i) => {
-        if (!combo.layers?.length) return;
-        c.push(`        case ${i}: return ${combo.layers.map((l) => `layer_state_is(${layerIds[l] ?? l})`).join(' || ')}; // ${combo.name}`);
+      qmkComboList.forEach((q, i) => {
+        if (!q.layers) return;
+        c.push(`        case ${i}: return top & (${q.layers.map((l) => `(layer_state_t)1 << ${layerIds[l] ?? l}`).join(' | ')}); // ${q.name}`);
       });
       c.push('    }');
       c.push('    return true;');
+      c.push('}');
+    }
+    if (comboRefs) {
+      c.push('');
+      c.push('// The layer QMK takes the key being processed from (a transparent key falls through), as get_event_keycode does.');
+      c.push('static uint8_t navi_key_layer = 0;');
+      c.push('static uint8_t navi_layer_of(keyrecord_t *record) {');
+      c.push('#if !defined(NO_ACTION_LAYER) && !defined(STRICT_LAYER_RELEASE)');
+      c.push('    if (!disable_action_cache && !record->event.pressed) return read_source_layers_cache(record->event.key);');
+      c.push('#endif');
+      c.push('    return layer_switch_get_layer(record->event.key);');
+      c.push('}');
+      c.push('');
+      c.push('// Combo reference layers (NAVI: Advanced → Combos): by the layer serving the key, not the highest layer QMK passes.');
+      c.push(`uint8_t ${hookName('combo_ref_from_layer')}(uint8_t layer) {`);
+      c.push('    (void)layer;');
+      c.push('    switch (navi_key_layer) {');
+      keymap.layers.forEach((_, l) => {
+        const ref = comboRefOf(keymap, l);
+        if (ref !== 0) c.push(`        case ${layerIds[l]}: return ${layerIds[ref]};`);
+      });
+      c.push(`        default: return ${layerIds[0]};`);
+      c.push('    }');
       c.push('}');
     }
     c.push('');
@@ -444,12 +478,16 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   }
 
   // ── Tap-hold settings (Advanced → Tap-hold) ──
-  const holdKeys = hasHoldKeys(tapHold);
   const quickTap = tapHold.quick.length > 0;
   const holdPress = tapHold.holdPress.length > 0;
   const permissive = tapHold.permissive.length > 0;
-  const preProcess = holdKeys || replay;
-  if (preProcess) c.push(...preProcessHook(hookName('pre_process_record_user'), { lastPressed: holdKeys, replay, interrupters: holdKeys && tracked.some((h) => h.holdKeys.length > 0) }));
+  const preProcess = holdKeys || replay || comboRefs;
+  const interrupters = holdKeys && tracked.some((h) => h.holdKeys.length > 0);
+  if (preProcess) c.push(...preProcessHook(hookName('pre_process_record_user'), { lastPressed: holdKeys, replay, interrupters, comboLayer: comboRefs, comboEvents }));
+  if (comboEvents) {
+    const played = qmkComboList.map((q) => ({ result: kc(q.combo.result), keys: q.combo.keys, name: q.name }));
+    c.push(...comboEventCode(hookName('process_combo_event'), played, { lastPressed: holdKeys, interrupters }));
+  }
   if (quickTap) c.push(...quickTapHook(hookName('get_quick_tap_term'), tapHold));
   if (holdPress) c.push(...holdOnOtherKeyPressHook(hookName('get_hold_on_other_key_press'), tapHold));
   if (permissive) c.push(...permissiveHoldHook(hookName('get_permissive_hold'), tapHold));
@@ -534,6 +572,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     pre_process_record_user: preProcess,
     get_combo_term: comboTerms.length > 0,
     combo_should_trigger: comboLayers.length > 0,
+    combo_ref_from_layer: comboRefs,
+    process_combo_event: comboEvents,
     leader_end_user: leaders.length > 0,
   };
   if (pipeline) {
@@ -547,6 +587,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       { hook: 'pre_process_record_user', lines: preProcessStub('pre_process_record_navi') },
       { hook: 'get_combo_term', guard: 'COMBO_ENABLE', lines: ['uint16_t get_combo_term_navi(uint16_t combo_index, combo_t *combo) {', '    return COMBO_TERM;', '}'] },
       { hook: 'combo_should_trigger', guard: 'COMBO_ENABLE', lines: ['bool combo_should_trigger_navi(uint16_t combo_index, combo_t *combo, uint16_t keycode, keyrecord_t *record) {', '    return true;', '}'] },
+      { hook: 'combo_ref_from_layer', guard: 'COMBO_ENABLE', lines: ['uint8_t combo_ref_from_layer_navi(uint8_t layer) {', '    return layer;', '}'] },
+      { hook: 'process_combo_event', guard: 'COMBO_ENABLE', lines: ['void process_combo_event_navi(uint16_t combo_index, bool pressed) {}'] },
       { hook: 'leader_end_user', guard: 'LEADER_ENABLE', lines: ['void leader_end_navi(void) {}'] },
       { hook: 'layer_state_set_user', lines: layerOnTopStubs() },
     ];
@@ -570,6 +612,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     h.push('#ifdef COMBO_ENABLE');
     h.push('uint16_t get_combo_term_navi(uint16_t combo_index, combo_t *combo);');
     h.push('bool combo_should_trigger_navi(uint16_t combo_index, combo_t *combo, uint16_t keycode, keyrecord_t *record);');
+    h.push('uint8_t combo_ref_from_layer_navi(uint8_t layer);');
+    h.push('void process_combo_event_navi(uint16_t combo_index, bool pressed);');
     h.push('#endif');
     h.push('#ifdef LEADER_ENABLE');
     h.push('void leader_end_navi(void);');
@@ -643,7 +687,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       },
     });
   }
-  if (hasCombos) define('COMBO_ONLY_FROM_LAYER', 0);
+  if (hasCombos && !comboRefs) define('COMBO_ONLY_FROM_LAYER', 0);
   if (comboTerms.length) define('COMBO_TERM_PER_COMBO');
   if (comboLayers.length) define('COMBO_SHOULD_TRIGGER');
   if (tappingTerms) define('TAPPING_TERM_PER_KEY');
@@ -674,6 +718,10 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (hasCombos) generatedSymbols.add('key_combos');
   if (!pipeline && comboTerms.length) generatedSymbols.add('get_combo_term');
   if (!pipeline && comboLayers.length) generatedSymbols.add('combo_should_trigger');
+  if (!pipeline && comboRefs) generatedSymbols.add('combo_ref_from_layer');
+  if (!pipeline && comboEvents) generatedSymbols.add('process_combo_event');
+  if (comboRefs) for (const name of ['navi_key_layer', 'navi_layer_of']) generatedSymbols.add(name);
+  if (comboEvents) for (const name of ['navi_combo', 'navi_combo_has', 'navi_in_press', 'navi_press_key', 'navi_press_keycode', 'navi_interrupter_at']) generatedSymbols.add(name);
   if (hasOverrides) generatedSymbols.add('key_overrides');
   if (!pipeline && tappingTerms) generatedSymbols.add('get_tapping_term');
   if (!pipeline && quickTap) generatedSymbols.add('get_quick_tap_term');
@@ -682,7 +730,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (!pipeline && preProcess) generatedSymbols.add('pre_process_record_user');
   if (!pipeline && recordHook) generatedSymbols.add('process_record_user');
   if (holdKeys) generatedSymbols.add('navi_last_pressed');
-  if (replay) for (const name of ['navi_down', 'navi_interrupted', 'navi_interrupter', 'navi_watch_presses', 'navi_held_tap', 'navi_forces_hold', 'navi_hold']) generatedSymbols.add(name);
+  if (replay) for (const name of ['navi_down', 'navi_interrupted', 'navi_interrupter', 'navi_note_press', 'navi_watch_presses', 'navi_held_tap', 'navi_forces_hold', 'navi_hold']) generatedSymbols.add(name);
   if (tapHoldInCode) generatedSymbols.add('navi_tap_holds');
   if (standInCheck) generatedSymbols.add('navi_is_stand_in');
   if (thActions.length) for (const name of ['navi_send', ...standInName.values()]) generatedSymbols.add(name);
@@ -739,9 +787,18 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       { hook: 'get_quick_tap_term', call: 'return get_quick_tap_term_navi(keycode, record);', why: { en: 'QUICK_TAP_TERM_PER_KEY is on — without it the build still passes, but the per-key quick tap terms do nothing', ru: 'включён QUICK_TAP_TERM_PER_KEY — без неё сборка пройдёт, но quick tap по клавишам не сработает' } },
       { hook: 'get_hold_on_other_key_press', call: 'return get_hold_on_other_key_press_navi(keycode, record);', why: { en: 'HOLD_ON_OTHER_KEY_PRESS_PER_KEY is on — without it the build still passes, but the tap-hold modes and hold keys do nothing and HOLD_ON_OTHER_KEY_PRESS is ignored', ru: 'включён HOLD_ON_OTHER_KEY_PRESS_PER_KEY — без неё сборка пройдёт, но режимы тап-холд и клавиши удержания не сработают, а HOLD_ON_OTHER_KEY_PRESS будет проигнорирован' } },
       { hook: 'get_permissive_hold', call: 'return get_permissive_hold_navi(keycode, record);', why: { en: 'PERMISSIVE_HOLD_PER_KEY is on — without it the build still passes, but the balanced mode does nothing and PERMISSIVE_HOLD is ignored', ru: 'включён PERMISSIVE_HOLD_PER_KEY — без неё сборка пройдёт, но режим balanced не сработает, а PERMISSIVE_HOLD будет проигнорирован' } },
-      { hook: 'pre_process_record_user', call: 'return pre_process_record_navi(keycode, record);', why: { en: 'tap-hold keys set to hold when another key is pressed need the real order of key presses', ru: 'тап-холд клавишам, которые удерживаются при нажатии другой клавиши, нужен настоящий порядок нажатий' } },
+      {
+        hook: 'pre_process_record_user',
+        call: 'return pre_process_record_navi(keycode, record);',
+        why: {
+          en: [(holdKeys || replay) && 'tap-hold keys set to hold when another key is pressed need the real order of key presses', comboRefs && 'combo reference layers need the layer of each pressed key'].filter(Boolean).join('; '),
+          ru: [(holdKeys || replay) && 'тап-холд клавишам, которые удерживаются при нажатии другой клавиши, нужен настоящий порядок нажатий', comboRefs && 'опорным слоям комбо нужен слой каждой нажатой клавиши'].filter(Boolean).join('; '),
+        },
+      },
       { hook: 'get_combo_term', call: 'return get_combo_term_navi(combo_index, combo);', why: { en: 'COMBO_TERM_PER_COMBO is on — without it the build fails', ru: 'включён COMBO_TERM_PER_COMBO — без неё сборка не пройдёт' } },
       { hook: 'combo_should_trigger', call: 'return combo_should_trigger_navi(combo_index, combo, keycode, record);', why: { en: 'COMBO_SHOULD_TRIGGER is on — combo layer limits', ru: 'включён COMBO_SHOULD_TRIGGER — ограничения комбинаций по слоям' } },
+      { hook: 'combo_ref_from_layer', call: 'return combo_ref_from_layer_navi(layer);', why: { en: 'combo reference layers — without it the build still passes, but combos read keys of the highest active layer', ru: 'опорные слои комбо — без неё сборка пройдёт, но комбо будут читать клавиши самого верхнего активного слоя' } },
+      { hook: 'process_combo_event', call: 'process_combo_event_navi(combo_index, pressed);', why: { en: 'combo results go through the tap-hold logic — without it the build still passes, but combos do nothing', ru: 'результаты комбо проходят через логику тап-холд — без неё сборка пройдёт, но комбо ничего не будут делать' } },
       { hook: 'leader_end_user', call: 'leader_end_navi();', why: { en: 'leader sequences', ru: 'последовательности leader' } },
       { hook: 'layer_state_set_user', call: 'return layer_state_set_navi(state);', why: { en: 'layer keys bring their layer to the top', ru: 'клавиши слоёв поднимают свой слой наверх' } },
     ];
