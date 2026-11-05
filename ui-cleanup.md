@@ -70,16 +70,16 @@ languages (closing with unsaved changes).
 - The editor's Tab key inserts spaces (`CodeEditor.tsx:22-25`) and so traps keyboard navigation (no escape key).
 
 **Do**
-1. Key shortcuts yield to text: if the window has a non-empty text selection, or focus is outside the keyboard
+1. ✅ Key shortcuts yield to text: if the window has a non-empty text selection, or focus is outside the keyboard
    canvas/picker, Ctrl+C/V/A do the native thing.
-2. Context menu (main process `context-menu` event): Cut/Copy/Paste/Select all for inputs and selected text, in
+2. ✅ Context menu (main process `context-menu` event): Cut/Copy/Paste/Select all for inputs and selected text, in
    the UI language.
-3. One `<Modal>` component: Esc closes (unless busy), focus trapped and returned, background `inert`, shortcuts
+3. ✅ One `<Modal>` component: Esc closes (unless busy), focus trapped and returned, background `inert`, shortcuts
    paused while open. Move the three modals onto it.
-4. Unsaved changes on close: an in-app modal in the UI language with Save / Don't save / Cancel (the window's
+4. ✅ Unsaved changes on close: an in-app modal in the UI language with Save / Don't save / Cancel (the window's
    close is held until the renderer answers). The trust-folder dialog stays native on purpose (build safety:
    granted only through a main-process dialog) and already uses one language.
-5. Esc leaves the code editor's Tab capture (or Ctrl+Tab / Tab after Esc moves focus), as VS Code does.
+5. ✅ Esc leaves the code editor's Tab capture (or Ctrl+Tab / Tab after Esc moves focus), as VS Code does.
 
 ## Step 3: readable key names everywhere (🟠 6/10)
 
@@ -109,8 +109,7 @@ languages (closing with unsaved changes).
    people writing C need it (Firmware tabs stay raw).
 3. ✅ `KeycodeField`: friendly preview next to the box, a button that opens the keycode picker, and "pick from
    the keyboard" where a key position makes sense.
-   Left over: the catalog popover (`KeycodePopover.tsx`) must pause global shortcuts like Step 2's Modal (Del /
-   Ctrl+Z act behind it now); `KeyChips`' "+ key" box has no preview or catalog button (`common.tsx`).
+   Left over: `KeyChips`' "+ key" box has no preview or catalog button (`common.tsx`).
 4. (After Step 1 lands.) Key caps: fit text (shrink to a floor, then two lines) before ellipsis; full name in the tooltip.
 
 ## Step 4: page structure and safety nets (🟠 6/10)
@@ -146,7 +145,8 @@ languages (closing with unsaved changes).
    Firmware.
 4. Keep scroll and local state per tab (no remount on tab switch).
 5. Every delete: an "Undo" button in its toast; the firmware-file delete gets a confirm.
-6. Error toasts stay until closed, with Copy; messages say what failed and what to do, raw detail behind
+6. Error toasts stay until closed, with Copy (and stay clickable over an open `<Modal>`: they sit in `#root`,
+   which the modal makes inert); messages say what failed and what to do, raw detail behind
    "details".
 7. Wrap the stray strings in `t()`; drop the duplicate tagline.
 8. Settings main tab: the `colors` block and effects as real controls (color pickers with "reset to palette"),

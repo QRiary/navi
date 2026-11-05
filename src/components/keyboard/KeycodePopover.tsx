@@ -6,6 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 're
 import { createPortal } from 'react-dom';
 import { t } from '../../i18n';
 import { KeycodePicker } from './KeycodePicker';
+import { holdShortcuts } from '../Modal';
 
 const WIDTH = 760;
 const HEIGHT = 440;
@@ -27,6 +28,7 @@ export function KeycodePopover({ anchor, current, onPick, onClose }: { anchor: R
 
   useEffect(() => {
     const opener = anchor.current;
+    const release = holdShortcuts(); // Del / Ctrl+Z must not edit the project behind the catalog
     box.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
@@ -43,6 +45,7 @@ export function KeycodePopover({ anchor, current, onPick, onClose }: { anchor: R
     return () => {
       document.removeEventListener('keydown', onKey, true);
       document.removeEventListener('mousedown', onDown, true);
+      release();
       opener?.focus();
     };
   }, [anchor, onClose]);

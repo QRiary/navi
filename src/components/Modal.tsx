@@ -14,10 +14,21 @@ import { X } from 'lucide-react';
 import { t } from '../i18n';
 
 const stack: HTMLElement[] = [];
+let holds = 0;
 
-/** True while any dialog is open (global shortcuts check it). */
+/** True while any dialog (or a popover holding the shortcuts) is open: global shortcuts check it. */
 export function anyModalOpen(): boolean {
-  return stack.length > 0;
+  return stack.length > 0 || holds > 0;
+}
+
+/** Pauses the global shortcuts without making the app inert (popovers); returns the release. */
+export function holdShortcuts(): () => void {
+  holds++;
+  let released = false;
+  return () => {
+    if (!released) holds--;
+    released = true;
+  };
 }
 
 function refreshInert() {
