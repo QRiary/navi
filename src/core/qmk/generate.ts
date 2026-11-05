@@ -178,7 +178,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     tapDanceName: (i) => project.tapDances.find((t) => t.index === i)?.name,
     customName,
   };
-  const kc = (v: number) => toQmk(spec, v, ctx, { unicode: project.firmware.unicode });
+  const qmkExpr = (v: number) => toQmk(spec, v, ctx, { unicode: project.firmware.unicode });
   const issues: AdvancedIssue[] = [
     ...checkTapDances(spec, project.tapDances),
     ...checkCombos(project, project.combos),
@@ -189,6 +189,11 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   ];
   const aliases = checkKeyAliases(project, layerIds);
   issues.push(...aliases.issues);
+  // A keycode with an alias is written by its alias everywhere (the #define comes before any use), so a search for
+  // the alias finds every key. The first alias of a keycode wins, as on the keys.
+  const aliasOf = new Map<number, string>();
+  aliases.defines.forEach((a) => aliasOf.has(a.keycode) || aliasOf.set(a.keycode, a.cName));
+  const kc = (v: number) => aliasOf.get(v) ?? qmkExpr(v);
   // “Own pipeline”: the hooks get a _navi suffix, enums and prototypes go to navi.h, build settings to navi_*.
   const pipeline = project.firmware.pipeline?.enabled === true;
   const hookName = (qmk: keyof typeof NAVI_HOOKS) => (pipeline ? NAVI_HOOKS[qmk] : qmk);
@@ -291,8 +296,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push('');
   }
   if (aliases.defines.length) {
-    decl.push('// Key aliases (NAVI: Advanced → Aliases): names of keycodes for your own code. The keymap below uses the keycodes themselves.');
-    aliases.defines.forEach((a) => decl.push(`#define ${a.cName} ${kc(a.keycode)}`));
+    decl.push('// Key aliases (NAVI: Advanced → Aliases): names of keycodes, used by the keymap below and by your own code.');
+    aliases.defines.forEach((a) => decl.push(`#define ${a.cName} ${qmkExpr(a.keycode)}`));
     decl.push('');
   }
   // Layers are written following the drawing (as the keys sit), the NAVI_LAYOUT macro turns them into the matrix.

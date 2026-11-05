@@ -37,7 +37,7 @@ build/           app icon (icon.svg is the source)
 | Key labels, catalog, “what the firmware needs” | `labels.ts`, `catalog.ts`, `requirements.ts` |
 | Firmware features and their states (works / needs firmware / not supported / unknown) | `src/core/features/registry.ts`, `required.ts`, `advanced.ts` (tap dance / combo / override checks) |
 | Project model | `src/core/project/types.ts`; operations `ops.ts`, untrusted JSON `validate.ts`, `migrate.ts`, `diff.ts`, `factory.ts` |
-| Key aliases: a label shown on every key with that keycode, C name `NV_<LABEL>` (Cyrillic transliterated), checks; `#define`s go to `navi.h` (own pipeline) or `keymap.c`, the keymap keeps plain keycodes; layer moves renumber them, a deleted layer drops its aliases | `src/core/project/aliases.ts`, Advanced → Aliases (`pages/AdvancedPage.tsx`) |
+| Key aliases: a label shown on every key with that keycode, C name `NV_<LABEL>` (Cyrillic transliterated), checks; `#define`s go to `navi.h` (own pipeline) or `keymap.c`, every generated use of the keycode is written by its alias (first alias of a value wins); layer moves renumber them, a deleted layer drops its aliases | `src/core/project/aliases.ts`, Advanced → Aliases (`pages/AdvancedPage.tsx`) |
 | Geometry and templates (Dilemma 4x6 clone, grid) | `src/core/layout/geometry.ts`, `templates.ts` |
 | Import/export: QMK `keymap.json`/`info.json`, VIA (definition and backup), KLE | `src/core/io/formats.ts`, `kle.ts` |
 | VIA protocol, client (queue, timeouts), macros, matrix detection, write plan + read-back check | `src/core/via/*` (`simulator.ts` is for tests only) |
