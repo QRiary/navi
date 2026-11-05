@@ -338,3 +338,153 @@
 .theme-desc {
   font-size: var(--fs-xs);
 }
+
+/*
+ * Combos tab (components/advanced/CombosTab.tsx): the keyboard and the open combo stick under the page's tab bar
+ * (`--sticky-tabs-h`, set by Tabs), the list scrolls under them. Too low a window or a stacked layout: not sticky,
+ * the block would cover most of the list.
+ */
+.combo-top {
+  position: sticky;
+  top: var(--sticky-tabs-h, 0px);
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr);
+  align-items: start;
+  gap: var(--gap);
+  padding: 8px 0;
+  background:
+    linear-gradient(var(--panel-background), var(--panel-background)),
+    var(--app-background);
+}
+
+@media (max-height: 760px), (max-width: 1100px) {
+  .combo-top {
+    position: static;
+  }
+}
+
+@media (max-width: 1100px) {
+  .combo-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.combo-board .panel-box-head {
+  min-height: 48px;
+}
+
+.combo-board.is-picking {
+  border-color: var(--text-primary);
+}
+
+.combo-pick-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  width: 100%;
+  font-size: var(--fs-xs);
+}
+
+.combo-pick-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.kb-preview--interactive .kb-key[role='button'] {
+  cursor: pointer;
+  outline: none;
+}
+
+.kb-preview--interactive .kb-key[role='button']:hover .kb-key-shape {
+  stroke: var(--text-label);
+}
+
+.kb-preview--interactive .kb-key[role='button']:focus-visible .kb-key-shape {
+  stroke: var(--text-primary);
+  stroke-width: 2px;
+}
+
+/* How many combos use a key: a quiet number in the key's top-right corner. */
+.kb-preview-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-anchor: end;
+  dominant-baseline: middle;
+  fill: var(--text-secondary);
+  pointer-events: none;
+}
+
+.kb-key.is-selected .kb-preview-badge {
+  fill: var(--accent-contrast);
+}
+
+.combo-editor--empty {
+  padding: 12px;
+}
+
+.combo-fields {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.combo-keys,
+.combo-layers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-xs);
+}
+
+.combo-toolbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.combo-search {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 200px;
+  color: var(--text-label);
+}
+
+.combo-search .input {
+  flex: 1;
+}
+
+.combo-row {
+  --row-cols: minmax(0, 1fr) minmax(0, auto);
+  text-align: left;
+}
+
+.combo-none {
+  padding: 12px;
+}
+
+.combo-advanced > summary {
+  cursor: pointer;
+  border-bottom: 0;
+}
+
+.combo-advanced[open] > summary {
+  border-bottom: var(--border);
+}
+
+.combo-advanced-hint {
+  padding: 8px 12px 0;
+}
+
+.combo-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

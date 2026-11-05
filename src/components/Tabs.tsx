@@ -5,7 +5,7 @@
  * Roving tabindex: only the current tab is in the Tab order; ←/→, Home/End move and select at once.
  * `TabPanels` keeps every visited panel mounted (hidden when inactive), so local edits survive a tab switch.
  */
-import { Fragment, useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef,type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { nextTabIndex } from './tabsNav';
 
 export interface TabItem {
@@ -35,6 +35,23 @@ export const panelDomId = (idBase: string, id: string) => `${idBase}-panel-${id}
 export function Tabs(props: TabsProps) {
   const { idBase, label, items, current, sticky, style } = props;
   const refs = useRef(new Map<string, HTMLElement>());
+  const barRef = useRef<HTMLDivElement>(null);
+
+  // A sticky bar tells its scroll area how tall it is (`--sticky-tabs-h`), so a panel's own sticky block
+  // (the combos keyboard) can stick right under it.
+  useEffect(() => {
+    const bar = barRef.current;
+    const area = bar?.closest<HTMLElement>('.page-scroll');
+    if (!bar || !area) return;
+    const update = () => area.style.setProperty('--sticky-tabs-h', `${bar.offsetHeight}px`);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(bar);
+    return () => {
+      observer.disconnect();
+      area.style.removeProperty('--sticky-tabs-h');
+    };
+  }, [sticky]);
 
   const select = (id: string) => {
     if (props.href) location.hash = props.href(id);
@@ -88,7 +105,7 @@ export function Tabs(props: TabsProps) {
   const grouped = clusters.some((c) => c.group);
 
   return (
-    <div className={`tabs ${sticky ? 'tabs--sticky' : ''}`} role="tablist" aria-label={label} style={style} onKeyDown={onKeyDown}>
+    <div ref={sticky ? barRef : undefined} className={`tabs ${sticky ? 'tabs--sticky' : ''}`} role="tablist" aria-label={label} style={style} onKeyDown={onKeyDown}>
       {grouped
         ? clusters.map((c, n) => {
             const captionId = c.group ? `${idBase}-group-${n}` : undefined;
