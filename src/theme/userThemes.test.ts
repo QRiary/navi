@@ -1,20 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import { parseConfig } from '../config/configFile';
-import { THEME_PRESETS, getPreset, setOwnPresets } from '../config/theme.config';
+import { THEME_PRESETS, completePalette, getPreset, setOwnPresets } from '../config/theme.config';
 import { resolvePalette } from './applyTheme';
 import { cleanName, effectsDiffer, idForName, parseTheme, schemeOf, serializeTheme, toPreset, uniqueName, type UserTheme } from './userThemes';
 
 const midnight: UserTheme = {
   id: 'midnight',
   name: 'Midnight',
-  palette: { ...THEME_PRESETS[0].palette, background: '#000000', accent: '#3b1c94' },
+  palette: completePalette({ ...THEME_PRESETS[0].palette, background: '#000000', accent: '#3b1c94', key: '#1a1a1f' }),
   effects: { scanlines: 0, noise: 0, vignette: 0, glow: 0, glitch: false, wires: false },
 };
 
 describe('theme files', () => {
-  it('round-trip: name, scheme, all 13 colors and the effects', () => {
+  it('round-trip: name, scheme, all colors and the effects', () => {
     const parsed = parseTheme(serializeTheme(midnight));
     expect(parsed).toEqual({ ok: true, name: 'Midnight', palette: midnight.palette, effects: midnight.effects });
+  });
+
+  it('a file from before the key colors: keys take its cell and border', () => {
+    const data = JSON.parse(serializeTheme(midnight));
+    delete data.colors.key;
+    delete data.colors.keyBorder;
+    const parsed = parseTheme(JSON.stringify(data));
+    expect(parsed.ok && [parsed.palette.key, parsed.palette.keyBorder]).toEqual([midnight.palette.cell, midnight.palette.border]);
   });
 
   it('a file without effects is fine and has none', () => {

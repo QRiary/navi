@@ -1,10 +1,13 @@
 /**
- * The user's own themes: a name + the 13 palette colors + the look effects, one file each in <userData>/themes/<id>.navi-theme.json
+ * The user's own themes: a name + the palette colors + the look effects, one file each in <userData>/themes/<id>.navi-theme.json
  * (the browser build keeps them in localStorage). The same file format is used for export / import.
  * Pure functions only; the store is src/store/themesStore.ts.
  */
-import { PALETTE_KEYS, THEME_PRESETS, type AppSettings, type ColorScheme, type ThemePalette, type ThemePreset } from '../config/theme.config';
+import { PALETTE_KEYS, THEME_PRESETS, completePalette, type AppSettings, type ColorScheme, type PaletteKey, type PresetPalette, type ThemePalette, type ThemePreset } from '../config/theme.config';
 import { isHexColor, luminance } from './color';
+
+/** Colors added after the format: a theme file without them takes its cell / border. */
+const OPTIONAL_COLORS: readonly PaletteKey[] = ['key', 'keyBorder'];
 
 export const THEME_FILE_FORMAT = 'navi.theme';
 export const THEME_FILE_EXT = 'navi-theme.json';
@@ -67,10 +70,11 @@ export function parseTheme(text: string): ParseResult {
   if (!name) return fail('The theme has no name.', 'У темы нет имени.');
   if (!isRecord(data.colors)) return fail('The theme has no colors.', 'В теме нет цветов.');
   const colors = data.colors;
-  const bad = PALETTE_KEYS.filter((k) => typeof colors[k] !== 'string' || !isHexColor(colors[k] as string));
+  const bad = PALETTE_KEYS.filter((k) => !(OPTIONAL_COLORS.includes(k) && colors[k] === undefined) && (typeof colors[k] !== 'string' || !isHexColor(colors[k] as string)));
   if (bad.length) return fail(`Colors missing or not #rrggbb: ${bad.join(', ')}.`, `Цвета отсутствуют или не #rrggbb: ${bad.join(', ')}.`);
-  const palette = {} as ThemePalette;
-  for (const key of PALETTE_KEYS) palette[key] = (colors[key] as string).toLowerCase();
+  const given = {} as PresetPalette;
+  for (const key of PALETTE_KEYS) if (colors[key] !== undefined) given[key] = (colors[key] as string).toLowerCase();
+  const palette = completePalette(given);
   palette.scheme = data.scheme === 'dark' || data.scheme === 'light' ? data.scheme : schemeOf(palette.background);
   if (data.effects === undefined) return { ok: true, name, palette };
   const fx = data.effects;

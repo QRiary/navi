@@ -28,9 +28,11 @@
   "colors": {
     "background": null,  // window background
     "panel": null,       // panel background
-    "cell": null,        // background of cells, keys and input fields
+    "cell": null,        // background of cells and input fields
     "hover": null,       // hover highlight
     "border": null,      // borders
+    "key": null,         // keys in keyboard drawings (null — follows "cell")
+    "keyBorder": null,   // key outlines (null — follows "border")
     "text": null,        // main text
     "textDim": null,     // secondary text
     "label": null,       // UPPERCASE labels
