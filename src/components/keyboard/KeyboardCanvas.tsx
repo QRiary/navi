@@ -251,7 +251,7 @@ export function KeyboardCanvas(props: Props) {
   const moving = moveDelta ? new Set(selection) : null;
 
   return (
-    <div className="kb-canvas" ref={wrapRef} onDragOver={onDragOver} onDragLeave={() => setDropOver(null)} onDrop={onDrop}>
+    <div className="kb-canvas" ref={wrapRef} tabIndex={-1} data-key-shortcuts="" onDragOver={onDragOver} onDragLeave={() => setDropOver(null)} onDrop={onDrop}>
       <svg
         ref={svgRef}
         className="kb-svg"

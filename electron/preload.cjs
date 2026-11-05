@@ -25,6 +25,9 @@ contextBridge.exposeInMainWorld('navi', {
   saveFile: invoke('navi:file:save'),
   openFile: invoke('navi:file:open'),
   probeResult: invoke('navi:probe-result'),
+  reportUiState: invoke('navi:ui-state'),
+  onCloseRequest: (cb) => subscribe('navi:close-request', cb),
+  answerClose: invoke('navi:close-answer'),
   projects: {
     list: invoke('navi:projects:list'),
     read: invoke('navi:projects:read'),

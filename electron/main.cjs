@@ -8,7 +8,7 @@
  *
  * The interface talks to this file only through preload.cjs (window.navi).
  */
-const { app, BrowserWindow, dialog, ipcMain, net, protocol, session, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -18,6 +18,8 @@ const { registerQmkIpc } = require('./qmk.cjs');
 const { registerFlashIpc } = require('./flash.cjs');
 const { registerLinkIpc } = require('./links.cjs');
 const { cancelAll } = require('./runner.cjs');
+const { registerCloseGuard } = require('./closeGuard.cjs');
+const { attachContextMenu } = require('./contextMenu.cjs');
 
 app.setName('NAVI');
 // Own data folder (tests, portable copy): NAVI_USER_DATA=path
@@ -49,6 +51,8 @@ if (!isFirstInstance) app.quit();
 
 /** @type {BrowserWindow | null} */
 let win = null;
+/** Set in registerIpc (before the first window). */
+let closeGuard = null;
 
 const isOwnUrl = (url) => (DEV_URL ? String(url).startsWith(DEV_URL) : String(url).startsWith('app://navi'));
 
@@ -77,21 +81,9 @@ function createWindow() {
 
   if (!PROBE_MODE) win.once('ready-to-show', () => (TEST_WINDOW ? win?.showInactive() : win?.show()));
 
-  // Unsaved changes: the interface sets beforeunload — ask the user.
-  // (The draft is on disk anyway, so edits are not lost even when closing.)
-  win.webContents.on('will-prevent-unload', (event) => {
-    const choice = dialog.showMessageBoxSync(win, {
-      type: 'question',
-      buttons: ['Закрыть / Close', 'Остаться / Stay'],
-      defaultId: 1,
-      cancelId: 1,
-      title: 'NAVI',
-      message:
-        'Есть несохранённые изменения. Они сохранены как черновик и откроются при следующем запуске.\n\n' +
-        'There are unsaved changes. They are kept as a draft and will reopen next time.',
-    });
-    if (choice === 0) event.preventDefault();
-  });
+  // Unsaved changes: the close is held and the interface asks (closeGuard.cjs); right-click menu for text.
+  closeGuard.attach(win);
+  attachContextMenu(win, Menu, closeGuard.language);
   win.on('closed', () => (win = null));
 
   // Links to the QMK docs etc. open in the external browser; the app never navigates away.
@@ -192,6 +184,7 @@ function watchConfig() {
 function registerIpc() {
   const store = createProjectStore(projectsDir);
   const links = registerLinkIpc({ ipcMain, dialog, getWindow: () => win, dataDir });
+  closeGuard = registerCloseGuard({ ipcMain, dialog, getWindow: () => win });
 
   ipcMain.handle('navi:info', () => ({
     dataDir,

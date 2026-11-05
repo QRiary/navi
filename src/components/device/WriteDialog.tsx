@@ -3,9 +3,9 @@
  * and verify by reading back. “Done” — only if the check passed.
  */
 import { useMemo, useState } from 'react';
-import { X } from 'lucide-react';
 import { friendlyName } from '../../core/keycodes/friendly';
 import { KeyName } from '../KeyName';
+import { Modal } from '../Modal';
 import { planWrite, type ApplyResult } from '../../core/via/sync';
 import { activeKeymap } from '../../core/project/ops';
 import { hardwareFacts } from '../../lib/hardwareFacts';
@@ -51,15 +51,23 @@ export function WriteDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={t('Write to keyboard', 'Запись в клавиатуру')}>
-      <div className="modal">
-        <div className="modal-head">
-          <h2>{t('write to keyboard', 'запись в клавиатуру')} · VIA</h2>
-          <button className="icon-btn" aria-label={t('Close', 'Закрыть')} onClick={onClose} disabled={busy}>
-            <X size={16} strokeWidth={1.5} />
+    <Modal
+      title={<>{t('write to keyboard', 'запись в клавиатуру')} · VIA</>}
+      onClose={onClose}
+      busy={busy}
+      footer={
+        <>
+          <button className="btn" onClick={onClose} disabled={busy}>
+            {result ? t('close', 'закрыть') : t('cancel', 'отмена')}
           </button>
-        </div>
-        <div className="modal-body">
+          {!result && (
+            <button className="btn btn--primary" disabled={!plan.ok || nothing || busy} onClick={() => void run()}>
+              {busy ? t('writing…', 'запись…') : t('write', 'записать')}
+            </button>
+          )}
+        </>
+      }
+    >
           {plan.warnings.map((w, i) => (
             <div key={i} className="notice" style={{ borderColor: w.level === 'error' ? 'var(--danger-color)' : undefined }}>
               <span>{lang === 'ru' ? w.message.ru : w.message.en}</span>
@@ -125,18 +133,6 @@ export function WriteDialog({ onClose }: { onClose: () => void }) {
               {error} — {t('part of the changes may have been written; reconnect and compare again.', 'часть изменений могла записаться; переподключите и сравните ещё раз.')}
             </div>
           )}
-        </div>
-        <div className="modal-foot">
-          <button className="btn" onClick={onClose} disabled={busy}>
-            {result ? t('close', 'закрыть') : t('cancel', 'отмена')}
-          </button>
-          {!result && (
-            <button className="btn btn--primary" disabled={!plan.ok || nothing || busy} onClick={() => void run()}>
-              {busy ? t('writing…', 'запись…') : t('write', 'записать')}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

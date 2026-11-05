@@ -4,6 +4,8 @@ import { activeKeymap } from '../core/project/ops';
 import { useEditorStore } from '../store/editorStore';
 import { saveProject, useProjectStore } from '../store/projectStore';
 import type { Route } from './router';
+import { nativeClipboardNow } from './clipboardTarget';
+import { anyModalOpen } from '../components/Modal';
 
 /**
  * Shortcuts. The physical key is checked (e.code), so they work with a Russian layout too.
@@ -18,6 +20,8 @@ export function useShortcuts(route: Route) {
       const typing = !!target?.closest('input, textarea, select, [contenteditable="true"]');
       const ctrl = e.ctrlKey || e.metaKey;
       const store = useProjectStore.getState();
+      // A dialog is open: the project behind it is not edited (the dialog handles its own keys).
+      if (anyModalOpen()) return;
       if (ctrl && e.code === 'KeyS') {
         e.preventDefault();
         if (store.project) void saveProject();
@@ -44,6 +48,8 @@ export function useShortcuts(route: Route) {
         }
         return;
       }
+      // Selected text or a focused control outside the keys: copy/paste/select all stay native.
+      if (ctrl && ['KeyC', 'KeyV', 'KeyX', 'KeyA'].includes(e.code) && nativeClipboardNow()) return;
       if (ctrl && e.code === 'KeyC') {
         if (copySelection()) e.preventDefault();
         return;
