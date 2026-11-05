@@ -13,6 +13,8 @@ import { checkMacroSteps, macroBytesUsed } from '../core/via/macros';
 import { encode } from '../core/keycodes/codec';
 import { hidFromCode } from '../lib/hidCodes';
 import { navigate } from '../lib/router';
+import { whyDisabled } from '../lib/whyDisabled';
+import { InfoTip } from '../components/InfoTip';
 import { assignToSelection } from '../lib/keymapActions';
 import { useDeviceStore } from '../store/deviceStore';
 import { useProjectStore, useSpec } from '../store/projectStore';
@@ -95,13 +97,25 @@ export function MacrosPage() {
         {t(
           'Macros live in the keyboard memory (VIA) and run by keys MC_0 … MC_n. The firmware types text as US-layout keys, presses only basic keys and waits at most 9999 ms per pause.',
           'Макросы хранятся в памяти клавиатуры (VIA) и запускаются клавишами MC_0 … MC_n. Прошивка набирает текст как американские клавиши, нажимает только простые клавиши и ждёт не больше 9999 мс за паузу.',
-        )}
+        )}{' '}
+        <InfoTip label={t('macros', 'макросы')}>
+          {t(
+            'These are the keyboard’s own (VIA) macros: they are stored in the keyboard and replayed by the firmware, so they work on any computer. MC_0 is the first slot; put its key on a layer to run it. Macros that need more than basic keys (for example other layers or tap dances) are not made here.',
+            'Это собственные макросы клавиатуры (VIA): они хранятся в ней и воспроизводятся прошивкой, поэтому работают на любом компьютере. MC_0 — первая ячейка; поставьте её клавишу на слой, чтобы запускать. Макросы с чем-то сложнее простых клавиш (например, слоями или tap dance) здесь не делаются.',
+          )}
+        </InfoTip>
       </p>
       <div className="toolbar">
         <span className="kicker">
           {caps?.macros
             ? t(`keyboard: ${caps.macros.count} slots, ${caps.macros.bufferSize} bytes`, `клавиатура: ${caps.macros.count} ячеек, ${caps.macros.bufferSize} байт`)
-            : t('keyboard not connected — sizes are not known yet', 'клавиатура не подключена — объём памяти пока неизвестен')}
+            : t('keyboard not connected — sizes are not known yet', 'клавиатура не подключена — объём памяти пока неизвестен')}{' '}
+          <InfoTip label={t('macro memory', 'память макросов')}>
+            {t(
+              'All macros share one small buffer in the keyboard. Text costs a byte per character, each key step a few bytes. If the bar is full, shorten a macro or delete one.',
+              'Все макросы делят один небольшой буфер в клавиатуре. Текст занимает байт на символ, шаг с клавишей — несколько байт. Если полоса заполнена, сократите или удалите макрос.',
+            )}
+          </InfoTip>
         </span>
         {bufferSize !== null && (
           <div className="field-row" style={{ minWidth: 220 }}>
@@ -120,7 +134,12 @@ export function MacrosPage() {
             {Array.from({ length: count }, (_, i) => {
               const m = project.macros.find((x) => x.index === i);
               return (
-                <button key={i} className={`row ${i === selected ? 'is-active' : ''}`} style={{ ['--row-cols' as string]: '44px minmax(0,1fr) auto', textAlign: 'left' }} onClick={() => setSelected(i)}>
+                <button
+                  key={i}
+                  className={`row ${i === selected ? 'is-active' : ''}`}
+                  style={{ ['--row-cols' as string]: '44px minmax(0,1fr) auto', textAlign: 'left' }}
+                  onClick={() => setSelected(i)}
+                >
                   <span className="num">MC_{i}</span>
                   <span>{m?.name ?? <span className="field-hint">{t('empty', 'пусто')}</span>}</span>
                   <span className="kicker">{m ? `${m.steps.length}` : ''}</span>
@@ -131,15 +150,24 @@ export function MacrosPage() {
         </div>
         <div className="panel-box">
           <div className="panel-box-head">
-            <input className="input" style={{ flex: 1 }} value={macro.name} maxLength={60} onChange={(e) => update((m) => ({ ...m, name: e.target.value }), t('macro name', 'имя макроса'), `mname:${selected}`)} aria-label={t('Macro name', 'Имя макроса')} />
+            <input
+              className="input"
+              style={{ flex: 1 }}
+              value={macro.name}
+              maxLength={60}
+              onChange={(e) => update((m) => ({ ...m, name: e.target.value }), t('macro name', 'имя макроса'), `mname:${selected}`)}
+              aria-label={t('Macro name', 'Имя макроса')}
+            />
             <button
               className="btn"
               onClick={() => {
                 assignToSelection(encode(spec, { kind: 'named', def: spec.byName.get(`QK_MACRO_${selected}`)! }));
                 navigate({ section: 'keyboard' });
               }}
-              disabled={!spec.byName.get(`QK_MACRO_${selected}`)}
-              title={t('Assign MC to the key selected on the layout', 'Назначить MC выбранной на схеме клавише')}
+              {...whyDisabled(
+                !spec.byName.get(`QK_MACRO_${selected}`) && t('This keycode set has no MC_n key for this slot', 'В этом наборе keycode нет клавиши MC_n для этой ячейки'),
+                t('Assign MC to the key selected on the layout', 'Назначить MC выбранной на схеме клавише'),
+              )}
             >
               → {t('to selected key', 'на выбранную клавишу')}
             </button>
@@ -163,7 +191,11 @@ export function MacrosPage() {
                 </>
               }
             />
-            {recording && <p className="field-hint">{t('Recording: press keys on your keyboard… (Esc is recorded too — use the button to stop)', 'Идёт запись: нажимайте клавиши… (Esc тоже записывается — остановите кнопкой)')}</p>}
+            {recording && (
+              <p className="field-hint">
+                {t('Recording: press keys on your keyboard… (Esc is recorded too — use the button to stop)', 'Идёт запись: нажимайте клавиши… (Esc тоже записывается — остановите кнопкой)')}
+              </p>
+            )}
             {issues.map((iss, i) => (
               <div key={i} className="issue">
                 <span className="issue-where">
@@ -176,9 +208,11 @@ export function MacrosPage() {
         </div>
       </div>
       <p className="field-hint" style={{ marginTop: 'var(--gap)' }}>
-        {t('Macros are written to the keyboard by “to keyboard” (bottom bar) with the “macros” box checked.', 'Макросы записываются в клавиатуру кнопкой «в клавиатуру» (внизу) с отмеченным пунктом «макросы».')}
+        {t(
+          'Macros are written to the keyboard by “to keyboard” (bottom bar) with the “macros” box checked.',
+          'Макросы записываются в клавиатуру кнопкой «в клавиатуру» (внизу) с отмеченным пунктом «макросы».',
+        )}
       </p>
     </div>
   );
 }
-

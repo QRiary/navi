@@ -14,6 +14,8 @@ import { activeKeymap } from '../../core/project/ops';
 import { reservedStandInBases } from '../../lib/keymapActions';
 import { useQmkStore } from '../../store/qmkStore';
 import { t } from '../../i18n';
+import { QMK_DOCS } from '../../lib/qmkDocs';
+import { Hint, InfoTip } from '../InfoTip';
 
 type Kind = 'basic' | 'mods' | 'tap-hold' | 'layer' | 'layer-mod' | 'one-shot' | 'tap-dance' | 'unicode' | 'raw';
 
@@ -213,7 +215,13 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
     }
     if (plain !== null && (!clash || !onTapHold)) onChange(plain);
     else if (onTapHold) onTapHold(tap, hold);
-    else return setError(t('Here only what QMK’s MT / LT can say: a basic key tapped, modifiers or a layer 0–15 held.', 'Здесь только то, что умеют MT / LT в QMK: нажатие — обычная клавиша, удержание — модификаторы или слой 0–15.'));
+    else
+      return setError(
+        t(
+          'Here only what QMK’s MT / LT can say: a basic key tapped, modifiers or a layer 0–15 held.',
+          'Здесь только то, что умеют MT / LT в QMK: нажатие — обычная клавиша, удержание — модификаторы или слой 0–15.',
+        ),
+      );
     setError(null);
   };
 
@@ -265,7 +273,17 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
 
   return (
     <div className="field">
-      <span className="field-label">{t('compose', 'собрать')}</span>
+      <span className="field-label">
+        <Hint
+          docs={QMK_DOCS.modTap}
+          tip={t(
+            'Builds one key from parts. mods+key sends a shortcut (Ctrl+C); tap-hold is a mod-tap or layer-tap (tap = a key, hold = a modifier or layer); layer switches layers; layer+mods holds a layer with modifiers; one-shot applies a modifier to the next key only.',
+            'Собирает одну клавишу из частей. мод+клавиша — сочетание (Ctrl+C); тап-холд — mod-tap или layer-tap (нажатие — клавиша, удержание — модификатор или слой); слой переключает слои; слой+моды держит слой с модификаторами; one-shot применяет модификатор только к следующей клавише.',
+          )}
+        >
+          {t('compose', 'собрать')}
+        </Hint>
+      </span>
       <div className="chips" role="tablist">
         {(Object.keys(KIND_LABELS()) as Kind[]).map((k) => (
           <button key={k} type="button" role="tab" aria-selected={kind === k} className={`chip ${kind === k ? 'is-on' : ''}`} onClick={() => switchKind(k)}>
@@ -277,14 +295,18 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
       {(kind === 'basic' || kind === 'mods') && (
         <div className="field-row">
           <span className="field-hint">{t('key:', 'клавиша:')}</span>
-          <BasicKeySelect
-            spec={spec}
-            value={base}
-            label={t('Key', 'Клавиша')}
-            onChange={(b) =>
-              commit(kind === 'basic' ? { kind: 'basic', value: b } : { kind: 'mods', mods, base: b })
-            }
-          />
+          <BasicKeySelect spec={spec} value={base} label={t('Key', 'Клавиша')} onChange={(b) => commit(kind === 'basic' ? { kind: 'basic', value: b } : { kind: 'mods', mods, base: b })} />
+        </div>
+      )}
+      {kind === 'one-shot' && (
+        <div className="field-row">
+          <span className="field-hint">{t('one-shot mods', 'one-shot модификаторы')}</span>
+          <InfoTip docs={QMK_DOCS.oneShot} label={t('one-shot mods', 'one-shot модификаторы')}>
+            {t(
+              'Tap the key, then press another one: the modifier applies to that next key only and then switches off. Use it for Shift or Ctrl without holding them.',
+              'Нажмите клавишу, затем другую: модификатор действует только на эту следующую клавишу и потом выключается. Удобно для Shift или Ctrl без удержания.',
+            )}
+          </InfoTip>
         </div>
       )}
       {(kind === 'mods' || kind === 'one-shot' || kind === 'layer-mod') && (
@@ -294,13 +316,7 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
             onChange={(m) =>
               (m & 0x0f) === 0
                 ? setError(t('Choose at least one modifier', 'Выберите хотя бы один модификатор'))
-                : commit(
-                    kind === 'mods'
-                      ? { kind: 'mods', mods: m, base }
-                      : kind === 'layer-mod'
-                          ? { kind: 'layer-mod', layer, mods: m }
-                          : { kind: 'one-shot-mod', mods: m },
-                  )
+                : commit(kind === 'mods' ? { kind: 'mods', mods: m, base } : kind === 'layer-mod' ? { kind: 'layer-mod', layer, mods: m } : { kind: 'one-shot-mod', mods: m })
             }
           />
         </>
@@ -310,6 +326,12 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
         <div className="field-row">
           <span className="field-hint">{t('hold → layer:', 'удержание → слой:')}</span>
           <LayerSelect project={project} value={layer} max={15} onChange={(l) => commit({ kind: 'layer-mod', layer: l, mods })} />
+          <InfoTip docs={QMK_DOCS.layerSwitching} label="LM">
+            {t(
+              'LM(layer, mods) holds the layer like MO and sends the modifiers at the same time. Only layers 0–15 work.',
+              'LM(слой, моды) держит слой как MO и одновременно нажимает модификаторы. Работают только слои 0–15.',
+            )}
+          </InfoTip>
         </div>
       )}
       {kind === 'layer' && (
@@ -323,6 +345,12 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
               ))}
             </select>
             <LayerSelect project={project} value={layer} max={31} onChange={(l) => commit({ kind: 'layer', fn, layer: l })} />
+            <InfoTip docs={QMK_DOCS.layerSwitching} label={t('layer functions', 'функции слоя')}>
+              {t(
+                'MO is for a layer you hold (like Fn). TG toggles it on and off. TO switches to it and turns the others off. TT acts as MO when held and toggles when tapped repeatedly. OSL is on for the next key only. DF sets the base layer; PDF also saves it.',
+                'MO — слой, пока держите (как Fn). TG включает и выключает его. TO переходит на него и выключает остальные. TT при удержании как MO, а при нескольких нажатиях подряд переключает. OSL включён только на одну клавишу. DF задаёт базовый слой; PDF ещё и запоминает его.',
+              )}
+            </InfoTip>
           </div>
         </>
       )}
@@ -367,7 +395,11 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
           <span className="expr-result">enter</span>
         </form>
       )}
-      {error && <p className="field-hint" style={{ color: 'var(--danger-color)' }}>{error}</p>}
+      {error && (
+        <p className="field-hint" style={{ color: 'var(--danger-color)' }}>
+          {error}
+        </p>
+      )}
     </div>
   );
 }

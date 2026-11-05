@@ -17,6 +17,7 @@ import { keycodeNeeds, needStatus } from '../core/keycodes/requirements';
 import { effectiveKeycode, getKeycode } from '../core/project/ops';
 import type { EncoderGeom, KeyGeom } from '../core/project/types';
 import { hardwareFacts } from '../lib/hardwareFacts';
+import { whyDisabled } from '../lib/whyDisabled';
 import { assignToKey, swapKeys } from '../lib/keymapActions';
 import { useActive, useLabelContext } from '../lib/projectContext';
 import { useDeviceStore } from '../store/deviceStore';
@@ -123,7 +124,22 @@ export function KeyboardPage() {
         highlighted: editor.highlight.some((h) => h[0] === pos[0] && h[1] === pos[1]),
       };
     },
-    [active, labelCtx, layer, editor.view, editor.heldLayers, editor.compare, editor.compareLayer, editor.pressed, editor.highlight, spec, settings.showTransparentSource, savedKeymap, snapshot, isWarn],
+    [
+      active,
+      labelCtx,
+      layer,
+      editor.view,
+      editor.heldLayers,
+      editor.compare,
+      editor.compareLayer,
+      editor.pressed,
+      editor.highlight,
+      spec,
+      settings.showTransparentSource,
+      savedKeymap,
+      snapshot,
+      isWarn,
+    ],
   );
 
   const encoderView = useCallback(
@@ -181,7 +197,11 @@ export function KeyboardPage() {
           <button className={editor.view === 'assign' ? 'is-on' : ''} onClick={() => editor.setView('assign')} title={t('What is assigned on this layer', 'Что назначено на этом слое')}>
             {t('assigned', 'назначения')}
           </button>
-          <button className={editor.view === 'effective' ? 'is-on' : ''} onClick={() => editor.setView('effective')} title={t('What actually fires with transparency and layer order', 'Что сработает на самом деле — с учётом прозрачности и порядка слоёв')}>
+          <button
+            className={editor.view === 'effective' ? 'is-on' : ''}
+            onClick={() => editor.setView('effective')}
+            title={t('What actually fires with transparency and layer order', 'Что сработает на самом деле — с учётом прозрачности и порядка слоёв')}
+          >
             {t('result', 'итог')}
           </button>
         </div>
@@ -214,8 +234,8 @@ export function KeyboardPage() {
         >
           <option value="none">{t('compare', 'сравнить')}</option>
           <option value="saved">{t('vs saved version', 'с сохранённой версией')}</option>
-          <option value="device" disabled={!snapshot}>
-            {t('vs keyboard', 'с клавиатурой')}
+          <option value="device" {...whyDisabled(!snapshot && t('Connect the keyboard first (Device page)', 'Сначала подключите клавиатуру (страница «Устройство»)'))}>
+            {snapshot ? t('vs keyboard', 'с клавиатурой') : t('vs keyboard (not connected)', 'с клавиатурой (не подключена)')}
           </option>
           {otherLayers.map(({ l, i }) => (
             <option key={l.id} value={`layer:${i}`}>
@@ -241,45 +261,49 @@ export function KeyboardPage() {
         ariaLabel={t('Keyboard layout', 'Схема клавиатуры')}
         overlay={
           <>
-          <div className="kb-zoom">
-        <div className="seg" role="group" aria-label={t('Zoom', 'Масштаб')}>
-          <button className={settings.showMatrix ? 'is-on' : ''} title={t('Show matrix positions [row,col]', 'Показать позиции матрицы [строка,столбец]')} onClick={() => useSettingsStore.getState().setValue('keyboard.showMatrix', !settings.showMatrix)}>
-            r,c
-          </button>
-          <button aria-label={t('Zoom out', 'Уменьшить')} onClick={() => editor.setZoom(editor.zoom / 1.2)}>
-            <Minus size={13} strokeWidth={1.5} />
-          </button>
-          <button className="zoom-value" onClick={() => editor.setZoom(1, { x: 0, y: 0 })} title={t('Fit to view', 'Вписать в окно')}>
-            {Math.round(editor.zoom * 100)}%
-          </button>
-          <button aria-label={t('Zoom in', 'Увеличить')} onClick={() => editor.setZoom(editor.zoom * 1.2)}>
-            <Plus size={13} strokeWidth={1.5} />
-          </button>
-          <button aria-label={t('Fit', 'Вписать')} title={t('Fit to view', 'Вписать в окно')} onClick={() => editor.setZoom(1, { x: 0, y: 0 })}>
-            <Maximize2 size={12} strokeWidth={1.5} />
-          </button>
-        </div>
-          </div>
-          <div className="kb-legend" aria-hidden="true">
-            <span>
-              <i className="lg-trns" />
-              {t('transparent', 'прозрачная')}
-            </span>
-            <span>
-              <i className="lg-layer" />
-              {t('layer key', 'слой')}
-            </span>
-            {editor.compare !== 'none' && (
+            <div className="kb-zoom">
+              <div className="seg" role="group" aria-label={t('Zoom', 'Масштаб')}>
+                <button
+                  className={settings.showMatrix ? 'is-on' : ''}
+                  title={t('Show matrix positions [row,col]', 'Показать позиции матрицы [строка,столбец]')}
+                  onClick={() => useSettingsStore.getState().setValue('keyboard.showMatrix', !settings.showMatrix)}
+                >
+                  r,c
+                </button>
+                <button aria-label={t('Zoom out', 'Уменьшить')} onClick={() => editor.setZoom(editor.zoom / 1.2)}>
+                  <Minus size={13} strokeWidth={1.5} />
+                </button>
+                <button className="zoom-value" onClick={() => editor.setZoom(1, { x: 0, y: 0 })} title={t('Fit to view', 'Вписать в окно')}>
+                  {Math.round(editor.zoom * 100)}%
+                </button>
+                <button aria-label={t('Zoom in', 'Увеличить')} onClick={() => editor.setZoom(editor.zoom * 1.2)}>
+                  <Plus size={13} strokeWidth={1.5} />
+                </button>
+                <button aria-label={t('Fit', 'Вписать')} title={t('Fit to view', 'Вписать в окно')} onClick={() => editor.setZoom(1, { x: 0, y: 0 })}>
+                  <Maximize2 size={12} strokeWidth={1.5} />
+                </button>
+              </div>
+            </div>
+            <div className="kb-legend" aria-hidden="true">
               <span>
-                <i className="lg-changed" />
-                {t('differs', 'отличается')}
+                <i className="lg-trns" />
+                {t('transparent', 'прозрачная')}
               </span>
-            )}
-            <span>
-              <i className="lg-warn" />
-              {t('not supported', 'не поддерживается')}
-            </span>
-          </div>
+              <span>
+                <i className="lg-layer" />
+                {t('layer key', 'слой')}
+              </span>
+              {editor.compare !== 'none' && (
+                <span>
+                  <i className="lg-changed" />
+                  {t('differs', 'отличается')}
+                </span>
+              )}
+              <span>
+                <i className="lg-warn" />
+                {t('not supported', 'не поддерживается')}
+              </span>
+            </div>
           </>
         }
       />

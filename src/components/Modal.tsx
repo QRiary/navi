@@ -12,6 +12,7 @@ import { useEffect, useId, useRef, type KeyboardEvent, type MouseEvent, type Rea
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { t } from '../i18n';
+import { whyDisabled } from '../lib/whyDisabled';
 
 const stack: HTMLElement[] = [];
 let holds = 0;
@@ -114,7 +115,12 @@ export function Modal({ title, onClose, busy = false, dismissible = true, closeB
         <div className="modal-head">
           <h2 id={titleId}>{title}</h2>
           {closeButton && (
-            <button className="icon-btn" title={closeLabel ?? t('Close', 'Закрыть')} aria-label={closeLabel ?? t('Close', 'Закрыть')} onClick={close} disabled={busy}>
+            <button
+              className="icon-btn"
+              {...whyDisabled(busy && t('Wait: this is still working', 'Подождите: идёт работа'), closeLabel ?? t('Close', 'Закрыть'))}
+              aria-label={closeLabel ?? t('Close', 'Закрыть')}
+              onClick={close}
+            >
               <X size={16} strokeWidth={1.5} />
             </button>
           )}

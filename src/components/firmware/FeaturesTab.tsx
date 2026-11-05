@@ -13,6 +13,8 @@ import { hardwareFacts } from '../../lib/hardwareFacts';
 import { useProjectStore, useSpec } from '../../store/projectStore';
 import { StatusChip } from '../inspector/KeyInspector';
 import { getLanguage, t } from '../../i18n';
+import { whyDisabled } from '../../lib/whyDisabled';
+import { Hint } from '../InfoTip';
 
 export function FeaturesTab() {
   const project = useProjectStore((s) => s.project);
@@ -24,19 +26,25 @@ export function FeaturesTab() {
   const hw = hardwareFacts(project);
 
   const setFlag = (f: FeatureId, state: FlagState | '') =>
-    apply((p) => {
-      const flags = { ...p.firmware.flags };
-      if (state === '') delete flags[f];
-      else flags[f] = { state, evidence: 'declared' };
-      return { ...p, firmware: { ...p.firmware, flags } };
-    }, t('firmware fact', 'факт о прошивке'));
+    apply(
+      (p) => {
+        const flags = { ...p.firmware.flags };
+        if (state === '') delete flags[f];
+        else flags[f] = { state, evidence: 'declared' };
+        return { ...p, firmware: { ...p.firmware, flags } };
+      },
+      t('firmware fact', 'факт о прошивке'),
+    );
   const setBuild = (f: FeatureId, on: boolean | null) =>
-    apply((p) => {
-      const buildFeatures = { ...p.firmware.buildFeatures };
-      if (on === null) delete buildFeatures[f];
-      else buildFeatures[f] = on;
-      return { ...p, firmware: { ...p.firmware, buildFeatures } };
-    }, t('build feature', 'функция сборки'));
+    apply(
+      (p) => {
+        const buildFeatures = { ...p.firmware.buildFeatures };
+        if (on === null) delete buildFeatures[f];
+        else buildFeatures[f] = on;
+        return { ...p, firmware: { ...p.firmware, buildFeatures } };
+      },
+      t('build feature', 'функция сборки'),
+    );
 
   return (
     <div className="page">
@@ -49,9 +57,27 @@ export function FeaturesTab() {
       <div className="panel-box rows">
         <div className="row kicker" style={{ ['--row-cols' as string]: 'minmax(0,1.4fr) 130px 150px 90px minmax(0,1fr)' }}>
           <span>{t('feature', 'функция')}</span>
-          <span>{t('now', 'сейчас')}</span>
+          <span>
+            <Hint
+              tip={t(
+                'Whether this feature is in the firmware that is on the keyboard now. It decides the “works / needs firmware” marks elsewhere in NAVI. Empty means the QMK default.',
+                'Есть ли эта функция в прошивке, которая стоит на клавиатуре сейчас. От этого зависят отметки «работает / нужна прошивка» в других местах NAVI. Пусто — значение QMK по умолчанию.',
+              )}
+            >
+              {t('now', 'сейчас')}
+            </Hint>
+          </span>
           <span>{t('known from', 'откуда известно')}</span>
-          <span>{t('your build', 'ваша сборка')}</span>
+          <span>
+            <Hint
+              tip={t(
+                'Turn the feature on in the rules.mk of your own firmware build (the flag shown next to its name).',
+                'Включить функцию в rules.mk вашей собственной прошивки (флаг рядом с названием).',
+              )}
+            >
+              {t('your build', 'ваша сборка')}
+            </Hint>
+          </span>
           <span>{t('needed by', 'нужно для')}</span>
         </div>
         {FEATURES.map((f) => {
@@ -74,7 +100,11 @@ export function FeaturesTab() {
                 <StatusChip state={st.state} likely={st.likely} text={lang === 'ru' ? st.reason.ru : st.reason.en} /> {flag && <span className="kicker">{flag.evidence}</span>}
               </span>
               {f.rules ? (
-                <button className={`toggle ${build || needed ? 'is-on' : ''}`} disabled={!!needed} onClick={() => setBuild(f.id, build ? null : true)} title={needed ? t('Required by your project', 'Нужно вашему проекту') : undefined}>
+                <button
+                  className={`toggle ${build || needed ? 'is-on' : ''}`}
+                  {...whyDisabled(needed && t('Required by your project, so it is always on', 'Нужно вашему проекту, поэтому всегда включено'))}
+                  onClick={() => setBuild(f.id, build ? null : true)}
+                >
                   {build || needed ? 'on' : 'off'}
                 </button>
               ) : (

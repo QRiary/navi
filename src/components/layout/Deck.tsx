@@ -12,6 +12,9 @@ import { useEditorStore } from '../../store/editorStore';
 import { isDirty, saveProject, useProjectStore } from '../../store/projectStore';
 import { WriteDialog } from '../device/WriteDialog';
 import { t } from '../../i18n';
+import { InfoTip } from '../InfoTip';
+import { QMK_DOCS } from '../../lib/qmkDocs';
+import { whyDisabled } from '../../lib/whyDisabled';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
 
@@ -88,11 +91,27 @@ function LayersCell() {
           </button>
         ))}
       </div>
+      <InfoTip label={t('layers', 'слои')} docs={QMK_DOCS.layers}>
+        {t(
+          'The numbers are the keymap’s layers: click one to edit that layer. Layer 0 is the lowest; keys on higher layers take over unless they are transparent.',
+          'Цифры — слои раскладки: нажмите, чтобы редактировать слой. Слой 0 самый нижний; клавиши верхних слоёв перекрывают нижние, если они не прозрачные.',
+        )}
+      </InfoTip>
       <span className="deck-sep" />
-      <button className="icon-btn icon-btn--lg" disabled={past.length === 0} onClick={undo} aria-label={t('Undo', 'Отменить')} title={`${t('Undo', 'Отменить')} (Ctrl+Z)${lastUndo ? `: ${lastUndo}` : ''}`}>
+      <button
+        className="icon-btn icon-btn--lg"
+        onClick={undo}
+        aria-label={t('Undo', 'Отменить')}
+        {...whyDisabled(past.length === 0 && t('Nothing to undo', 'Нечего отменять'), `${t('Undo', 'Отменить')} (Ctrl+Z)${lastUndo ? `: ${lastUndo}` : ''}`)}
+      >
         <Undo2 {...ICON} />
       </button>
-      <button className="icon-btn icon-btn--lg" disabled={future.length === 0} onClick={redo} aria-label={t('Redo', 'Повторить')} title={`${t('Redo', 'Повторить')} (Ctrl+Y)${lastRedo ? `: ${lastRedo}` : ''}`}>
+      <button
+        className="icon-btn icon-btn--lg"
+        onClick={redo}
+        aria-label={t('Redo', 'Повторить')}
+        {...whyDisabled(future.length === 0 && t('Nothing to redo', 'Нечего повторять'), `${t('Redo', 'Повторить')} (Ctrl+Y)${lastRedo ? `: ${lastRedo}` : ''}`)}
+      >
         <Redo2 {...ICON} />
       </button>
     </div>
@@ -111,7 +130,15 @@ function SaveCell() {
   return (
     <div className="deck-cell deck-cell--right">
       <div className={`save-state ${dirty ? 'save-state--dirty' : ''}`}>
-        <strong>{dirty ? t('unsaved', 'не сохранено') : t('saved', 'сохранено')}</strong>
+        <strong>
+          {dirty ? t('unsaved', 'не сохранено') : t('saved', 'сохранено')}{' '}
+          <InfoTip label={t('saving', 'сохранение')}>
+            {t(
+              'Your edits are kept as a draft automatically, but only Save (Ctrl+S) makes a version you can return to. “To keyboard” is separate: it writes the keymap to the connected keyboard and does not save the project.',
+              'Правки автоматически хранятся черновиком, но вернуться можно только к версии, созданной «Сохранить» (Ctrl+S). «В клавиатуру» — отдельное действие: оно записывает раскладку в подключённую клавиатуру, но не сохраняет проект.',
+            )}
+          </InfoTip>
+        </strong>
         {(() => {
           const note = draftError ? t(`draft error: ${draftError}`, `ошибка черновика: ${draftError}`) : dirty ? t('draft is kept automatically', 'черновик хранится автоматически') : project.name;
           return <span title={note}>{note}</span>;
@@ -119,13 +146,22 @@ function SaveCell() {
       </div>
       <button
         className="btn btn--primary"
-        disabled={!dirty || saving}
+        {...whyDisabled((saving && t('Wait: saving…', 'Подождите: идёт сохранение…')) || (!dirty && t('Nothing changed since the last save', 'С прошлого сохранения ничего не менялось')), 'Ctrl+S')}
         onClick={() => void saveProject()}
-        title="Ctrl+S"
       >
         <Save size={14} strokeWidth={1.5} /> {t('save', 'сохранить')}
       </button>
-      <button className="btn" disabled={status !== 'connected'} onClick={() => setWriting(true)} title={t('Write the keymap to the connected keyboard (VIA)', 'Записать раскладку в подключённую клавиатуру (VIA)')}>
+      <button
+        className="btn"
+        {...whyDisabled(
+          status !== 'connected' &&
+            (status === 'busy' || status === 'connecting'
+              ? t('Wait: the keyboard is busy', 'Подождите: клавиатура занята')
+              : t('Connect the keyboard first (Device page)', 'Сначала подключите клавиатуру (страница «Устройство»)')),
+          t('Write the keymap to the connected keyboard (VIA)', 'Записать раскладку в подключённую клавиатуру (VIA)'),
+        )}
+        onClick={() => setWriting(true)}
+      >
         <Upload size={14} strokeWidth={1.5} /> {t('to keyboard', 'в клавиатуру')}
       </button>
       {writing && <WriteDialog onClose={() => setWriting(false)} />}

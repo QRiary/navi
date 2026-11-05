@@ -21,6 +21,9 @@ import { useEditorStore } from '../store/editorStore';
 import { useProjectStore, useSpec } from '../store/projectStore';
 import { t } from '../i18n';
 import { deletedToast } from '../lib/undoToast';
+import { QMK_DOCS } from '../lib/qmkDocs';
+import { whyDisabled } from '../lib/whyDisabled';
+import { Hint, InfoTip } from '../components/InfoTip';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 const COLORS = ['', '#6ec6ff', '#7fe3a8', '#ffb000', '#ff5d6c', '#c792ea', '#e8e8e8'];
@@ -69,7 +72,13 @@ export function LayersPage() {
         {t(
           'QMK checks layers from the highest switched-on one down; a transparent key (▽) falls through to the next switched-on layer, the base layer is always at the bottom. Layer numbers in MO()/LT()/TG()… are renumbered automatically when you move or delete layers.',
           'QMK смотрит слои от самого верхнего включённого вниз; прозрачная клавиша (▽) пропускает к следующему включённому слою, базовый слой всегда снизу. Номера слоёв в MO()/LT()/TG()… пересчитываются сами при перестановке и удалении.',
-        )}
+        )}{' '}
+        <InfoTip docs={QMK_DOCS.layers} label={t('layers', 'слои')}>
+          {t(
+            'A layer is a full set of key assignments. The base layer is always on; other layers are switched on by keys (MO, TG, LT…) while the base stays underneath. The number is the layer’s place in the list: layer 0 is the lowest.',
+            'Слой — полный набор назначений клавиш. Базовый слой включён всегда; остальные включаются клавишами (MO, TG, LT…), а базовый остаётся под ними. Номер — место слоя в списке: слой 0 самый нижний.',
+          )}
+        </InfoTip>
       </p>
       <div className="panel-box rows">
         <LayerKeysOnTopRow project={project} />
@@ -77,10 +86,23 @@ export function LayersPage() {
       <KeymapManager />
       <div className="toolbar">
         <span className="kicker">
-          {n} {t('layers', 'слоёв')} · {t('base', 'базовый')}: {keymap.defaultLayer}
+          {n} {t('layers', 'слоёв')} ·{' '}
+          <Hint
+            tip={t(
+              'The base (default) layer is the one active when nothing else is switched on; transparent keys on other layers fall through to it. Pick it with the star on a layer. QMK allows up to 32 layers.',
+              'Базовый слой (по умолчанию) действует, когда ничего другого не включено; прозрачные клавиши других слоёв пропускают к нему. Выбирается звёздочкой на слое. В QMK не больше 32 слоёв.',
+            )}
+          >
+            {t('base', 'базовый')}
+          </Hint>
+          : {keymap.defaultLayer}
         </span>
         <div className="toolbar-actions">
-          <button className="btn btn--primary" disabled={n >= 32} onClick={() => apply((p) => insertLayer(p, id, spec, `Layer ${n}`, n), t('add layer', 'новый слой'))}>
+          <button
+            className="btn btn--primary"
+            {...whyDisabled(n >= 32 && t('At most 32 layers', 'Не больше 32 слоёв'))}
+            onClick={() => apply((p) => insertLayer(p, id, spec, `Layer ${n}`, n), t('add layer', 'новый слой'))}
+          >
             <Plus {...ICON} /> {t('add layer', 'добавить слой')}
           </button>
         </div>
@@ -149,19 +171,36 @@ export function LayersPage() {
                 </button>
                 <div className="row-actions" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
                   <div className="row-actions">
-                    <button className="icon-btn" disabled={i === 0} title={t('Move up (lower number)', 'Выше (меньший номер)')} aria-label={t('Move up', 'Выше')} onClick={() => apply((p) => moveLayer(p, id, spec, i, i - 1), t('move layer', 'перестановка слоя'))}>
+                    <button
+                      className="icon-btn"
+                      {...whyDisabled(i === 0 && t('Already the first layer', 'Уже первый слой'), t('Move up (lower number)', 'Выше (меньший номер)'))}
+                      aria-label={t('Move up', 'Выше')}
+                      onClick={() => apply((p) => moveLayer(p, id, spec, i, i - 1), t('move layer', 'перестановка слоя'))}
+                    >
                       <ArrowUp {...ICON} />
                     </button>
-                    <button className="icon-btn" disabled={i === n - 1} title={t('Move down (higher number)', 'Ниже (больший номер)')} aria-label={t('Move down', 'Ниже')} onClick={() => apply((p) => moveLayer(p, id, spec, i, i + 1), t('move layer', 'перестановка слоя'))}>
+                    <button
+                      className="icon-btn"
+                      {...whyDisabled(i === n - 1 && t('Already the last layer', 'Уже последний слой'), t('Move down (higher number)', 'Ниже (больший номер)'))}
+                      aria-label={t('Move down', 'Ниже')}
+                      onClick={() => apply((p) => moveLayer(p, id, spec, i, i + 1), t('move layer', 'перестановка слоя'))}
+                    >
                       <ArrowDown {...ICON} />
                     </button>
-                    <button className="icon-btn" disabled={n >= 32} title={t('Duplicate', 'Копия слоя')} aria-label={t('Duplicate', 'Копия')} onClick={() => apply((p) => duplicateLayer(p, id, spec, i), t('duplicate layer', 'копия слоя'))}>
+                    <button
+                      className="icon-btn"
+                      {...whyDisabled(n >= 32 && t('At most 32 layers', 'Не больше 32 слоёв'), t('Duplicate', 'Копия слоя'))}
+                      aria-label={t('Duplicate', 'Копия')}
+                      onClick={() => apply((p) => duplicateLayer(p, id, spec, i), t('duplicate layer', 'копия слоя'))}
+                    >
                       <CopyPlus {...ICON} />
                     </button>
                     <button
                       className={`icon-btn ${confirmDelete === i ? 'is-danger' : ''}`}
-                      disabled={n <= 1}
-                      title={confirmDelete === i ? t('Click again: delete (references become KC_NO)', 'Ещё раз: удалить (ссылки станут KC_NO)') : t('Delete layer', 'Удалить слой')}
+                      {...whyDisabled(
+                        n <= 1 && t('A keymap needs at least one layer', 'В раскладке должен остаться хотя бы один слой'),
+                        confirmDelete === i ? t('Click again: delete (references become KC_NO)', 'Ещё раз: удалить (ссылки станут KC_NO)') : t('Delete layer', 'Удалить слой'),
+                      )}
                       aria-label={t('Delete layer', 'Удалить слой')}
                       onClick={() => {
                         if (confirmDelete !== i) {
@@ -178,13 +217,28 @@ export function LayersPage() {
                     </button>
                   </div>
                   <div className="row-actions">
-                    <button className="icon-btn" disabled={i === keymap.defaultLayer} title={t('Make base layer', 'Сделать базовым')} aria-label={t('Make base', 'Базовый')} onClick={() => apply((p) => setDefaultLayer(p, id, i), t('base layer', 'базовый слой'))}>
+                    <button
+                      className="icon-btn"
+                      {...whyDisabled(i === keymap.defaultLayer && t('Already the base layer', 'Уже базовый слой'), t('Make base layer', 'Сделать базовым'))}
+                      aria-label={t('Make base', 'Базовый')}
+                      onClick={() => apply((p) => setDefaultLayer(p, id, i), t('base layer', 'базовый слой'))}
+                    >
                       <Star {...ICON} />
                     </button>
-                    <button className="icon-btn" title={t('Fill with transparent', 'Залить прозрачными')} aria-label={t('Transparent', 'Прозрачные')} onClick={() => apply((p) => fillLayer(p, id, i, KC_TRNS), t('fill transparent', 'заливка прозрачными'))}>
+                    <button
+                      className="icon-btn"
+                      title={t('Fill with transparent', 'Залить прозрачными')}
+                      aria-label={t('Transparent', 'Прозрачные')}
+                      onClick={() => apply((p) => fillLayer(p, id, i, KC_TRNS), t('fill transparent', 'заливка прозрачными'))}
+                    >
                       <SquareDashed {...ICON} />
                     </button>
-                    <button className="icon-btn" title={t('Fill with empty (KC_NO)', 'Залить пустыми (KC_NO)')} aria-label={t('Empty', 'Пустые')} onClick={() => apply((p) => fillLayer(p, id, i, KC_NO), t('fill empty', 'заливка пустыми'))}>
+                    <button
+                      className="icon-btn"
+                      title={t('Fill with empty (KC_NO)', 'Залить пустыми (KC_NO)')}
+                      aria-label={t('Empty', 'Пустые')}
+                      onClick={() => apply((p) => fillLayer(p, id, i, KC_NO), t('fill empty', 'заливка пустыми'))}
+                    >
                       <Eraser {...ICON} />
                     </button>
                   </div>
@@ -239,7 +293,12 @@ export function LayersPage() {
             <span className="cell-label">{t('copy keys between layers', 'перенос назначений между слоями')}</span>
           </div>
           <div className="panel-box-body field">
-            <p className="field-hint">{t('All keys of one layer are copied to the selected layer (undo with Ctrl+Z). To copy only some keys, select them in the editor and use Ctrl+C / Ctrl+V on another layer.', 'Все клавиши одного слоя копируются в выбранный (отмена — Ctrl+Z). Чтобы перенести часть, выделите клавиши в редакторе и используйте Ctrl+C / Ctrl+V на другом слое.')}</p>
+            <p className="field-hint">
+              {t(
+                'All keys of one layer are copied to the selected layer (undo with Ctrl+Z). To copy only some keys, select them in the editor and use Ctrl+C / Ctrl+V on another layer.',
+                'Все клавиши одного слоя копируются в выбранный (отмена — Ctrl+Z). Чтобы перенести часть, выделите клавиши в редакторе и используйте Ctrl+C / Ctrl+V на другом слое.',
+              )}
+            </p>
             <div className="field-row">
               <select className="select" value={copyFrom} onChange={(e) => setCopyFrom(Number(e.target.value))} aria-label={t('From', 'Откуда')}>
                 {keymap.layers.map((l, i) => (

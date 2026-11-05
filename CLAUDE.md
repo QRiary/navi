@@ -16,6 +16,7 @@ npm run app:dev        # Vite :5190 + Electron with hot reload
 npm run device:probe   # build + hidden window: reads (read-only!) all VIA keyboards and prints JSON
 npm run gen:qmk -- <qmk_firmware>   # regenerate src/core/qmk-data/* from QMK sources
 npm run icon           # build/icon.svg → build/icon.png, public/icon.png, build/icon.ico
+npm run check:docs     # opens every QMK docs link in src/ and checks the page and its #anchor exist (run after adding one)
 npm run dist           # Windows installer (electron-builder)
 ```
 After changes: `npm run typecheck; npm test; npm run build`.

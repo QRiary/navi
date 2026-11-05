@@ -10,14 +10,28 @@ import type { Project, UnicodeEntry } from '../../core/project/types';
 import { useProjectStore, useSpec } from '../../store/projectStore';
 import { FeatureNote, IssueList } from './common';
 import { getLanguage, t } from '../../i18n';
+import { QMK_DOCS } from '../../lib/qmkDocs';
 import { deletedToast } from '../../lib/undoToast';
+import { whyDisabled } from '../../lib/whyDisabled';
+import { EmptyState } from '../EmptyState';
+import { Hint } from '../InfoTip';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
 /** Unicode input methods in QMK (quantum/unicode/unicode.h). The order is the UC_NEXT switching order. */
 const INPUT_MODES: { id: string; title: string; en: string; ru: string }[] = [
-  { id: 'UNICODE_MODE_WINCOMPOSE', title: 'Windows · WinCompose', en: 'Needs the free WinCompose app. Recommended on Windows: any character, works everywhere.', ru: 'Нужна бесплатная программа WinCompose. Лучший вариант для Windows: любые символы, работает везде.' },
-  { id: 'UNICODE_MODE_WINDOWS', title: 'Windows · HexNumpad', en: 'Built into Windows after a registry change (EnableHexNumpad); only up to U+FFFF, not in every app.', ru: 'Встроено в Windows после правки реестра (EnableHexNumpad); только до U+FFFF, не во всех программах.' },
+  {
+    id: 'UNICODE_MODE_WINCOMPOSE',
+    title: 'Windows · WinCompose',
+    en: 'Needs the free WinCompose app. Recommended on Windows: any character, works everywhere.',
+    ru: 'Нужна бесплатная программа WinCompose. Лучший вариант для Windows: любые символы, работает везде.',
+  },
+  {
+    id: 'UNICODE_MODE_WINDOWS',
+    title: 'Windows · HexNumpad',
+    en: 'Built into Windows after a registry change (EnableHexNumpad); only up to U+FFFF, not in every app.',
+    ru: 'Встроено в Windows после правки реестра (EnableHexNumpad); только до U+FFFF, не во всех программах.',
+  },
   { id: 'UNICODE_MODE_LINUX', title: 'Linux · IBus', en: 'Ctrl+Shift+U input (IBus, GTK).', ru: 'Ввод через Ctrl+Shift+U (IBus, GTK).' },
   { id: 'UNICODE_MODE_MACOS', title: 'macOS', en: 'Needs the “Unicode Hex Input” keyboard layout.', ru: 'Нужна раскладка «Unicode Hex Input».' },
   { id: 'UNICODE_MODE_BSD', title: 'BSD', en: 'Not implemented in QMK yet (placeholder).', ru: 'В QMK пока не реализован (заготовка).' },
@@ -85,15 +99,43 @@ export function UnicodeTab({ project }: { project: Project }) {
       t('unicode input', 'ввод юникода'),
     );
   const setTable = (list: UnicodeEntry[], label: string, coalesce?: string) => apply((p) => ({ ...p, unicodeMap: list }), label, coalesce ? { coalesce } : undefined);
-  const patch = (id: string, p: Partial<UnicodeEntry>, label: string, coalesce?: string) => setTable(project.unicodeMap.map((x) => (x.id === id ? { ...x, ...p } : x)), label, coalesce);
+  const patch = (id: string, p: Partial<UnicodeEntry>, label: string, coalesce?: string) =>
+    setTable(
+      project.unicodeMap.map((x) => (x.id === id ? { ...x, ...p } : x)),
+      label,
+      coalesce,
+    );
 
+  const addButton = (
+    <button
+      className="btn btn--primary"
+      {...whyDisabled(project.unicodeMap.length >= 0x4000 && t('At most 16384 characters', 'Не больше 16384 символов'))}
+      onClick={() => setTable([...project.unicodeMap, { id: newId('uc'), name: `CHAR_${project.unicodeMap.length}`, codepoint: 0x2192 }], t('new character', 'новый символ'))}
+    >
+      <Plus {...ICON} /> {t('character', 'символ')}
+    </button>
+  );
+  const firstUse =
+    mode === 'unicodemap'
+      ? { en: 'add the first character to the table', ru: 'добавите первый символ в таблицу' }
+      : { en: 'put a Unicode character (UC) on a key', ru: 'поставите на клавишу символ Юникода (UC)' };
   return (
     <div className="page">
-      <FeatureNote project={project} feature={mode === 'unicodemap' ? 'unicodemap' : 'unicode'} />
+      <FeatureNote project={project} feature={mode === 'unicodemap' ? 'unicodemap' : 'unicode'} firstUse={firstUse} />
 
       <section className="section">
         <div className="section-head">
-          <h2>{t('how keys carry characters', 'как клавиши хранят символы')}</h2>
+          <h2>
+            <Hint
+              docs={QMK_DOCS.unicodeSubsystems}
+              tip={t(
+                'Two ways to put a character on a key. UC keeps the code inside the keycode (up to U+7FFF, no emoji). UM and UP look the character up in the table below, so any character works; UP holds a pair, the second one typed with Shift.',
+                'Два способа поставить символ на клавишу. UC хранит код прямо в keycode (до U+7FFF, без эмодзи). UM и UP берут символ из таблицы ниже, поэтому подходят любые символы; UP хранит пару, второй символ печатается с Shift.',
+              )}
+            >
+              {t('how keys carry characters', 'как клавиши хранят символы')}
+            </Hint>
+          </h2>
         </div>
         <div className="field">
           <div className="panel-box rows">
@@ -107,7 +149,10 @@ export function UnicodeTab({ project }: { project: Project }) {
               <input type="radio" name="unicode-mode" checked={mode === 'unicodemap'} onChange={() => setMode('unicodemap')} />
               <strong>UM(i) / UP(i, j)</strong>
               <span className="field-hint">
-                {t('Keys refer to rows of the table below: any character, including emoji. UP gives a second character with Shift.', 'Клавиши ссылаются на строки таблицы ниже: любые символы, включая эмодзи. UP — второй символ с Shift.')}
+                {t(
+                  'Keys refer to rows of the table below: any character, including emoji. UP gives a second character with Shift.',
+                  'Клавиши ссылаются на строки таблицы ниже: любые символы, включая эмодзи. UP — второй символ с Shift.',
+                )}
               </span>
               <span />
             </label>
@@ -127,7 +172,17 @@ export function UnicodeTab({ project }: { project: Project }) {
 
       <section className="section">
         <div className="section-head">
-          <h2>{t('input method on the computer', 'способ ввода на компьютере')}</h2>
+          <h2>
+            <Hint
+              docs={QMK_DOCS.unicodeInputModes}
+              tip={t(
+                'A keyboard cannot send a character directly: it types a key sequence the operating system turns into the character, and every OS expects a different one. Pick the one for your computer.',
+                'Клавиатура не может отправить символ напрямую: она набирает последовательность клавиш, которую система превращает в символ, и у каждой системы она своя. Выберите ту, что подходит вашему компьютеру.',
+              )}
+            >
+              {t('input method on the computer', 'способ ввода на компьютере')}
+            </Hint>
+          </h2>
           <span className="kicker">UNICODE_SELECTED_MODES</span>
         </div>
         <p className="field-hint">
@@ -155,39 +210,74 @@ export function UnicodeTab({ project }: { project: Project }) {
       <section className="section">
         <div className="section-head">
           <h2>
-            {t('table', 'таблица')} · {project.unicodeMap.length}
+            <Hint
+              docs={QMK_DOCS.unicodeSubsystems}
+              tip={t(
+                'The list of characters UM(i) and UP(i, j) refer to by row number. Only used in the “UM / UP” mode.',
+                'Список символов, на которые ссылаются UM(i) и UP(i, j) по номеру строки. Используется только в режиме «UM / UP».',
+              )}
+            >
+              {t('table', 'таблица')}
+            </Hint>{' '}
+            · {project.unicodeMap.length}
           </h2>
           {mode !== 'unicodemap' && <span className="badge badge--warn">{t('used only in table mode', 'используется только в режиме таблицы')}</span>}
         </div>
-        <div className="panel-box rows">
-          {project.unicodeMap.map((u, i) => (
-            <div key={u.id} className="row" style={{ ['--row-cols' as string]: '50px 60px minmax(120px, 1fr) 110px 120px auto' }}>
-              <span className="kicker">UM({i})</span>
-              <input
-                className="input"
-                style={{ width: 52, textAlign: 'center', fontSize: 'var(--fs-lg, 18px)' }}
-                value={printable(u.codepoint)}
-                onChange={(e) => {
-                  const cp = e.target.value.codePointAt(0);
-                  if (cp !== undefined) patch(u.id, { codepoint: cp }, t('character', 'символ'), `ucchar:${u.id}`);
-                }}
-                aria-label={t('Character', 'Символ')}
-              />
-              <input className="input" value={u.name} onChange={(e) => patch(u.id, { name: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_') }, t('character name', 'имя символа'), `ucname:${u.id}`)} aria-label={t('Name', 'Имя')} />
-              <CodepointInput entry={u} onChange={(cp) => patch(u.id, { codepoint: cp }, t('code point', 'код символа'))} />
-              <span className="field-hint">{i < 128 ? `UP(${i}, …)` : ''}</span>
-              <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => { setTable(project.unicodeMap.filter((x) => x.id !== u.id), t('delete character', 'удаление символа')); deletedToast(u.name || t('character', 'символ')); }}>
-                <Trash2 {...ICON} />
-              </button>
-            </div>
-          ))}
-        </div>
+        {project.unicodeMap.length === 0 && (
+          <EmptyState
+            what={t('The table holds the characters that UM(i) and UP(i, j) keys type, one per row.', 'В таблице лежат символы, которые печатают клавиши UM(i) и UP(i, j), по одному на строку.')}
+            example={t('Row 0 = “→” (U+2192): put UM(0) on a key to type an arrow.', 'Строка 0 = «→» (U+2192): поставьте UM(0) на клавишу, чтобы печатать стрелку.')}
+          >
+            {addButton}
+          </EmptyState>
+        )}
+        {project.unicodeMap.length > 0 && (
+          <div className="panel-box rows">
+            {project.unicodeMap.map((u, i) => (
+              <div key={u.id} className="row" style={{ ['--row-cols' as string]: '50px 60px minmax(120px, 1fr) 110px 120px auto' }}>
+                <span className="kicker">UM({i})</span>
+                <input
+                  className="input"
+                  style={{ width: 52, textAlign: 'center', fontSize: 'var(--fs-lg, 18px)' }}
+                  value={printable(u.codepoint)}
+                  onChange={(e) => {
+                    const cp = e.target.value.codePointAt(0);
+                    if (cp !== undefined) patch(u.id, { codepoint: cp }, t('character', 'символ'), `ucchar:${u.id}`);
+                  }}
+                  aria-label={t('Character', 'Символ')}
+                />
+                <input
+                  className="input"
+                  value={u.name}
+                  onChange={(e) => patch(u.id, { name: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_') }, t('character name', 'имя символа'), `ucname:${u.id}`)}
+                  aria-label={t('Name', 'Имя')}
+                />
+                <CodepointInput entry={u} onChange={(cp) => patch(u.id, { codepoint: cp }, t('code point', 'код символа'))} />
+                <span className="field-hint">{i < 128 ? `UP(${i}, …)` : ''}</span>
+                <button
+                  className="icon-btn"
+                  aria-label={t('Delete', 'Удалить')}
+                  onClick={() => {
+                    setTable(
+                      project.unicodeMap.filter((x) => x.id !== u.id),
+                      t('delete character', 'удаление символа'),
+                    );
+                    deletedToast(u.name || t('character', 'символ'));
+                  }}
+                >
+                  <Trash2 {...ICON} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="field-row">
-          <button className="btn btn--primary" disabled={project.unicodeMap.length >= 0x4000} onClick={() => setTable([...project.unicodeMap, { id: newId('uc'), name: `CHAR_${project.unicodeMap.length}`, codepoint: 0x2192 }], t('new character', 'новый символ'))}>
-            <Plus {...ICON} /> {t('character', 'символ')}
-          </button>
+          {project.unicodeMap.length > 0 && addButton}
           <span className="field-hint">
-            {t('Paste a character into the first field or type its code. On a key: expression UM(0), or UP(0, 1) for “0, with Shift — 1”.', 'Вставьте символ в первое поле или введите код. На клавишу: выражение UM(0), или UP(0, 1) — «0, а с Shift — 1».')}
+            {t(
+              'Paste a character into the first field or type its code. On a key: expression UM(0), or UP(0, 1) for “0, with Shift — 1”.',
+              'Вставьте символ в первое поле или введите код. На клавишу: выражение UM(0), или UP(0, 1) — «0, а с Shift — 1».',
+            )}
           </span>
         </div>
         <p className="field-hint">

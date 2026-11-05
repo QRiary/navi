@@ -11,7 +11,9 @@ import type { LightingState, Project } from '../../core/project/types';
 import { useProjectStore } from '../../store/projectStore';
 import { useQmkStore } from '../../store/qmkStore';
 import { t } from '../../i18n';
-
+import { QMK_DOCS } from '../../lib/qmkDocs';
+import { whyDisabled } from '../../lib/whyDisabled';
+import { Hint } from '../InfoTip';
 
 function num(v: unknown, fallback: number): number {
   return typeof v === 'number' ? v : fallback;
@@ -50,7 +52,17 @@ export function BuildLighting({ preset }: { preset: LightingState | null }) {
   return (
     <section className="panel-box" style={{ marginTop: 'var(--gap)' }}>
       <div className="panel-box-head">
-        <span className="cell-label">{t('in your build (pure QMK)', 'в своей сборке (чистый QMK)')}</span>
+        <span className="cell-label">
+          <Hint
+            docs={QMK_DOCS.rgbMatrixConfig}
+            tip={t(
+              'The lighting your firmware starts with, written into config.h when you build. It is separate from the live lighting above, which only works with VIA.',
+              'Подсветка, с которой стартует ваша прошивка; записывается в config.h при сборке. Это не то же самое, что подсветка выше, которая меняется вживую и только через VIA.',
+            )}
+          >
+            {t('in your build (pure QMK)', 'в своей сборке (чистый QMK)')}
+          </Hint>
+        </span>
         <span className="kicker">config.h</span>
       </div>
       <div className="panel-box-body field">
@@ -61,12 +73,21 @@ export function BuildLighting({ preset }: { preset: LightingState | null }) {
           )}
         </p>
         <label className="checkbox">
-          <input type="checkbox" checked={bc.RGB_MATRIX_DEFAULT_ON !== false} onChange={(e) => patch({ RGB_MATRIX_DEFAULT_ON: e.target.checked }, t('lighting on by default', 'подсветка включена по умолчанию'))} />{' '}
+          <input
+            type="checkbox"
+            checked={bc.RGB_MATRIX_DEFAULT_ON !== false}
+            onChange={(e) => patch({ RGB_MATRIX_DEFAULT_ON: e.target.checked }, t('lighting on by default', 'подсветка включена по умолчанию'))}
+          />{' '}
           {t('lighting on after power-up', 'подсветка включена при включении')}
         </label>
         <div className="field">
           <span className="field-label">{t('effect', 'эффект')}</span>
-          <select className="select" value={mode} onChange={(e) => patch({ RGB_MATRIX_DEFAULT_MODE: e.target.value ? `RGB_MATRIX_${e.target.value}` : null }, t('default effect', 'эффект по умолчанию'))} aria-label={t('Default effect', 'Эффект по умолчанию')}>
+          <select
+            className="select"
+            value={mode}
+            onChange={(e) => patch({ RGB_MATRIX_DEFAULT_MODE: e.target.value ? `RGB_MATRIX_${e.target.value}` : null }, t('default effect', 'эффект по умолчанию'))}
+            aria-label={t('Default effect', 'Эффект по умолчанию')}
+          >
             <option value="">{t('— as set by the keyboard —', '— как задано у клавиатуры —')}</option>
             {RGB_MATRIX_EFFECTS.map((e) => (
               <option key={e.id} value={e.id}>
@@ -80,39 +101,93 @@ export function BuildLighting({ preset }: { preset: LightingState | null }) {
         </div>
         <div className="field">
           <span className="field-label">
-            {t('brightness', 'яркость')} · {num(bc.RGB_MATRIX_DEFAULT_VAL, base.val)}
+            <Hint
+              tip={t(
+                'The limit is the maximum brightness the keyboard maker allows (RGB_MATRIX_MAXIMUM_BRIGHTNESS), because the LEDs draw more current when brighter. The slider stops at it.',
+                'Предел — максимальная яркость, которую допускает производитель клавиатуры (RGB_MATRIX_MAXIMUM_BRIGHTNESS): чем ярче светодиоды, тем больше ток. Ползунок упирается в него.',
+              )}
+            >
+              {t('brightness', 'яркость')}
+            </Hint>{' '}
+            · {num(bc.RGB_MATRIX_DEFAULT_VAL, base.val)}
             {limit !== null ? ` / ${t('limit', 'предел')} ${limit}` : ''}
           </span>
-          <Slider value={Math.min(num(bc.RGB_MATRIX_DEFAULT_VAL, base.val), maxBrightness)} min={0} max={maxBrightness} step={1} label={t('Default brightness', 'Яркость по умолчанию')} onChange={(v) => patch({ RGB_MATRIX_DEFAULT_VAL: v }, t('default brightness', 'яркость по умолчанию'))} />
+          <Slider
+            value={Math.min(num(bc.RGB_MATRIX_DEFAULT_VAL, base.val), maxBrightness)}
+            min={0}
+            max={maxBrightness}
+            step={1}
+            label={t('Default brightness', 'Яркость по умолчанию')}
+            onChange={(v) => patch({ RGB_MATRIX_DEFAULT_VAL: v }, t('default brightness', 'яркость по умолчанию'))}
+          />
         </div>
         <div className="field">
           <span className="field-label">
             {t('speed', 'скорость')} · {num(bc.RGB_MATRIX_DEFAULT_SPD, base.speed)}
           </span>
-          <Slider value={num(bc.RGB_MATRIX_DEFAULT_SPD, base.speed)} min={0} max={255} step={1} label={t('Default speed', 'Скорость по умолчанию')} onChange={(v) => patch({ RGB_MATRIX_DEFAULT_SPD: v }, t('default speed', 'скорость по умолчанию'))} />
+          <Slider
+            value={num(bc.RGB_MATRIX_DEFAULT_SPD, base.speed)}
+            min={0}
+            max={255}
+            step={1}
+            label={t('Default speed', 'Скорость по умолчанию')}
+            onChange={(v) => patch({ RGB_MATRIX_DEFAULT_SPD: v }, t('default speed', 'скорость по умолчанию'))}
+          />
         </div>
         <div className="field">
           <span className="field-label">
             {t('color', 'цвет')} · H {num(bc.RGB_MATRIX_DEFAULT_HUE, base.hue)} · S {num(bc.RGB_MATRIX_DEFAULT_SAT, base.sat)}
           </span>
-          <Slider value={num(bc.RGB_MATRIX_DEFAULT_HUE, base.hue)} min={0} max={255} step={1} label={t('Default hue', 'Оттенок по умолчанию')} onChange={(v) => patch({ RGB_MATRIX_DEFAULT_HUE: v }, t('default hue', 'оттенок по умолчанию'))} />
-          <Slider value={num(bc.RGB_MATRIX_DEFAULT_SAT, base.sat)} min={0} max={255} step={1} label={t('Default saturation', 'Насыщенность по умолчанию')} onChange={(v) => patch({ RGB_MATRIX_DEFAULT_SAT: v }, t('default saturation', 'насыщенность по умолчанию'))} />
+          <Slider
+            value={num(bc.RGB_MATRIX_DEFAULT_HUE, base.hue)}
+            min={0}
+            max={255}
+            step={1}
+            label={t('Default hue', 'Оттенок по умолчанию')}
+            onChange={(v) => patch({ RGB_MATRIX_DEFAULT_HUE: v }, t('default hue', 'оттенок по умолчанию'))}
+          />
+          <Slider
+            value={num(bc.RGB_MATRIX_DEFAULT_SAT, base.sat)}
+            min={0}
+            max={255}
+            step={1}
+            label={t('Default saturation', 'Насыщенность по умолчанию')}
+            onChange={(v) => patch({ RGB_MATRIX_DEFAULT_SAT: v }, t('default saturation', 'насыщенность по умолчанию'))}
+          />
         </div>
         {limit === null && (
           <p className="field-hint">
-            {t('The keyboard brightness limit is not known yet (choose the target in Firmware). Do not set the brightness higher than the keyboard maker allows.', 'Предел яркости клавиатуры пока неизвестен (выберите target в «Прошивке»). Не ставьте яркость выше, чем допускает производитель.')}
+            {t(
+              'The keyboard brightness limit is not known yet (choose the target in Firmware). Do not set the brightness higher than the keyboard maker allows.',
+              'Предел яркости клавиатуры пока неизвестен (выберите target в «Прошивке»). Не ставьте яркость выше, чем допускает производитель.',
+            )}
           </p>
         )}
         <div className="field-row">
-          <button className="btn" disabled={!preset} onClick={() => preset && patch(buildLightingFrom(preset, project.lighting.rgbMatrixEffects, limit), t('lighting into the build', 'подсветка в сборку'))}>
+          <button
+            className="btn"
+            {...whyDisabled(
+              !preset && t('No lighting values to take: connect the keyboard or set a project preset above', 'Нет значений подсветки: подключите клавиатуру или задайте пресет проекта выше'),
+            )}
+            onClick={() => preset && patch(buildLightingFrom(preset, project.lighting.rgbMatrixEffects, limit), t('lighting into the build', 'подсветка в сборку'))}
+          >
             {t('take values from above', 'взять значения сверху')}
           </button>
-          <button className="btn btn--ghost" disabled={!isSet} onClick={() => patch(Object.fromEntries(KEYS.map((k) => [k, null])), t('lighting from the keyboard', 'подсветка как у клавиатуры'))}>
+          <button
+            className="btn btn--ghost"
+            {...whyDisabled(!isSet && t('Already as set by the keyboard', 'Уже как задано у клавиатуры'))}
+            onClick={() => patch(Object.fromEntries(KEYS.map((k) => [k, null])), t('lighting from the keyboard', 'подсветка как у клавиатуры'))}
+          >
             {t('as set by the keyboard', 'как задано у клавиатуры')}
           </button>
         </div>
         {preset && preset.effect !== 0 && !presetName && (
-          <p className="field-hint">{t('The effect number above has no known name, so only the color, brightness and speed are taken. Choose the effect in the list.', 'У номера эффекта сверху нет известного названия, поэтому берутся только цвет, яркость и скорость. Эффект выберите в списке.')}</p>
+          <p className="field-hint">
+            {t(
+              'The effect number above has no known name, so only the color, brightness and speed are taken. Choose the effect in the list.',
+              'У номера эффекта сверху нет известного названия, поэтому берутся только цвет, яркость и скорость. Эффект выберите в списке.',
+            )}
+          </p>
         )}
       </div>
     </section>

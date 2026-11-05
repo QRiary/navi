@@ -14,6 +14,8 @@ import { navi } from '../desktop/bridge';
 import { JSON_FILTERS, openTextFile, saveTextFile } from '../lib/files';
 import { href } from '../lib/router';
 import { TabPanels, Tabs } from '../components/Tabs';
+import { Hint } from '../components/InfoTip';
+import { whyDisabled } from '../lib/whyDisabled';
 import { useSettingsStore } from '../store/settingsStore';
 import { toast } from '../store/toastStore';
 import { getLanguage, t } from '../i18n';
@@ -44,9 +46,7 @@ function ConfigTab() {
   return (
     <div>
       <div className="toolbar">
-        <span className="file-name">
-          user.config.jsonc{dirty && <span className="dirty-mark"> ● {t('not applied', 'не применено')}</span>}
-        </span>
+        <span className="file-name">user.config.jsonc{dirty && <span className="dirty-mark"> ● {t('not applied', 'не применено')}</span>}</span>
         <div className="toolbar-actions">
           {navi && (
             <button className="btn" onClick={() => void navi!.openPath('config')}>
@@ -75,10 +75,16 @@ function ConfigTab() {
           >
             <RotateCcw {...ICON} /> {confirmReset ? t('reset for sure?', 'точно сбросить?') : t('defaults', 'по умолчанию')}
           </button>
-          <button className="btn" disabled={!dirty} onClick={() => setDraft(configText)}>
+          <button className="btn" {...whyDisabled(!dirty && t('No unapplied changes to cancel', 'Нет неприменённых изменений'))} onClick={() => setDraft(configText)}>
             {t('cancel', 'отменить')}
           </button>
-          <button className="btn btn--primary" disabled={!dirty || errors.length > 0} onClick={apply}>
+          <button
+            className="btn btn--primary"
+            {...whyDisabled(
+              (!dirty && t('No changes to apply', 'Нет изменений для применения')) || (errors.length > 0 && t('Fix the errors listed below first', 'Сначала исправьте ошибки в списке ниже')),
+            )}
+            onClick={apply}
+          >
             {t('apply', 'применить')} <kbd>ctrl+s</kbd>
           </button>
         </div>
@@ -134,7 +140,16 @@ function QuickTab() {
     <div className="page">
       <section className="section" style={{ marginTop: 0 }}>
         <div className="section-head">
-          <h2>{t('palette', 'палитра')}</h2>
+          <h2>
+            <Hint
+              tip={t(
+                'A palette sets all colors at once. Single colors can be changed below the palette; they stay when you switch palettes until you reset them.',
+                'Палитра задаёт сразу все цвета. Отдельные цвета можно изменить ниже; они остаются при смене палитры, пока вы их не сбросите.',
+              )}
+            >
+              {t('palette', 'палитра')}
+            </Hint>
+          </h2>
         </div>
         <div className="theme-grid">
           {THEME_PRESETS.map((p) => (
@@ -154,7 +169,16 @@ function QuickTab() {
       {navi && (
         <section className="section">
           <div className="section-head">
-            <h2>{t('interface', 'интерфейс')}</h2>
+            <h2>
+              <Hint
+                tip={t(
+                  'Interface size zooms everything (text, buttons, the keyboard drawing), like a browser zoom. To change only the text size, use typography.scale in the config file.',
+                  'Размер интерфейса увеличивает всё (текст, кнопки, рисунок клавиатуры), как масштаб в браузере. Чтобы изменить только размер текста, используйте typography.scale в файле конфига.',
+                )}
+              >
+                {t('interface', 'интерфейс')}
+              </Hint>
+            </h2>
           </div>
           <div className="panel-box rows">
             <InterfaceSizeControl />
@@ -187,9 +211,18 @@ function QuickTab() {
                 ))}
             </select>
           </div>
-          {toggle('keyboard.showTransparentSource', settings.keyboard.showTransparentSource, t('Show what transparent keys fall through to', 'Показывать, что «просвечивает» через прозрачные клавиши'))}
+          {toggle(
+            'keyboard.showTransparentSource',
+            settings.keyboard.showTransparentSource,
+            t('Show what transparent keys fall through to', 'Показывать, что «просвечивает» через прозрачные клавиши'),
+          )}
           {toggle('keyboard.showMatrix', settings.keyboard.showMatrix, t('Show matrix positions', 'Показывать позиции матрицы'))}
-          {toggle('layout.inspector', settings.layout.inspector, t('Inspector panel', 'Панель инспектора'), t('right panel on Keyboard, Hardware and Firmware', 'правая панель на страницах «Клавиатура», «Железо» и «Прошивка»'))}
+          {toggle(
+            'layout.inspector',
+            settings.layout.inspector,
+            t('Inspector panel', 'Панель инспектора'),
+            t('right panel on Keyboard, Hardware and Firmware', 'правая панель на страницах «Клавиатура», «Железо» и «Прошивка»'),
+          )}
           {toggle('layout.statusLine', settings.layout.statusLine, t('Status line', 'Строка состояния'))}
         </div>
       </section>
@@ -199,13 +232,27 @@ function QuickTab() {
         </div>
         <div className="panel-box rows">
           {toggle('device.autoConnect', settings.device.autoConnect, t('Connect to the project keyboard on start', 'Подключаться к клавиатуре проекта при запуске'))}
-          {toggle('device.liveWrite', settings.device.liveWrite, t('Live write', 'Живая запись'), t('every key change is written to the keyboard at once (like VIA)', 'каждое изменение клавиш сразу пишется в клавиатуру (как VIA)'))}
+          {toggle(
+            'device.liveWrite',
+            settings.device.liveWrite,
+            t('Live write', 'Живая запись'),
+            t('every key change is written to the keyboard at once (like VIA)', 'каждое изменение клавиш сразу пишется в клавиатуру (как VIA)'),
+          )}
           {toggle('editor.confirmDeviceWrite', settings.editor.confirmDeviceWrite, t('Show the change list before writing', 'Показывать список изменений перед записью'))}
         </div>
       </section>
       <section className="section">
         <div className="section-head">
-          <h2>{t('effects', 'эффекты')}</h2>
+          <h2>
+            <Hint
+              tip={t(
+                'Decoration only: these change how the app looks and never touch your project or the keyboard. Turn animations off if the interface feels slow.',
+                'Только оформление: меняет вид приложения и никак не затрагивает проект и клавиатуру. Если интерфейс тормозит, выключите анимации.',
+              )}
+            >
+              {t('effects', 'эффекты')}
+            </Hint>
+          </h2>
         </div>
         <div className="panel-box rows">
           {toggle('effects.animations', settings.effects.animations, t('Animations', 'Анимации'))}
