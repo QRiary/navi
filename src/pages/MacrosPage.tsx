@@ -19,6 +19,8 @@ import { assignToSelection } from '../lib/keymapActions';
 import { useDeviceStore } from '../store/deviceStore';
 import { useProjectStore, useSpec } from '../store/projectStore';
 import { getLanguage, t } from '../i18n';
+import { ListFilter } from '../components/ListFilter';
+import { findAttr, matchesQuery, useFindJump, useListFilter } from '../lib/find';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
@@ -69,7 +71,13 @@ export function MacrosPage() {
     };
   }, [recording]);
 
+  const [query, setQuery] = useListFilter();
+  useFindJump('macro:', (i) => setSelected(Number(i)));
+
   if (!project) return null;
+  const slots = Array.from({ length: count }, (_, i) => ({ i, m: project.macros.find((x) => x.index === i) })).filter(({ i, m }) =>
+    matchesQuery(query, `MC_${i}`, m?.name, ...(m?.steps.map((s) => (s.type === 'text' ? s.text : null)) ?? [])),
+  );
   const macro = project.macros.find((m) => m.index === selected) ?? { id: '', index: selected, name: `M${selected}`, steps: [] };
   const issues = checkMacroSteps(selected, macro.steps);
   const update = (fn: (m: Macro) => Macro, label: string, coalesce?: string) => apply((p) => ({ ...p, macros: patchMacros(p.macros, selected, fn) }), label, coalesce ? { coalesce } : undefined);
@@ -130,12 +138,21 @@ export function MacrosPage() {
       </div>
       <div className="grid-2" style={{ gridTemplateColumns: 'minmax(220px, 300px) minmax(0, 1fr)' }}>
         <div className="panel-box">
+          <ListFilter
+            value={query}
+            onChange={setQuery}
+            label={t('Filter macros', 'Фильтр макросов')}
+            placeholder={t('Filter by slot, name or text', 'Фильтр по ячейке, имени или тексту')}
+            shown={slots.length}
+            total={count}
+          />
+          {slots.length === 0 && <p className="field-hint">{t('Nothing matches the filter.', 'Под фильтр ничего не подходит.')}</p>}
           <div className="rows">
-            {Array.from({ length: count }, (_, i) => {
-              const m = project.macros.find((x) => x.index === i);
+            {slots.map(({ i, m }) => {
               return (
                 <button
                   key={i}
+                  {...findAttr('macro:' + i)}
                   className={`row ${i === selected ? 'is-active' : ''}`}
                   style={{ ['--row-cols' as string]: '44px minmax(0,1fr) auto', textAlign: 'left' }}
                   onClick={() => setSelected(i)}

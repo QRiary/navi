@@ -1,24 +1,11 @@
-import { Cable, Cpu, FolderOpen, Keyboard, Layers, Lightbulb, ListVideo, Plus, RotateCw, Settings2, Shapes, Sparkles, type LucideIcon } from 'lucide-react';
-import { href, navigate, type Route, type Section } from '../../lib/router';
+import { Plus } from 'lucide-react';
+import { href, navigate, type Route } from '../../lib/router';
+import { SECTIONS } from '../../lib/sections';
 import { useProjectStore } from '../../store/projectStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useDeviceStore } from '../../store/deviceStore';
 import { Logo } from '../Logo';
 import { t } from '../../i18n';
-
-const NAV: { section: Section; label: () => string; icon: LucideIcon }[] = [
-  { section: 'keyboard', label: () => t('Keyboard', 'Клавиатура'), icon: Keyboard },
-  { section: 'layers', label: () => t('Layers', 'Слои'), icon: Layers },
-  { section: 'encoders', label: () => t('Encoders', 'Энкодеры'), icon: RotateCw },
-  { section: 'macros', label: () => t('Macros', 'Макросы'), icon: ListVideo },
-  { section: 'advanced', label: () => t('Advanced', 'Расширенное'), icon: Sparkles },
-  { section: 'lighting', label: () => t('Lighting', 'Подсветка'), icon: Lightbulb },
-  { section: 'hardware', label: () => t('Hardware', 'Железо'), icon: Shapes },
-  { section: 'firmware', label: () => t('Firmware', 'Прошивка'), icon: Cpu },
-  { section: 'device', label: () => t('Device', 'Устройство'), icon: Cable },
-  { section: 'projects', label: () => t('Projects', 'Проекты'), icon: FolderOpen },
-  { section: 'settings', label: () => t('Settings', 'Настройки'), icon: Settings2 },
-];
 
 export function Sidebar({ route }: { route: Route }) {
   const tagline = useSettingsStore((s) => s.settings.brand.tagline);
@@ -34,7 +21,7 @@ export function Sidebar({ route }: { route: Route }) {
       </a>
       <div className="cell-label side-label">{t('navigation', 'навигация')}</div>
       <nav className="side-nav" aria-label={t('Main navigation', 'Основная навигация')}>
-        {NAV.map(({ section, label, icon: Icon }, i) => {
+        {SECTIONS.map(({ id: section, title: label, icon: Icon }, i) => {
           const isActive = route.section === section;
           const note = section === 'device' && (deviceStatus === 'connected' || deviceStatus === 'busy') ? t('on', 'вкл') : '';
           return (

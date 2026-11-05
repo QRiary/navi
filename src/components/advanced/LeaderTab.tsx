@@ -17,6 +17,9 @@ import { deletedToast } from '../../lib/undoToast';
 import { whyDisabled } from '../../lib/whyDisabled';
 import { EmptyState } from '../EmptyState';
 import { Hint, InfoTip } from '../InfoTip';
+import { ListFilter } from '../ListFilter';
+import { findAttr, matchesQuery, useListFilter } from '../../lib/find';
+import { useKeyWords } from '../../lib/keyFind';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
@@ -61,6 +64,8 @@ export function LeaderTab({ project }: { project: Project }) {
   const apply = useProjectStore((s) => s.apply);
   const spec = useSpec();
   const issues = useMemo(() => checkLeaderSequences(spec, project), [spec, project]);
+  const [query, setQuery] = useListFilter();
+  const keyWords = useKeyWords();
   const set = (list: LeaderSequence[], label: string, coalesce?: string) => apply((p) => ({ ...p, leaderSequences: list }), label, coalesce ? { coalesce } : undefined);
   const patch = (id: string, p: Partial<LeaderSequence>, label: string, coalesce?: string) =>
     set(
@@ -69,6 +74,9 @@ export function LeaderTab({ project }: { project: Project }) {
       coalesce,
     );
   const cols = '40px minmax(140px,0.8fr) 150px minmax(160px,1.2fr) auto';
+  const shown = project.leaderSequences
+    .map((s, i) => ({ s, i }))
+    .filter(({ s }) => matchesQuery(query, sequenceText(spec, s.keys), ...s.keys.map(keyWords), s.action.type === 'send-string' && s.action.text, s.action.type === 'tap' && keyWords(s.action.keycode)));
   const addButton = (
     <button
       className="btn btn--primary"
@@ -106,6 +114,17 @@ export function LeaderTab({ project }: { project: Project }) {
         </EmptyState>
       )}
       {project.leaderSequences.length > 0 && (
+        <ListFilter
+          value={query}
+          onChange={setQuery}
+          label={t('Filter leader sequences', 'Фильтр последовательностей')}
+          placeholder={t('Filter by keys or action', 'Фильтр по клавишам или действию')}
+          shown={shown.length}
+          total={project.leaderSequences.length}
+        />
+      )}
+      {project.leaderSequences.length > 0 && shown.length === 0 && <p className="field-hint">{t('Nothing matches the filter.', 'Под фильтр ничего не подходит.')}</p>}
+      {shown.length > 0 && (
         <div className="panel-box rows">
           {project.leaderSequences.length > 0 && (
             <div className="row kicker" style={{ ['--row-cols' as string]: cols }}>
@@ -126,8 +145,8 @@ export function LeaderTab({ project }: { project: Project }) {
               <span />
             </div>
           )}
-          {project.leaderSequences.map((s, i) => (
-            <div key={s.id} className="row" style={{ ['--row-cols' as string]: cols }}>
+          {shown.map(({ s, i }) => (
+            <div key={s.id} className="row" {...findAttr('leader:' + s.id)} style={{ ['--row-cols' as string]: cols }}>
               <span className="num">{i + 1}</span>
               <SequenceInput seq={s} onChange={(keys) => patch(s.id, { keys }, t('leader keys', 'клавиши лидера'))} />
               <ActionEditor action={s.action} coalesceKey={`lead:${s.id}`} onChange={(action, coalesce) => patch(s.id, { action }, t('leader action', 'действие лидера'), coalesce)} />

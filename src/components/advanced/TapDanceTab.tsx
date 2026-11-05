@@ -11,7 +11,10 @@ import { tapDanceKind } from '../../core/project/tapDances';
 import { TAP_DANCE_MAX_STEPS, TAP_DANCE_VARIANTS, type MacroStep, type Project, type TapDance, type TapDanceKind, type TapDanceOwnC, type TapDanceStep } from '../../core/project/types';
 import { tapDanceReservedNames } from '../../core/qmk/generate';
 import { t } from '../../i18n';
+import { findAttr, matchesQuery, useListFilter } from '../../lib/find';
+import { useKeyWords } from '../../lib/keyFind';
 import { featureDocs, QMK_DOCS } from '../../lib/qmkDocs';
+import { ListFilter } from '../ListFilter';
 import { deletedToast } from '../../lib/undoToast';
 import { whyDisabled } from '../../lib/whyDisabled';
 import { EmptyState } from '../EmptyState';
@@ -53,6 +56,8 @@ const OWN_C_FIELDS: { key: keyof TapDanceOwnC; label: () => string; tip: () => s
 export function TapDanceTab({ project }: { project: Project }) {
   const apply = useProjectStore((s) => s.apply);
   const spec = useSpec();
+  const [query, setQuery] = useListFilter();
+  const keyWords = useKeyWords();
   const issues = useMemo(() => checkTapDances(spec, project.tapDances, tapDanceReservedNames(project, activeKeymap(project))), [spec, project]);
   const set = (tds: TapDance[], label: string, coalesce?: string) => apply((p) => ({ ...p, tapDances: tds }), label, coalesce ? { coalesce } : undefined);
   const patch = (id: string, change: Partial<TapDance>, label: string, coalesce?: string) =>
@@ -73,6 +78,9 @@ export function TapDanceTab({ project }: { project: Project }) {
       { kind: kind === 'slots' ? undefined : kind, ...(kind === 'every-tap' && !td.steps?.length ? { steps: [{ none: [] }] } : {}), ...(kind === 'own-c' && !td.ownC ? { ownC: {} } : {}) },
       t('tap dance kind', 'вид tap dance'),
     );
+  const shownDances = project.tapDances.filter((td) =>
+    matchesQuery(query, td.name, `TD(${td.name})`, td.index, keyWords(td.tap), keyWords(td.hold), keyWords(td.doubleTap), keyWords(td.tapHold)),
+  );
   const addButton = (
     <button
       className="btn btn--primary"
@@ -108,6 +116,17 @@ export function TapDanceTab({ project }: { project: Project }) {
         </EmptyState>
       )}
       {project.tapDances.length > 0 && (
+        <ListFilter
+          value={query}
+          onChange={setQuery}
+          label={t('Filter tap dances', 'Фильтр tap dance')}
+          placeholder={t('Filter by name or key', 'Фильтр по имени или клавише')}
+          shown={shownDances.length}
+          total={project.tapDances.length}
+        />
+      )}
+      {project.tapDances.length > 0 && shownDances.length === 0 && <p className="field-hint">{t('Nothing matches the filter.', 'Под фильтр ничего не подходит.')}</p>}
+      {shownDances.length > 0 && (
         <div className="panel-box">
           <div className="rows">
             <div className="row kicker" style={{ ['--row-cols' as string]: COLS }}>
@@ -140,10 +159,10 @@ export function TapDanceTab({ project }: { project: Project }) {
               </span>
               <span />
             </div>
-            {project.tapDances.map((td) => {
+            {shownDances.map((td) => {
               const kind = tapDanceKind(td);
               return (
-                <div key={td.id} className="row-group">
+                <div key={td.id} className="row-group" {...findAttr('tapdance:' + td.id)}>
                   <div className="row" style={{ ['--row-cols' as string]: COLS }}>
                     <span className="num">{td.index}</span>
                     <input

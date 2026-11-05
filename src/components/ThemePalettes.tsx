@@ -8,6 +8,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { THEME_PRESETS, type ThemePreset } from '../config/theme.config';
 import { count, getLanguage, t } from '../i18n';
 import { whyDisabled } from '../lib/whyDisabled';
+import { findAttr } from '../lib/find';
 import { useSettingsStore } from '../store/settingsStore';
 import { useThemesStore } from '../store/themesStore';
 import { exportTheme, importTheme, pickTheme, removeTheme, renameTheme, saveAsNew, saveToCurrent, suggestedName, unsavedChanges } from '../theme/themeActions';
@@ -115,7 +116,7 @@ export function PaletteSection() {
   };
 
   return (
-    <section className="section" style={{ marginTop: 0 }}>
+    <section className="section" {...findAttr('setting:theme')} style={{ marginTop: 0 }}>
       <div className="section-head">
         <h2>
           <Hint

@@ -6,10 +6,11 @@ import { saveProject, useProjectStore } from '../store/projectStore';
 import type { Route } from './router';
 import { nativeClipboardNow } from './clipboardTarget';
 import { anyModalOpen } from '../components/Modal';
+import { focusListFilter, useFindStore } from './find';
 
 /**
  * Shortcuts. The physical key is checked (e.code), so they work with a Russian layout too.
- *  Ctrl+S — save, Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z) — undo/redo;
+ *  Ctrl+S — save, Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z) — undo/redo, Ctrl+K — search, Ctrl+F — the tab's filter box;
  *  in the Keyboard section: Del/Backspace — empty, T — transparent, Ctrl+C/V, Esc — clear the selection,
  *  Alt+0…9 — layer, Ctrl+A — select all keys.
  */
@@ -25,6 +26,12 @@ export function useShortcuts(route: Route) {
       if (ctrl && e.code === 'KeyS') {
         e.preventDefault();
         if (store.project) void saveProject();
+        return;
+      }
+      // Ctrl+K: search everywhere. Ctrl+F: the filter box of the tab on screen, or search everywhere if it has none.
+      if (ctrl && !e.altKey && !e.shiftKey && (e.code === 'KeyK' || e.code === 'KeyF')) {
+        e.preventDefault();
+        if (e.code === 'KeyK' || !focusListFilter()) useFindStore.getState().setOpen(true);
         return;
       }
       if (typing) return;

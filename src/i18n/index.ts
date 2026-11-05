@@ -21,6 +21,24 @@ export function getLanguage(): Language {
   return current;
 }
 
+/** Runs `fn` with `t()` answering in another language (the search indexes titles in both). */
+export function withLanguage<T>(language: Language, fn: () => T): T {
+  const saved = current;
+  current = language;
+  try {
+    return fn();
+  } finally {
+    current = saved;
+  }
+}
+
+/** Both languages of a text made by `t()` calls, joined (search fields). */
+export function bothLanguages(fn: () => string): string {
+  const en = withLanguage('en', fn);
+  const ru = withLanguage('ru', fn);
+  return en === ru ? en : `${en} ${ru}`;
+}
+
 /** String in the current language: t('English text', 'Russian text'). */
 export function t(en: string, ru: string): string {
   return current === 'ru' ? ru : en;

@@ -11,23 +11,15 @@ import { SetupTab } from '../components/firmware/SetupTab';
 import { TargetTab } from '../components/firmware/TargetTab';
 import { TabPanels, Tabs } from '../components/Tabs';
 import { href } from '../lib/router';
+import { currentTab, tabItems, tabRoute } from '../lib/sections';
 import { t } from '../i18n';
 
-const TABS = () => [
-  { id: 'setup', label: t('1 · Environment', '1 · Окружение') },
-  { id: 'target', label: t('2 · Keyboard', '2 · Клавиатура') },
-  { id: 'features', label: t('3 · Features', '3 · Функции') },
-  { id: 'files', label: t('4 · Keymap files', '4 · Файлы keymap') },
-  { id: 'build', label: t('5 · Build', '5 · Сборка') },
-  { id: 'flash', label: t('6 · Flash', '6 · Прошить') },
-];
-
 export function FirmwarePage({ tab }: { tab?: string }) {
-  const tabs = TABS();
-  const current = tabs.some((i) => i.id === tab) ? tab! : 'setup';
+  const tabs = tabItems('firmware');
+  const current = currentTab('firmware', tab);
   return (
     <div className="page">
-      <Tabs idBase="firmware" label={t('Firmware steps', 'Шаги прошивки')} items={tabs} current={current} href={(id) => href({ section: 'firmware', tab: id })} sticky />
+      <Tabs idBase="firmware" label={t('Firmware steps', 'Шаги прошивки')} items={tabs} current={current} href={(id) => href(tabRoute('firmware', id))} sticky />
       <TabPanels
         idBase="firmware"
         ids={tabs.map((i) => i.id)}

@@ -14,7 +14,8 @@ import { aliasCName, ALIAS_LABEL_MAX, checkKeyAliases, KEY_ALIASES_MAX } from '.
 import { layerIdentifiers } from '../core/qmk/generate';
 import { customKeycodeValue } from '../lib/projectContext';
 import { href } from '../lib/router';
-import { TabPanels, Tabs, type TabItem } from '../components/Tabs';
+import { currentTab, tabItems, tabRoute } from '../lib/sections';
+import { TabPanels, Tabs } from '../components/Tabs';
 import { useProjectStore, useSpec } from '../store/projectStore';
 import { ActionEditor, FeatureNote, IssueList, KeycodeField } from '../components/advanced/common';
 import { TapHoldTab } from '../components/advanced/TapHoldTab';
@@ -30,8 +31,13 @@ import { deletedToast } from '../lib/undoToast';
 import { whyDisabled } from '../lib/whyDisabled';
 import { EmptyState } from '../components/EmptyState';
 import { Hint, InfoTip } from '../components/InfoTip';
+import { ListFilter } from '../components/ListFilter';
+import { findAttr, matchesQuery, useListFilter } from '../lib/find';
+import { useKeyWords } from '../lib/keyFind';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
+
+const NothingMatches = () => <p className="field-hint">{t('Nothing matches the filter.', 'Под фильтр ничего не подходит.')}</p>;
 
 function OverridesTab({ project }: { project: Project }) {
   const apply = useProjectStore((s) => s.apply);
@@ -43,6 +49,9 @@ function OverridesTab({ project }: { project: Project }) {
       label,
       coalesce,
     );
+  const [query, setQuery] = useListFilter();
+  const keyWords = useKeyWords();
+  const shownOverrides = project.keyOverrides.filter((o) => matchesQuery(query, o.name, keyWords(o.trigger), keyWords(o.replacement)));
   const addOverrideButton = (
     <button
       className="btn btn--primary"
@@ -72,9 +81,20 @@ function OverridesTab({ project }: { project: Project }) {
         </EmptyState>
       )}
       {project.keyOverrides.length > 0 && (
+        <ListFilter
+          value={query}
+          onChange={setQuery}
+          label={t('Filter overrides', 'Фильтр подмен')}
+          placeholder={t('Filter by name or key', 'Фильтр по имени или клавише')}
+          shown={shownOverrides.length}
+          total={project.keyOverrides.length}
+        />
+      )}
+      {project.keyOverrides.length > 0 && shownOverrides.length === 0 && <NothingMatches />}
+      {shownOverrides.length > 0 && (
         <div className="panel-box rows">
-          {project.keyOverrides.map((o) => (
-            <div key={o.id} className="row" style={{ ['--row-cols' as string]: 'minmax(96px,0.6fr) minmax(176px,1fr) 16px minmax(176px,1fr) auto', paddingBlock: 8 }}>
+          {shownOverrides.map((o) => (
+            <div key={o.id} {...findAttr('override:' + o.id)} className="row" style={{ ['--row-cols' as string]: 'minmax(96px,0.6fr) minmax(176px,1fr) 16px minmax(176px,1fr) auto', paddingBlock: 8 }}>
               <input
                 className="input"
                 value={o.name}
@@ -121,6 +141,10 @@ function CustomTab({ project }: { project: Project }) {
       label,
       coalesce,
     );
+  const [query, setQuery] = useListFilter();
+  const shownCustom = project.customKeycodes
+    .map((c, i) => ({ c, i }))
+    .filter(({ c, i }) => matchesQuery(query, c.name, c.description, `0x${customKeycodeValue(spec, i).toString(16).toUpperCase()}`));
   const addCustomButton = (
     <button
       className="btn btn--primary"
@@ -155,9 +179,20 @@ function CustomTab({ project }: { project: Project }) {
         </EmptyState>
       )}
       {project.customKeycodes.length > 0 && (
+        <ListFilter
+          value={query}
+          onChange={setQuery}
+          label={t('Filter custom keycodes', 'Фильтр своих keycodes')}
+          placeholder={t('Filter by name, description or code', 'Фильтр по имени, описанию или коду')}
+          shown={shownCustom.length}
+          total={project.customKeycodes.length}
+        />
+      )}
+      {project.customKeycodes.length > 0 && shownCustom.length === 0 && <NothingMatches />}
+      {shownCustom.length > 0 && (
         <div className="panel-box rows">
-          {project.customKeycodes.map((c, i) => (
-            <div key={c.id} className="row" style={{ ['--row-cols' as string]: '72px minmax(96px,0.8fr) minmax(96px,1fr) 128px minmax(96px,1.2fr) auto' }}>
+          {shownCustom.map(({ c, i }) => (
+            <div key={c.id} {...findAttr('custom:' + c.id)} className="row" style={{ ['--row-cols' as string]: '72px minmax(96px,0.8fr) minmax(96px,1fr) 128px minmax(96px,1.2fr) auto' }}>
               <span className="kicker">0x{customKeycodeValue(spec, i).toString(16).toUpperCase()}</span>
               <input
                 className="input"
@@ -211,6 +246,9 @@ function AliasesTab({ project }: { project: Project }) {
       coalesce,
     );
   const cols = 'minmax(140px,1fr) minmax(150px,1fr) minmax(140px,1fr) auto';
+  const [query, setQuery] = useListFilter();
+  const keyWords = useKeyWords();
+  const shownAliases = project.keyAliases.filter((a) => matchesQuery(query, a.label, keyWords(a.keycode), aliasCName(a.label.trim())));
   const addAliasButton = (
     <button
       className="btn btn--primary"
@@ -243,6 +281,17 @@ function AliasesTab({ project }: { project: Project }) {
         </EmptyState>
       )}
       {project.keyAliases.length > 0 && (
+        <ListFilter
+          value={query}
+          onChange={setQuery}
+          label={t('Filter aliases', 'Фильтр псевдонимов')}
+          placeholder={t('Filter by label, key or C name', 'Фильтр по подписи, клавише или имени C')}
+          shown={shownAliases.length}
+          total={project.keyAliases.length}
+        />
+      )}
+      {project.keyAliases.length > 0 && shownAliases.length === 0 && <NothingMatches />}
+      {shownAliases.length > 0 && (
         <div className="panel-box">
           <div className="rows">
             <div className="row kicker" style={{ ['--row-cols' as string]: cols }}>
@@ -260,8 +309,8 @@ function AliasesTab({ project }: { project: Project }) {
               </span>
               <span />
             </div>
-            {project.keyAliases.map((a) => (
-              <div key={a.id} className="row" style={{ ['--row-cols' as string]: cols }}>
+            {shownAliases.map((a) => (
+              <div key={a.id} {...findAttr('alias:' + a.id)} className="row" style={{ ['--row-cols' as string]: cols }}>
                 <input
                   className="input"
                   value={a.label}
@@ -332,6 +381,14 @@ function BehaviorTab({ project }: { project: Project }) {
     for (const p of params) m.set(p.group, [...(m.get(p.group) ?? []), p]);
     return [...m.entries()];
   }, [params]);
+  const [query, setQuery] = useListFilter();
+  const shownGroups = groups
+    .map(([group, list]) => {
+      const gt = groupTitle(group);
+      return [group, list.filter((p) => matchesQuery(query, p.title.en, p.title.ru, p.define, p.hint?.en, p.hint?.ru, gt.en, gt.ru))] as const;
+    })
+    .filter(([, list]) => list.length > 0);
+  const shownCount = shownGroups.reduce((n, [, list]) => n + list.length, 0);
   const setValue = (define: string, value: string | number | boolean | undefined) =>
     apply(
       (p) => {
@@ -351,7 +408,16 @@ function BehaviorTab({ project }: { project: Project }) {
           'Эти значения попадут в config.h вашей раскладки (пусто — значение QMK по умолчанию). Действуют после сборки и прошивки. Имена и типы — из собственного списка настроек QMK.',
         )}
       </p>
-      {groups.map(([group, list]) => (
+      <ListFilter
+        value={query}
+        onChange={setQuery}
+        label={t('Filter QMK settings', 'Фильтр настроек QMK')}
+        placeholder={t('Filter by name or setting', 'Фильтр по названию или настройке')}
+        shown={shownCount}
+        total={params.length}
+      />
+      {shownCount === 0 && <NothingMatches />}
+      {shownGroups.map(([group, list]) => (
         <section key={group} className="section">
           <div className="section-head">
             <h2>{lang === 'ru' ? groupTitle(group).ru : groupTitle(group).en}</h2>
@@ -360,7 +426,7 @@ function BehaviorTab({ project }: { project: Project }) {
             {list.map((p) => {
               const v = project.firmware.buildConfig[p.define];
               return (
-                <div key={p.define} className="row" style={{ ['--row-cols' as string]: 'minmax(0,1.3fr) minmax(0,1fr) auto' }}>
+                <div key={p.define} {...findAttr('cfg:' + p.define)} className="row" style={{ ['--row-cols' as string]: 'minmax(0,1.3fr) minmax(0,1fr) auto' }}>
                   <span>
                     {lang === 'ru' ? p.title.ru : p.title.en}
                     {p.hint && <span className="field-hint"> — {lang === 'ru' ? p.hint.ru : p.hint.en}</span>}
@@ -409,32 +475,8 @@ function BehaviorTab({ project }: { project: Project }) {
 export function AdvancedPage({ tab }: { tab?: string }) {
   const project = useProjectStore((s) => s.project);
   if (!project) return null;
-  const keys = t('Keys', 'Клавиши');
-  const codes = t('Codes', 'Коды');
-  const behavior = t('Behavior', 'Поведение');
-  const tabs: TabItem[] = [
-    { id: 'tapdance', label: 'Tap dance', group: keys },
-    { id: 'taphold', label: t('Tap-hold', 'Тап-холд'), group: keys },
-    { id: 'combos', label: t('Combos', 'Комбо'), group: keys },
-    { id: 'overrides', label: t('Key overrides', 'Подмена сочетаний'), group: keys },
-    { id: 'leader', label: t('Leader key', 'Клавиша-лидер'), group: keys },
-    { id: 'custom', label: t('Custom keycodes', 'Свои keycodes'), group: codes },
-    { id: 'aliases', label: t('Aliases', 'Псевдонимы'), group: codes },
-    { id: 'unicode', label: t('Unicode', 'Юникод'), group: codes },
-    {
-      id: 'behavior',
-      label: t('QMK settings', 'Настройки QMK'),
-      group: behavior,
-      title: t("QMK's own settings: defines NAVI writes into config.h", 'Собственные настройки QMK: define, которые NAVI пишет в config.h'),
-    },
-    {
-      id: 'navi',
-      label: t('NAVI additions', 'Дополнения NAVI'),
-      group: behavior,
-      title: t('Behaviors QMK does not have: C code NAVI generates into keymap.c', 'Поведение, которого нет в QMK: код на C, который NAVI генерирует в keymap.c'),
-    },
-  ];
-  const current = tabs.some((i) => i.id === tab) ? tab! : 'tapdance';
+  const tabs = tabItems('advanced');
+  const current = currentTab('advanced', tab);
   const panel = (id: string, active: boolean) => {
     switch (id) {
       case 'tapdance':
@@ -461,7 +503,7 @@ export function AdvancedPage({ tab }: { tab?: string }) {
   };
   return (
     <div className="page">
-      <Tabs idBase="advanced" label={t('Advanced', 'Расширенное')} items={tabs} current={current} href={(id) => href({ section: 'advanced', tab: id })} sticky />
+      <Tabs idBase="advanced" label={t('Advanced', 'Расширенное')} items={tabs} current={current} href={(id) => href(tabRoute('advanced', id))} sticky />
       <TabPanels idBase="advanced" ids={tabs.map((i) => i.id)} current={current} render={panel} />
     </div>
   );

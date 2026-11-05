@@ -1,25 +1,13 @@
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Search } from 'lucide-react';
+import { useFindStore } from '../../lib/find';
 import { activeKeymap } from '../../core/project/ops';
 import { patchProject } from '../../core/project/ops';
 import type { Route } from '../../lib/router';
 import { useProjectStore } from '../../store/projectStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { StatusLine } from './StatusLine';
+import { sectionDef } from '../../lib/sections';
 import { t } from '../../i18n';
-
-const TITLES = (): Record<Route['section'], string> => ({
-  keyboard: t('Keyboard', 'Клавиатура'),
-  layers: t('Layers', 'Слои'),
-  encoders: t('Encoders', 'Энкодеры'),
-  macros: t('Macros', 'Макросы'),
-  advanced: t('Advanced', 'Расширенное'),
-  lighting: t('Lighting', 'Подсветка'),
-  hardware: t('Hardware', 'Железо'),
-  firmware: t('Firmware', 'Прошивка'),
-  device: t('Device', 'Устройство'),
-  projects: t('Projects', 'Проекты'),
-  settings: t('Settings', 'Настройки'),
-});
 
 /** Top of the main area: section, project, keymap and the status line. */
 export function TopBar({ route }: { route: Route }) {
@@ -27,7 +15,8 @@ export function TopBar({ route }: { route: Route }) {
   const apply = useProjectStore((s) => s.apply);
   const systemLabels = useSettingsStore((s) => s.settings.layout.systemLabels);
   const km = project ? activeKeymap(project) : null;
-  const title = TITLES()[route.section];
+  const title = sectionDef(route.section).title();
+  const setSearchOpen = useFindStore((s) => s.setOpen);
   return (
     <header className="topbar">
       <div className="topbar-row">
@@ -45,6 +34,11 @@ export function TopBar({ route }: { route: Route }) {
             </span>
           )}
         </div>
+        <button type="button" className="search-box topbar-search" onClick={() => setSearchOpen(true)} aria-keyshortcuts="Control+K" title={t('Search everywhere (Ctrl+K)', 'Поиск везде (Ctrl+K)')}>
+          <Search size={14} strokeWidth={1.5} aria-hidden="true" />
+          <span className="topbar-search-text">{t('Search', 'Поиск')}</span>
+          <kbd>Ctrl K</kbd>
+        </button>
         {project && project.keymaps.length > 1 && (
           <select
             className="select"

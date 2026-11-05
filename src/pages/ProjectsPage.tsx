@@ -33,6 +33,7 @@ import { JSON_FILTERS, openTextFile, saveTextFile } from '../lib/files';
 import { projectFromDevice } from '../lib/projectFromDevice';
 import { projectRepo } from '../platform/projectRepo';
 import { href, navigate } from '../lib/router';
+import { currentTab, tabItems, tabRoute } from '../lib/sections';
 import { TabPanels, Tabs } from '../components/Tabs';
 import { EmptyState } from '../components/EmptyState';
 import { Hint } from '../components/InfoTip';
@@ -41,6 +42,8 @@ import { useDeviceStore } from '../store/deviceStore';
 import { useProjectStore } from '../store/projectStore';
 import { toast, toastError } from '../store/toastStore';
 import { locale, t } from '../i18n';
+import { ListFilter } from '../components/ListFilter';
+import { findAttr, matchesQuery, useListFilter } from '../lib/find';
 
 const ICON = { size: 15, strokeWidth: 1.5 };
 
@@ -346,6 +349,7 @@ function ProjectList() {
   const remove = useProjectStore((s) => s.remove);
   const create = useProjectStore((s) => s.create);
   const [confirm, setConfirm] = useState<string | null>(null);
+  const [query, setQuery] = useListFilter();
 
   const duplicate = async (id: string) => {
     const { saved, draft } = await projectRepo.read(id);
@@ -355,54 +359,69 @@ function ProjectList() {
     toast(t('Copy created', 'Копия создана'));
   };
 
+  const shown = list.filter((p) => matchesQuery(query, p.name, p.keyboard));
+
   return (
-    <div className="panel-box">
-      <div className="rows">
-        {list.map((p) => (
-          <div key={p.id} className={`row ${p.id === currentId ? 'is-active' : ''}`} style={{ ['--row-cols' as string]: 'minmax(0,1.4fr) minmax(0,1fr) 90px 150px auto' }}>
-            <button style={{ textAlign: 'left' }} onClick={() => void open(p.id).then((ok) => ok && navigate({ section: 'keyboard' }))}>
-              <strong>{p.name}</strong> {p.unsaved && <span className="badge badge--info">{t('draft', 'черновик')}</span>}{' '}
-              {p.broken && <span className="badge badge--warn">{t('broken', 'повреждён')}</span>}
-            </button>
-            <span className="field-hint">{p.keyboard}</span>
-            <span className="kicker">
-              {p.keys} {t('keys', 'кл.')} · {p.layers}L
-            </span>
-            <span className="kicker">{p.updatedAt ? new Date(p.updatedAt).toLocaleString(locale()) : ''}</span>
-            <div className="row-actions">
-              <button className="icon-btn" title={t('Duplicate', 'Копия')} aria-label={t('Duplicate', 'Копия')} onClick={() => void duplicate(p.id)}>
-                <Copy {...ICON} />
+    <>
+      {list.length > 0 && (
+        <ListFilter
+          value={query}
+          onChange={setQuery}
+          label={t('Filter projects', 'Фильтр проектов')}
+          placeholder={t('Filter by name or keyboard', 'Фильтр по имени или клавиатуре')}
+          shown={shown.length}
+          total={list.length}
+        />
+      )}
+      {list.length > 0 && shown.length === 0 && <p className="field-hint">{t('Nothing matches the filter.', 'Под фильтр ничего не подходит.')}</p>}
+      <div className="panel-box" hidden={list.length > 0 && shown.length === 0}>
+        <div className="rows">
+          {shown.map((p) => (
+            <div key={p.id} {...findAttr('project:' + p.id)} className={`row ${p.id === currentId ? 'is-active' : ''}`} style={{ ['--row-cols' as string]: 'minmax(0,1.4fr) minmax(0,1fr) 90px 150px auto' }}>
+              <button style={{ textAlign: 'left' }} onClick={() => void open(p.id).then((ok) => ok && navigate({ section: 'keyboard' }))}>
+                <strong>{p.name}</strong> {p.unsaved && <span className="badge badge--info">{t('draft', 'черновик')}</span>}{' '}
+                {p.broken && <span className="badge badge--warn">{t('broken', 'повреждён')}</span>}
               </button>
-              <button
-                className={`icon-btn ${confirm === p.id ? 'is-danger' : ''}`}
-                title={confirm === p.id ? t('Click again to delete', 'Ещё раз — удалить') : t('Delete (to trash folder)', 'Удалить (в папку .trash)')}
-                aria-label={t('Delete', 'Удалить')}
-                onClick={() => {
-                  if (confirm !== p.id) {
-                    setConfirm(p.id);
-                    setTimeout(() => setConfirm(null), 4000);
-                    return;
-                  }
-                  void remove(p.id).then(() => toast(t('Project moved to trash', 'Проект перенесён в корзину')));
-                }}
-              >
-                <Trash2 {...ICON} />
-              </button>
+              <span className="field-hint">{p.keyboard}</span>
+              <span className="kicker">
+                {p.keys} {t('keys', 'кл.')} · {p.layers}L
+              </span>
+              <span className="kicker">{p.updatedAt ? new Date(p.updatedAt).toLocaleString(locale()) : ''}</span>
+              <div className="row-actions">
+                <button className="icon-btn" title={t('Duplicate', 'Копия')} aria-label={t('Duplicate', 'Копия')} onClick={() => void duplicate(p.id)}>
+                  <Copy {...ICON} />
+                </button>
+                <button
+                  className={`icon-btn ${confirm === p.id ? 'is-danger' : ''}`}
+                  title={confirm === p.id ? t('Click again to delete', 'Ещё раз — удалить') : t('Delete (to trash folder)', 'Удалить (в папку .trash)')}
+                  aria-label={t('Delete', 'Удалить')}
+                  onClick={() => {
+                    if (confirm !== p.id) {
+                      setConfirm(p.id);
+                      setTimeout(() => setConfirm(null), 4000);
+                      return;
+                    }
+                    void remove(p.id).then(() => toast(t('Project moved to trash', 'Проект перенесён в корзину')));
+                  }}
+                >
+                  <Trash2 {...ICON} />
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
-        {list.length === 0 && (
-          <EmptyState
-            what={t('A project is one keyboard with its keymaps, macros and settings, saved on disk.', 'Проект — это одна клавиатура с её раскладками, макросами и настройками, сохранённая на диске.')}
-            example={t('“Dilemma 4x6”, read from the connected keyboard or made from the template.', '«Dilemma 4x6», прочитанный с подключённой клавиатуры или созданный из шаблона.')}
-          >
-            <a className="btn btn--primary" href={href({ section: 'projects', tab: 'new' })}>
-              {t('Create a project', 'Создать проект')}
-            </a>
-          </EmptyState>
-        )}
+          ))}
+          {list.length === 0 && (
+            <EmptyState
+              what={t('A project is one keyboard with its keymaps, macros and settings, saved on disk.', 'Проект — это одна клавиатура с её раскладками, макросами и настройками, сохранённая на диске.')}
+              example={t('“Dilemma 4x6”, read from the connected keyboard or made from the template.', '«Dilemma 4x6», прочитанный с подключённой клавиатуры или созданный из шаблона.')}
+            >
+              <a className="btn btn--primary" href={href({ section: 'projects', tab: 'new' })}>
+                {t('Create a project', 'Создать проект')}
+              </a>
+            </EmptyState>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -702,19 +721,15 @@ function RevisionList() {
 }
 
 export function ProjectsPage({ tab }: { tab?: string }) {
-  const active = tab === 'new' ? 'new' : tab === 'current' ? 'current' : 'list';
+  const active = currentTab('projects', tab);
   return (
     <div className="page">
       <Tabs
         idBase="projects"
         label={t('Projects', 'Проекты')}
-        items={[
-          { id: 'list', label: t('All projects', 'Все проекты') },
-          { id: 'current', label: t('Current: import / export / versions', 'Текущий: импорт / экспорт / версии') },
-          { id: 'new', label: t('New project', 'Новый проект') },
-        ]}
+        items={tabItems('projects')}
         current={active}
-        href={(id) => href(id === 'list' ? { section: 'projects' } : { section: 'projects', tab: id })}
+        href={(id) => href(tabRoute('projects', id))}
         sticky
       />
       <TabPanels idBase="projects" ids={['list', 'current', 'new']} current={active} render={(id) => (id === 'list' ? <ProjectList /> : id === 'current' ? <CurrentProject /> : <NewProject />)} />

@@ -51,10 +51,12 @@ interface ModalProps {
   closeButton?: boolean;
   closeLabel?: string;
   footer?: ReactNode;
+  /** Extra class on the dialog box (its size and place). */
+  className?: string;
   children: ReactNode;
 }
 
-export function Modal({ title, onClose, busy = false, dismissible = true, closeButton = true, closeLabel, footer, children }: ModalProps) {
+export function Modal({ title, onClose, busy = false, dismissible = true, closeButton = true, closeLabel, footer, className, children }: ModalProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -111,7 +113,7 @@ export function Modal({ title, onClose, busy = false, dismissible = true, closeB
 
   return createPortal(
     <div className="modal-backdrop" ref={backdropRef} onMouseDown={onBackdropDown} onClick={onBackdropClick}>
-      <div className="modal" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy || undefined} tabIndex={-1} onKeyDown={onKeyDown}>
+      <div className={className ? `modal ${className}` : 'modal'} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy || undefined} tabIndex={-1} onKeyDown={onKeyDown}>
         <div className="modal-head">
           <h2 id={titleId}>{title}</h2>
           {closeButton && (

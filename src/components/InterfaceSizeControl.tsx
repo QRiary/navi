@@ -4,6 +4,8 @@ import { ZOOM_RANGE, stepZoom } from '../lib/interfaceZoom';
 import { useSettingsStore } from '../store/settingsStore';
 import { t } from '../i18n';
 import { whyDisabled } from '../lib/whyDisabled';
+import { findAttr } from '../lib/find';
+import { settingHint, settingLabel } from '../lib/settingsIndex';
 
 export function InterfaceSizeControl() {
   const zoom = useSettingsStore((s) => s.settings.layout.zoom);
@@ -11,10 +13,10 @@ export function InterfaceSizeControl() {
   const set = (next: number) => next !== zoom && setValue('layout.zoom', next);
   const percent = Math.round(zoom * 100);
   return (
-    <div className="row" style={{ ['--row-cols' as string]: 'minmax(0,1fr) auto' }}>
+    <div className="row" {...findAttr('setting:layout.zoom')} style={{ ['--row-cols' as string]: 'minmax(0,1fr) auto' }}>
       <span>
-        {t('Interface size', 'Размер интерфейса')}
-        <span className="field-hint"> — {t('also Ctrl+= / Ctrl+- / Ctrl+0 and Ctrl+wheel', 'также Ctrl+= / Ctrl+- / Ctrl+0 и Ctrl+колесо')}</span>
+        {settingLabel('layout.zoom')}
+        <span className="field-hint"> — {settingHint('layout.zoom')}</span>
       </span>
       <div className="seg" role="group" aria-label={t('Interface size', 'Размер интерфейса')}>
         <button

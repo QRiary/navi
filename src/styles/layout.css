@@ -526,3 +526,98 @@
   min-height: 0;
   overflow: hidden;
 }
+
+/* Global search (Ctrl+K): a box near the top of the window, results under the field. */
+.modal.modal--search {
+  align-self: start;
+  width: min(680px, 100%);
+  margin-top: 8vh;
+}
+
+.search-palette-box {
+  max-width: none;
+  height: 40px;
+}
+
+.search-results {
+  display: flex;
+  flex-direction: column;
+  max-height: min(56vh, 520px);
+  margin: 0 -8px;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.search-result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  padding: 4px 8px;
+  border-radius: var(--panel-radius);
+  cursor: pointer;
+}
+
+.search-result.is-active {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent-color);
+}
+
+.search-result-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.search-result-title {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.search-result-detail {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.search-result-kind {
+  flex: none;
+  color: var(--text-label);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--label-spacing);
+  text-transform: uppercase;
+}
+
+.search-keys {
+  display: flex;
+  flex: 1;
+  gap: 16px;
+}
+
+/* The top bar's search box opens the global search. */
+.topbar-search {
+  flex: 0 1 280px;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+}
+
+.topbar-search-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.topbar-search:hover {
+  border-color: var(--text-secondary);
+}

@@ -15,6 +15,8 @@ import { deletedToast } from '../../lib/undoToast';
 import { whyDisabled } from '../../lib/whyDisabled';
 import { EmptyState } from '../EmptyState';
 import { Hint } from '../InfoTip';
+import { ListFilter } from '../ListFilter';
+import { findAttr, matchesQuery, useListFilter } from '../../lib/find';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
@@ -98,6 +100,13 @@ export function UnicodeTab({ project }: { project: Project }) {
       },
       t('unicode input', 'ввод юникода'),
     );
+  const [query, setQuery] = useListFilter();
+  const shownMap = project.unicodeMap
+    .map((u, i) => ({ u, i }))
+    .filter(({ u }) => {
+      const hex = u.codepoint.toString(16).toUpperCase().padStart(4, '0');
+      return matchesQuery(query, u.name, u.codepoint >= 0 && u.codepoint <= 0x10ffff && String.fromCodePoint(u.codepoint), `U+${hex}`, hex, `UM(${project.unicodeMap.indexOf(u)})`);
+    });
   const setTable = (list: UnicodeEntry[], label: string, coalesce?: string) => apply((p) => ({ ...p, unicodeMap: list }), label, coalesce ? { coalesce } : undefined);
   const patch = (id: string, p: Partial<UnicodeEntry>, label: string, coalesce?: string) =>
     setTable(
@@ -232,9 +241,20 @@ export function UnicodeTab({ project }: { project: Project }) {
           </EmptyState>
         )}
         {project.unicodeMap.length > 0 && (
+          <ListFilter
+            value={query}
+            onChange={setQuery}
+            label={t('Filter characters', 'Фильтр символов')}
+            placeholder={t('Filter by name, character or code', 'Фильтр по имени, символу или коду')}
+            shown={shownMap.length}
+            total={project.unicodeMap.length}
+          />
+        )}
+        {project.unicodeMap.length > 0 && shownMap.length === 0 && <p className="field-hint">{t('Nothing matches the filter.', 'Под фильтр ничего не подходит.')}</p>}
+        {shownMap.length > 0 && (
           <div className="panel-box rows">
-            {project.unicodeMap.map((u, i) => (
-              <div key={u.id} className="row" style={{ ['--row-cols' as string]: '50px 60px minmax(120px, 1fr) 110px 120px auto' }}>
+            {shownMap.map(({ u, i }) => (
+              <div key={u.id} className="row" {...findAttr('unicode:' + u.id)} style={{ ['--row-cols' as string]: '50px 60px minmax(120px, 1fr) 110px 120px auto' }}>
                 <span className="kicker">UM({i})</span>
                 <input
                   className="input"

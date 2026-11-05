@@ -14,9 +14,12 @@ import { listLanguages } from '../core/keycodes/spec';
 import { navi } from '../desktop/bridge';
 import { JSON_FILTERS, openTextFile, saveTextFile } from '../lib/files';
 import { href } from '../lib/router';
+import { currentTab, tabItems, tabRoute } from '../lib/sections';
 import { TabPanels, Tabs } from '../components/Tabs';
 import { Hint } from '../components/InfoTip';
 import { whyDisabled } from '../lib/whyDisabled';
+import { findAttr } from '../lib/find';
+import { settingHint, settingLabel } from '../lib/settingsIndex';
 import { useSettingsStore } from '../store/settingsStore';
 import { toast } from '../store/toastStore';
 import { t } from '../i18n';
@@ -125,17 +128,20 @@ const FONT_LABEL: Record<string, () => string> = {
 function QuickTab() {
   const settings = useSettingsStore((s) => s.settings);
   const setValue = useSettingsStore((s) => s.setValue);
-  const toggle = (key: string, value: boolean, label: string, hint?: string) => (
-    <div className="row" style={{ ['--row-cols' as string]: 'minmax(0,1fr) auto' }}>
-      <span>
-        {label}
-        {hint && <span className="field-hint"> — {hint}</span>}
-      </span>
-      <button className={`toggle ${value ? 'is-on' : ''}`} onClick={() => setValue(key, !value)} aria-pressed={value}>
-        {value ? t('on', 'вкл') : t('off', 'выкл')}
-      </button>
-    </div>
-  );
+  const toggle = (key: string, value: boolean) => {
+    const hint = settingHint(key);
+    return (
+      <div className="row" {...findAttr(`setting:${key}`)} style={{ ['--row-cols' as string]: 'minmax(0,1fr) auto' }}>
+        <span>
+          {settingLabel(key)}
+          {hint && <span className="field-hint"> — {hint}</span>}
+        </span>
+        <button className={`toggle ${value ? 'is-on' : ''}`} onClick={() => setValue(key, !value)} aria-pressed={value}>
+          {value ? t('on', 'вкл') : t('off', 'выкл')}
+        </button>
+      </div>
+    );
+  };
   return (
     <div className="page">
       <PaletteSection />
@@ -164,16 +170,16 @@ function QuickTab() {
           <h2>{t('keyboard display', 'отображение клавиатуры')}</h2>
         </div>
         <div className="panel-box rows">
-          <div className="row" style={{ ['--row-cols' as string]: 'minmax(0,1fr) auto' }}>
-            <span>{t('GUI key label', 'Подпись клавиши GUI')}</span>
+          <div className="row" {...findAttr('setting:keyboard.os')} style={{ ['--row-cols' as string]: 'minmax(0,1fr) auto' }}>
+            <span>{settingLabel('keyboard.os')}</span>
             <select className="select" value={settings.keyboard.os} onChange={(e) => setValue('keyboard.os', e.target.value)}>
               <option value="windows">Win</option>
               <option value="macos">Cmd</option>
               <option value="linux">Super</option>
             </select>
           </div>
-          <div className="row" style={{ ['--row-cols' as string]: 'minmax(0,1fr) auto' }}>
-            <span>{t('Second label: computer layout', 'Вторая подпись: раскладка компьютера')}</span>
+          <div className="row" {...findAttr('setting:keyboard.hostLayout')} style={{ ['--row-cols' as string]: 'minmax(0,1fr) auto' }}>
+            <span>{settingLabel('keyboard.hostLayout')}</span>
             <select className="select" value={settings.keyboard.hostLayout} onChange={(e) => setValue('keyboard.hostLayout', e.target.value)}>
               <option value="none">{t('none', 'нет')}</option>
               {listLanguages()
@@ -185,19 +191,10 @@ function QuickTab() {
                 ))}
             </select>
           </div>
-          {toggle(
-            'keyboard.showTransparentSource',
-            settings.keyboard.showTransparentSource,
-            t('Show what transparent keys fall through to', 'Показывать, что «просвечивает» через прозрачные клавиши'),
-          )}
-          {toggle('keyboard.showMatrix', settings.keyboard.showMatrix, t('Show matrix positions', 'Показывать позиции матрицы'))}
-          {toggle(
-            'layout.inspector',
-            settings.layout.inspector,
-            t('Inspector panel', 'Панель инспектора'),
-            t('right panel on Keyboard, Hardware and Firmware', 'правая панель на страницах «Клавиатура», «Железо» и «Прошивка»'),
-          )}
-          {toggle('layout.statusLine', settings.layout.statusLine, t('Status line', 'Строка состояния'))}
+          {toggle('keyboard.showTransparentSource', settings.keyboard.showTransparentSource)}
+          {toggle('keyboard.showMatrix', settings.keyboard.showMatrix)}
+          {toggle('layout.inspector', settings.layout.inspector)}
+          {toggle('layout.statusLine', settings.layout.statusLine)}
         </div>
       </section>
       <section className="section">
@@ -205,14 +202,9 @@ function QuickTab() {
           <h2>{t('device', 'устройство')}</h2>
         </div>
         <div className="panel-box rows">
-          {toggle('device.autoConnect', settings.device.autoConnect, t('Connect to the project keyboard on start', 'Подключаться к клавиатуре проекта при запуске'))}
-          {toggle(
-            'device.liveWrite',
-            settings.device.liveWrite,
-            t('Live write', 'Живая запись'),
-            t('every key change is written to the keyboard at once (like VIA)', 'каждое изменение клавиш сразу пишется в клавиатуру (как VIA)'),
-          )}
-          {toggle('editor.confirmDeviceWrite', settings.editor.confirmDeviceWrite, t('Show the change list before writing', 'Показывать список изменений перед записью'))}
+          {toggle('device.autoConnect', settings.device.autoConnect)}
+          {toggle('device.liveWrite', settings.device.liveWrite)}
+          {toggle('editor.confirmDeviceWrite', settings.editor.confirmDeviceWrite)}
         </div>
       </section>
       <section className="section">
@@ -229,15 +221,15 @@ function QuickTab() {
           </h2>
         </div>
         <div className="panel-box rows">
-          {toggle('effects.animations', settings.effects.animations, t('Animations', 'Анимации'))}
-          {toggle('effects.glitch', settings.effects.glitch, t('Glitch on headers', 'Сбой сигнала у заголовков'))}
-          {toggle('effects.wires', settings.effects.wires, t('Wires in the background', 'Провода на фоне'))}
-          <SliderRow settingKey="effects.scanlines" value={settings.effects.scanlines} label={t('Scan lines', 'Развёртка')} step={0.01} percent />
-          <SliderRow settingKey="effects.noise" value={settings.effects.noise} label={t('Noise', 'Шум')} step={0.01} percent />
-          <SliderRow settingKey="effects.vignette" value={settings.effects.vignette} label={t('Light at the top', 'Свет сверху')} step={0.01} percent />
-          <SliderRow settingKey="effects.glow" value={settings.effects.glow} label={t('Glow of active elements', 'Свечение активных элементов')} step={0.01} percent />
-          <SliderRow settingKey="surfaces.opacity" value={settings.surfaces.opacity} label={t('Panel opacity', 'Прозрачность панелей')} step={0.01} percent />
-          <SliderRow settingKey="surfaces.blur" value={settings.surfaces.blur} label={t('Blur under panels', 'Размытие под панелями')} step={1} unit="px" />
+          {toggle('effects.animations', settings.effects.animations)}
+          {toggle('effects.glitch', settings.effects.glitch)}
+          {toggle('effects.wires', settings.effects.wires)}
+          <SliderRow settingKey="effects.scanlines" value={settings.effects.scanlines} label={settingLabel('effects.scanlines')} step={0.01} percent />
+          <SliderRow settingKey="effects.noise" value={settings.effects.noise} label={settingLabel('effects.noise')} step={0.01} percent />
+          <SliderRow settingKey="effects.vignette" value={settings.effects.vignette} label={settingLabel('effects.vignette')} step={0.01} percent />
+          <SliderRow settingKey="effects.glow" value={settings.effects.glow} label={settingLabel('effects.glow')} step={0.01} percent />
+          <SliderRow settingKey="surfaces.opacity" value={settings.surfaces.opacity} label={settingLabel('surfaces.opacity')} step={0.01} percent />
+          <SliderRow settingKey="surfaces.blur" value={settings.surfaces.blur} label={settingLabel('surfaces.blur')} step={1} unit="px" />
         </div>
       </section>
       <section className="section">
@@ -245,19 +237,19 @@ function QuickTab() {
           <h2>{t('sizes and shape', 'размеры и форма')}</h2>
         </div>
         <div className="panel-box rows">
-          <SliderRow settingKey="keyboard.keySize" value={settings.keyboard.keySize} label={t('Key size on the drawing', 'Размер клавиши на рисунке')} step={1} unit="px" />
-          <SliderRow settingKey="shape.panelRadius" value={settings.shape.panelRadius} label={t('Panel corner radius', 'Скругление панелей')} step={1} unit="px" />
-          <SliderRow settingKey="shape.keyRadius" value={settings.shape.keyRadius} label={t('Key corner radius', 'Скругление клавиш')} step={1} unit="px" />
+          <SliderRow settingKey="keyboard.keySize" value={settings.keyboard.keySize} label={settingLabel('keyboard.keySize')} step={1} unit="px" />
+          <SliderRow settingKey="shape.panelRadius" value={settings.shape.panelRadius} label={settingLabel('shape.panelRadius')} step={1} unit="px" />
+          <SliderRow settingKey="shape.keyRadius" value={settings.shape.keyRadius} label={settingLabel('shape.keyRadius')} step={1} unit="px" />
           <SelectRow
             settingKey="layout.density"
             value={settings.layout.density}
-            label={t('Spacing', 'Плотность')}
+            label={settingLabel('layout.density')}
             options={SETTINGS_ENUMS['layout.density'].map((v) => ({ value: v, label: DENSITY_LABEL[v]() }))}
           />
           <SelectRow
             settingKey="typography.font"
             value={settings.typography.font}
-            label={t('Font', 'Шрифт')}
+            label={settingLabel('typography.font')}
             options={SETTINGS_ENUMS['typography.font'].map((v) => ({ value: v, label: FONT_LABEL[v]() }))}
           />
         </div>
@@ -272,10 +264,10 @@ function QuickTab() {
 export function SettingsPage({ tab }: { tab?: string }) {
   const language = useSettingsStore((s) => s.settings.language);
   const setValue = useSettingsStore((s) => s.setValue);
-  const active = tab === 'config' ? 'config' : 'quick';
+  const active = currentTab('settings', tab);
   return (
     <div className="page settings-page">
-      <div className="lang-switch">
+      <div className="lang-switch" {...findAttr('setting:language')}>
         <span className="cell-label">{t('language', 'язык')}</span>
         <button className={`btn ${language === 'en' ? 'btn--primary' : ''}`} onClick={() => setValue('language', 'en')}>
           english
@@ -287,12 +279,9 @@ export function SettingsPage({ tab }: { tab?: string }) {
       <Tabs
         idBase="settings"
         label={t('Settings', 'Настройки')}
-        items={[
-          { id: 'quick', label: t('Main', 'Основное') },
-          { id: 'config', label: t('Config', 'Конфиг') },
-        ]}
+        items={tabItems('settings')}
         current={active}
-        href={(id) => href(id === 'quick' ? { section: 'settings' } : { section: 'settings', tab: id })}
+        href={(id) => href(tabRoute('settings', id))}
         sticky
       />
       <TabPanels idBase="settings" ids={['quick', 'config']} current={active} render={(id) => (id === 'config' ? <ConfigTab /> : <QuickTab />)} />
