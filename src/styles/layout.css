@@ -478,7 +478,7 @@
   padding: 8px 16px;
   border: var(--border);
   border-radius: var(--panel-radius);
-  background: var(--cell-background);
+  background: var(--card-background);
 }
 
 .deck-cell--center {

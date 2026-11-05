@@ -79,7 +79,9 @@ function colorLabel(key: PaletteKey): string {
     case 'panel':
       return t('Panel background', 'Фон панелей');
     case 'cell':
-      return t('Cells and fields', 'Ячейки и поля');
+      return t('Fields and buttons', 'Поля и кнопки');
+    case 'card':
+      return t('Boxes in panels', 'Блоки в панелях');
     case 'hover':
       return t('Hover highlight', 'Подсветка при наведении');
     case 'border':

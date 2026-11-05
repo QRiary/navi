@@ -13,8 +13,8 @@ import {
 import { hexToRgb, isHexColor } from './color';
 
 /**
- * The resulting palette: the preset + own colors from the "colors" section. Key colors the preset and the config
- * both leave out follow the resulting `cell` / `border`, so an own `cell` still recolors the keys.
+ * The resulting palette: the preset + own colors from the "colors" section. Box and key colors the preset and
+ * the config both leave out follow the resulting `cell` / `border`, so an own `cell` still recolors them.
  */
 export function resolvePalette(settings: AppSettings): ThemePalette {
   const palette: PresetPalette = { ...getPreset(settings.theme).palette };
@@ -43,6 +43,7 @@ export function computeThemeVariables(settings: AppSettings): Record<string, str
     '--app-background': p.background,
     '--panel-background': rgba(p.panel, opacity),
     '--cell-background': p.cell,
+    '--card-background': p.card,
     '--hover-background': p.hover,
     '--border-color': p.border,
     '--key-background': p.key,

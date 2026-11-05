@@ -24,8 +24,10 @@ export interface ThemePalette {
   background: string;
   /** Panel background (sidebar, main area, bottom deck). */
   panel: string;
-  /** Background of cells inside panels and input fields. */
+  /** Background of input fields, buttons and other controls. */
   cell: string;
+  /** Background of boxes inside panels (tables, lists, logs) that hold the controls. A preset without it uses `cell`. */
+  card: string;
   /** Hover highlight. */
   hover: string;
   /** Borders. */
@@ -60,12 +62,12 @@ export interface ThemePreset {
   own?: boolean;
 }
 
-/** A preset's colors: the key colors may be left out, then they follow `cell` and `border`. */
-export type PresetPalette = Omit<ThemePalette, 'key' | 'keyBorder'> & Partial<Pick<ThemePalette, 'key' | 'keyBorder'>>;
+/** A preset's colors: the box and key colors may be left out, then they follow `cell` and `border`. */
+export type PresetPalette = Omit<ThemePalette, 'card' | 'key' | 'keyBorder'> & Partial<Pick<ThemePalette, 'card' | 'key' | 'keyBorder'>>;
 
-/** Fills the key colors a palette left out from `cell` and `border`. */
+/** Fills the box and key colors a palette left out from `cell` and `border`. */
 export function completePalette(p: PresetPalette): ThemePalette {
-  return { ...p, key: p.key ?? p.cell, keyBorder: p.keyBorder ?? p.border };
+  return { ...p, card: p.card ?? p.cell, key: p.key ?? p.cell, keyBorder: p.keyBorder ?? p.border };
 }
 
 export const THEME_PRESETS: ThemePreset[] = [
@@ -207,6 +209,7 @@ export const PALETTE_KEYS = [
   'background',
   'panel',
   'cell',
+  'card',
   'hover',
   'border',
   'key',
