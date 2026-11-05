@@ -70,6 +70,7 @@
   border-color: var(--accent-color);
 }
 
+/* Tab bars (components/Tabs.tsx). Labels keep the case they are written in. */
 .tabs {
   display: flex;
   flex-wrap: wrap;
@@ -77,13 +78,62 @@
   border-bottom: var(--border);
 }
 
+/* A page's main bar stays on top of the scrolling page; opaque even with a see-through panel color. */
+.tabs--sticky {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin-top: 0;
+  padding-top: 4px; /* the same 4px above as before, kept when stuck under the top bar */
+  background:
+    linear-gradient(var(--panel-background), var(--panel-background)),
+    var(--app-background);
+}
+
+/*
+ * A cluster of tabs under a quiet caption (Advanced: keys / codes / behavior), like a ribbon group: the caption
+ * sits above its tabs so it takes no width in the row, a thin line splits the clusters. A narrow window wraps
+ * whole clusters.
+ */
+.tabs-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.tabs-group + .tabs-group {
+  border-left: var(--border);
+}
+
+.tabs-group-row {
+  display: flex;
+}
+
+.tabs-caption {
+  padding: 0 12px 4px;
+  font-size: var(--fs-xs);
+  letter-spacing: var(--label-spacing);
+  text-transform: uppercase;
+  color: var(--text-label);
+  user-select: none;
+}
+
 .tab {
   position: relative;
-  padding: 8px 16px;
+  padding: 8px 12px;
   font-size: var(--fs-xs);
-  letter-spacing: 0.1em;
-  text-transform: lowercase;
-  color: var(--text-label);
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.tab-panel:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8px * var(--space));
+}
+
+/* Hardware → Geometry: the editor fills the page under the bar. */
+.hw-fill-panel {
+  height: 100%;
 }
 
 .tab:hover {

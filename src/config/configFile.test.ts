@@ -85,6 +85,17 @@ describe('config', () => {
     expect(parseConfig(again).settings?.layout.sidebarWidth).toBe(320);
   });
 
+  it('null clears an override and keeps the comments', () => {
+    const text = '{\n  "colors": {\n    "accent": "#ff0000", // active\n    "text": null\n  }\n}';
+    const cleared = setConfigValue(text, 'colors.accent', null);
+    expect(cleared).toBe('{\n  "colors": {\n    "accent": null, // active\n    "text": null\n  }\n}');
+    expect(parseConfig(cleared).issues).toEqual([]);
+    const set = setConfigValue(cleared, 'colors.accent', '#00ff00');
+    expect(parseConfig(set).settings?.colors.accent).toBe('#00ff00');
+    // not in the text yet: added as null
+    expect(parseConfig(setConfigValue('{ "theme": "mono" }', 'colors.danger', null)).issues).toEqual([]);
+  });
+
   it('no section — it is created', () => {
     const result = parseConfig(setConfigValue('{\n  "theme": "mono"\n}', 'layout.inspectorWidth', 400));
     expect(result.issues).toEqual([]);

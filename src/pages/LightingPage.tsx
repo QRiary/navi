@@ -16,7 +16,7 @@ import { hardwareFacts } from '../lib/hardwareFacts';
 import { href } from '../lib/router';
 import { useDeviceStore } from '../store/deviceStore';
 import { useProjectStore } from '../store/projectStore';
-import { toast } from '../store/toastStore';
+import { toast, toastError } from '../store/toastStore';
 import { StatusChip } from '../components/inspector/KeyInspector';
 import { getLanguage, t } from '../i18n';
 
@@ -87,7 +87,7 @@ export function LightingPage() {
   // With the keyboard (VIA) — straight to it; without it — into the project preset.
   const liveControl = connected && !!caps?.lighting.rgbMatrix;
   const send = (patch: Partial<LightingState>) => {
-    if (liveControl) void setLighting('rgbMatrix', patch).catch((e: Error) => toast(e.message, 'error'));
+    if (liveControl) void setLighting('rgbMatrix', patch).catch((e: Error) => toastError(t('Couldn’t send the lighting change to the keyboard. Check it is connected and try again.', 'Не удалось отправить изменение подсветки в клавиатуру. Проверьте подключение и повторите.'), e));
     else if (state) keepInProject({ ...state, ...patch });
   };
 
@@ -158,7 +158,7 @@ export function LightingPage() {
                   onClick={() =>
                     void saveLighting('rgbMatrix')
                       .then(() => toast(t('Saved in the keyboard memory', 'Сохранено в памяти клавиатуры')))
-                      .catch((e: Error) => toast(e.message, 'error'))
+                      .catch((e: Error) => toastError(t('Couldn’t save the lighting in the keyboard memory. Check it is connected and try again.', 'Не удалось сохранить подсветку в памяти клавиатуры. Проверьте подключение и повторите.'), e))
                   }
                 >
                   <Save size={14} strokeWidth={1.5} /> {t('save to keyboard', 'сохранить в клавиатуру')}
@@ -198,7 +198,7 @@ export function LightingPage() {
                         setEffectCount(n);
                         toast(t(`The firmware has ${n} effects`, `В прошивке ${n} эффектов`));
                       })
-                      .catch((e: Error) => toast(e.message, 'error'))
+                      .catch((e: Error) => toastError(t('Couldn’t read the effect count from the keyboard. Check it is connected and try again.', 'Не удалось узнать число эффектов у клавиатуры. Проверьте подключение и повторите.'), e))
                   }
                   title={t('Briefly switches to the last effect and back (not saved)', 'На миг переключает на последний эффект и обратно (не сохраняется)')}
                 >
@@ -242,7 +242,7 @@ export function LightingPage() {
       )}
       <BuildLighting preset={state} />
       <p className="field-hint" style={{ marginTop: 'var(--gap)' }}>
-        {t('Lighting keys (RM_*, UG_*) are in the catalog → “Lighting”. Other lighting parameters of your build (timeout, max brightness) — Advanced → Behavior → RGB Matrix.', 'Клавиши подсветки (RM_*, UG_*) — в каталоге → «Подсветка». Другие параметры подсветки сборки (отключение, предел яркости) — Расширенное → Поведение → RGB Matrix.')}
+        {t('Lighting keys (RM_*, UG_*) are in the catalog → “Lighting”. Other lighting parameters of your build (timeout, max brightness) — Advanced → QMK settings → RGB Matrix.', 'Клавиши подсветки (RM_*, UG_*) — в каталоге → «Подсветка». Другие параметры подсветки сборки (отключение, предел яркости) — Расширенное → Настройки QMK → RGB Matrix.')}
       </p>
     </div>
   );

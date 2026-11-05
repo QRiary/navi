@@ -20,9 +20,10 @@ import { JSON_FILTERS, openTextFile, saveTextFile } from '../lib/files';
 import { projectFromDevice } from '../lib/projectFromDevice';
 import { projectRepo } from '../platform/projectRepo';
 import { href, navigate } from '../lib/router';
+import { TabPanels, Tabs } from '../components/Tabs';
 import { useDeviceStore } from '../store/deviceStore';
 import { useProjectStore } from '../store/projectStore';
-import { toast } from '../store/toastStore';
+import { toast, toastError } from '../store/toastStore';
 import { locale, t } from '../i18n';
 
 const ICON = { size: 15, strokeWidth: 1.5 };
@@ -460,7 +461,7 @@ function LinkedFile() {
       .then((res) => {
         if (ok && res !== null) toast(ok);
       })
-      .catch((err: Error) => toast(err.message, 'error'));
+      .catch((err: Error) => toastError(t('That action on the linked file failed. Check the file is reachable and try again.', 'Действие со связанным файлом не удалось. Проверьте, что файл доступен, и повторите.'), err));
 
   return (
     <section className="panel-box" style={{ marginBottom: 'var(--gap)' }}>
@@ -526,7 +527,7 @@ function RevisionList() {
     if (compare?.file === file) return setCompare(null);
     const text = await projectRepo.readRevision(project.id, file);
     const { project: old, issues } = parseProjectText(text);
-    if (!old) return toast(issues[0]?.message ?? t('Cannot read this version', 'Не удалось прочитать версию'), 'error');
+    if (!old) return toastError(t('Cannot read this version.', 'Не удалось прочитать версию.'), issues[0]?.message);
     setCompare({ file, old, issues });
   };
 
@@ -571,7 +572,7 @@ function RevisionList() {
                     onClick={() =>
                       void restore(r.file).then((iss) => {
                         toast(t('Version restored — Ctrl+Z to undo, Ctrl+S to keep', 'Версия восстановлена — Ctrl+Z отменит, Ctrl+S сохранит'));
-                        if (iss.some((i) => i.level === 'error')) toast(iss[0].message, 'error');
+                        if (iss.some((i) => i.level === 'error')) toastError(t('The version was restored, but it has problems.', 'Версия восстановлена, но в ней есть проблемы.'), iss[0].message);
                       })
                     }
                   >
@@ -608,20 +609,19 @@ export function ProjectsPage({ tab }: { tab?: string }) {
   const active = tab === 'new' ? 'new' : tab === 'current' ? 'current' : 'list';
   return (
     <div className="page">
-      <div className="tabs" role="tablist">
-        <a className={`tab ${active === 'list' ? 'is-active' : ''}`} href={href({ section: 'projects' })}>
-          {t('all projects', 'все проекты')}
-        </a>
-        <a className={`tab ${active === 'current' ? 'is-active' : ''}`} href={href({ section: 'projects', tab: 'current' })}>
-          {t('current: import / export / versions', 'текущий: импорт / экспорт / версии')}
-        </a>
-        <a className={`tab ${active === 'new' ? 'is-active' : ''}`} href={href({ section: 'projects', tab: 'new' })}>
-          {t('new project', 'новый проект')}
-        </a>
-      </div>
-      {active === 'list' && <ProjectList />}
-      {active === 'current' && <CurrentProject />}
-      {active === 'new' && <NewProject />}
+      <Tabs
+        idBase="projects"
+        label={t('Projects', 'Проекты')}
+        items={[
+          { id: 'list', label: t('All projects', 'Все проекты') },
+          { id: 'current', label: t('Current: import / export / versions', 'Текущий: импорт / экспорт / версии') },
+          { id: 'new', label: t('New project', 'Новый проект') },
+        ]}
+        current={active}
+        href={(id) => href(id === 'list' ? { section: 'projects' } : { section: 'projects', tab: id })}
+        sticky
+      />
+      <TabPanels idBase="projects" ids={['list', 'current', 'new']} current={active} render={(id) => (id === 'list' ? <ProjectList /> : id === 'current' ? <CurrentProject /> : <NewProject />)} />
     </div>
   );
 }

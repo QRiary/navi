@@ -156,21 +156,22 @@ keycode and key override rows pushed their delete button out of the panel at 110
   "in the config").
 
 **Do**
-1. One `<Tabs>` component, sticky under the top bar, real ARIA, case as written; move the 7 bars onto it.
-2. Advanced: group the 10 tabs (e.g. Keys: tap-hold, tap dance, combos, overrides, leader · Codes: custom
-   keycodes, aliases, unicode · Behavior: config.h, NAVI behavior), one row; rename the two behavior tabs so
-   they say what differs.
-3. Right panel per page: the page's own context (selected item, help) or collapsed; Firmware features only on
-   Firmware.
-4. Keep scroll and local state per tab (no remount on tab switch).
-5. Every delete: an "Undo" button in its toast; the firmware-file delete gets a confirm.
-6. Error toasts stay until closed, with Copy (and stay clickable over an open `<Modal>`: they sit in `#root`,
-   which the modal makes inert); messages say what failed and what to do, raw detail behind
-   "details".
-7. Wrap the stray strings in `t()`; drop the duplicate tagline.
-8. Settings main tab: the `colors` block and effects as real controls (color pickers with "reset to palette"),
-   so the JSONC is only for power users.
-9. Layers page: bigger previews (or one large preview of the selected layer).
+1. ✅ One `<Tabs>` component, sticky under the top bar, real ARIA, case as written; move the 7 bars onto it.
+2. ✅ Advanced: grouped Keys (tap dance, tap-hold, combos, overrides, leader) · Codes (custom keycodes, aliases,
+   unicode) · Behavior ("QMK settings" = config.h, "NAVI additions" = NAVI's own C); group captions sit above
+   their tabs so the bar fits one row at 1600px / 110% in both languages.
+3. ✅ Right panel only on Keyboard, Hardware and Firmware; the other pages get its width (no per-page panel).
+4. ✅ Keep scroll and local state per tab (visited panels stay mounted and hidden; hidden tabs pause listeners).
+5. ✅ Every delete: an "Undo" button in its toast; the firmware-file delete gets a confirm.
+6. ✅ Error toasts stay until closed, with Copy, clickable over an open `<Modal>` (portal into `body`); messages
+   say what failed and what to do, raw detail behind "details".
+7. ✅ Wrap the stray strings in `t()`; the tagline only in the sidebar footer (wraps, no longer cut).
+   Left as names: "RGB Matrix", "QMK CLI", "qmk_firmware", "keymap", `send-string`'s "hello" (ASCII only).
+8. ✅ Settings main tab: colors (picker, hex, reset to palette, reset all), effect and surface sliders, sizes and
+   shape (key size, radii, density, font).
+9. ✅ Layers page: previews fill a wider column, height from the layout's proportions (~240px).
+   Left over: tabs not visited yet have no panel, so their `aria-controls` points nowhere until opened; the
+   layer tab bars (Deck, Keyboard page) and the composer's kind chips are not on `<Tabs>`.
 
 ## Step 5: hints, help and states (🟠 6/10)
 

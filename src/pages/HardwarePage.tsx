@@ -20,19 +20,23 @@ import { JSON_FILTERS, openTextFile } from '../lib/files';
 import { hidFromCode } from '../lib/hidCodes';
 import { useActive, useLabelContext } from '../lib/projectContext';
 import { href } from '../lib/router';
+import { useScrollMemory } from '../lib/scrollMemory';
+import { TabPanels, Tabs } from '../components/Tabs';
 import { useDeviceStore } from '../store/deviceStore';
 import { useEditorStore } from '../store/editorStore';
 import { useProjectStore, useSpec } from '../store/projectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { toast } from '../store/toastStore';
 import { getLanguage, locale, t } from '../i18n';
+import { deletedToast } from '../lib/undoToast';
 import { PinsTab } from '../components/hardware/PinsTab';
 
 const ICON = { size: 15, strokeWidth: 1.5 };
 
 type AssignMode = { kind: 'sequence'; next: MatrixPos; dir: 'cols' | 'rows' } | { kind: 'press' } | null;
 
-function GeometryEditor() {
+/** `visible`: the tab is shown; while hidden (kept mounted) “press a key” stops listening and the matrix test stops. */
+function GeometryEditor({ visible }: { visible: boolean }) {
   const active = useActive();
   const spec = useSpec();
   const labelCtx = useLabelContext();
@@ -61,7 +65,7 @@ function GeometryEditor() {
 
   // “Press a key”: the position comes from the matrix test (VIA) or from a normal key press through the layer 0 keymap.
   useEffect(() => {
-    if (assign?.kind !== 'press' || !active) return;
+    if (assign?.kind !== 'press' || !active || !visible) return;
     const selected = active.geometry.keys.find((k) => k.id === editor.selection[0]);
     if (!selected) return;
     const onPressed = (pressed: Set<string>) => {
@@ -86,9 +90,12 @@ function GeometryEditor() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [assign, editor.selection[0], active?.geometry, deviceSnapshot]);
+  }, [assign, editor.selection[0], active?.geometry, deviceSnapshot, visible]);
 
   useEffect(() => () => stopTester(), [stopTester]);
+  useEffect(() => {
+    if (!visible) stopTester();
+  }, [visible, stopTester]);
 
   const selectNext = (from: KeyGeom) => {
     if (!active) return;
@@ -204,7 +211,7 @@ function GeometryEditor() {
         <button className="icon-btn" disabled={!sel.length} onClick={() => rotateSel(5)} aria-label={t('Rotate +5°', 'Повернуть +5°')} title="+5°">
           <RotateCw {...ICON} />
         </button>
-        <button className="btn" disabled={!sel.length} onClick={() => apply((p) => removeKeys(p, geometry.id, ids), t('delete keys', 'удаление клавиш'))}>
+        <button className="btn" disabled={!sel.length} onClick={() => { apply((p) => removeKeys(p, geometry.id, ids), t('delete keys', 'удаление клавиш')); deletedToast(t('keys', 'клавиши')); }}>
           <Trash2 {...ICON} /> {t('delete', 'удалить')}
         </button>
         <span className="deck-sep" />
@@ -374,7 +381,7 @@ function ProfileTab({ project }: { project: Project }) {
                 <option value="rgb_matrix">RGB Matrix</option>
                 <option value="rgblight">RGB Light</option>
                 <option value="led_matrix">LED Matrix</option>
-                <option value="backlight">Backlight</option>
+                <option value="backlight">{t('Backlight (one color)', 'Backlight (один цвет)')}</option>
                 <option value="none">{t('none', 'нет')}</option>
               </select>
             </label>
@@ -383,9 +390,9 @@ function ProfileTab({ project }: { project: Project }) {
               <select className="select" value={hw.pointing.kind} onChange={(e) => set({ pointing: { ...hw.pointing, kind: e.target.value as HardwareProfile['pointing']['kind'] } }, 'pointing')}>
                 <option value="unknown">{t('unknown', 'неизвестно')}</option>
                 <option value="none">{t('none', 'нет')}</option>
-                <option value="cirque">Cirque trackpad</option>
+                <option value="cirque">{t('Cirque trackpad', 'трекпад Cirque')}</option>
                 <option value="trackball">{t('trackball', 'трекбол')}</option>
-                <option value="trackpoint">trackpoint</option>
+                <option value="trackpoint">{t('TrackPoint', 'трекпойнт')}</option>
                 <option value="other">{t('other', 'другое')}</option>
               </select>
             </label>
@@ -481,7 +488,7 @@ function VariantsTab({ project }: { project: Project }) {
               <button className="icon-btn" aria-label={t('Duplicate', 'Копия')} onClick={() => apply((p) => addGeometry(p, cloneGeometry(g, `${g.name} copy`)), t('duplicate geometry', 'копия геометрии'))}>
                 <Copy size={14} strokeWidth={1.5} />
               </button>
-              <button className="icon-btn" disabled={project.geometries.length <= 1} aria-label={t('Delete', 'Удалить')} onClick={() => apply((p) => removeGeometry(p, g.id), t('delete geometry', 'удаление геометрии'))}>
+              <button className="icon-btn" disabled={project.geometries.length <= 1} aria-label={t('Delete', 'Удалить')} onClick={() => { apply((p) => removeGeometry(p, g.id), t('delete geometry', 'удаление геометрии')); deletedToast(g.name || t('geometry', 'геометрия')); }}>
                 <Trash2 size={14} strokeWidth={1.5} />
               </button>
             </div>
@@ -518,31 +525,31 @@ function VariantsTab({ project }: { project: Project }) {
 export function HardwarePage({ tab }: { tab?: string }) {
   const project = useProjectStore((s) => s.project);
   const current = tab === 'profile' || tab === 'variants' || tab === 'pins' ? tab : 'geometry';
+  // A fill page: the scrolling tabs share one scroller of their own, so the position is remembered here.
+  const scrollRef = useScrollMemory(`hardware/${current}`);
   if (!project) return null;
+  const tabs = [
+    { id: 'geometry', label: t('Geometry', 'Геометрия') },
+    { id: 'profile', label: t('Hardware profile', 'Профиль железа') },
+    { id: 'variants', label: t('Geometry variants', 'Варианты геометрии') },
+    { id: 'pins', label: t('Board pins (firmware)', 'Выводы платы (прошивка)') },
+  ];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div className="tabs" role="tablist" style={{ margin: 0, padding: '0 var(--pad)' }}>
-        <a className={`tab ${current === 'geometry' ? 'is-active' : ''}`} href={href({ section: 'hardware' })}>
-          {t('geometry', 'геометрия')}
-        </a>
-        <a className={`tab ${current === 'profile' ? 'is-active' : ''}`} href={href({ section: 'hardware', tab: 'profile' })}>
-          {t('hardware profile', 'профиль железа')}
-        </a>
-        <a className={`tab ${current === 'variants' ? 'is-active' : ''}`} href={href({ section: 'hardware', tab: 'variants' })}>
-          {t('geometry variants', 'варианты геометрии')}
-        </a>
-        <a className={`tab ${current === 'pins' ? 'is-active' : ''}`} href={href({ section: 'hardware', tab: 'pins' })}>
-          {t('board pins (firmware)', 'выводы платы (прошивка)')}
-        </a>
-      </div>
+      <Tabs idBase="hardware" label={t('Hardware', 'Железо')} items={tabs} current={current} href={(id) => href(id === 'geometry' ? { section: 'hardware' } : { section: 'hardware', tab: id })} style={{ margin: 0, padding: '0 var(--pad)' }} />
       <div style={{ flex: 1, minHeight: 0 }}>
-        {current === 'geometry' ? (
-          <GeometryEditor />
-        ) : (
-          <div className="page-scroll" style={{ height: '100%' }}>
-            <div className="page-wrap">{current === 'profile' ? <ProfileTab project={project} /> : current === 'pins' ? <PinsTab project={project} /> : <VariantsTab project={project} />}</div>
+        {/* Geometry stays mounted once visited (its zoom, pan and assign mode survive a tab switch). */}
+        <TabPanels idBase="hardware" ids={['geometry']} current={current} className="hw-fill-panel" render={(_, active) => <GeometryEditor visible={active} />} />
+        <div className="page-scroll" style={{ height: '100%' }} hidden={current === 'geometry'} ref={scrollRef}>
+          <div className="page-wrap">
+            <TabPanels
+              idBase="hardware"
+              ids={['profile', 'variants', 'pins']}
+              current={current}
+              render={(id) => (id === 'profile' ? <ProfileTab project={project} /> : id === 'pins' ? <PinsTab project={project} /> : <VariantsTab project={project} />)}
+            />
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

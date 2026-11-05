@@ -12,6 +12,7 @@ import { isDesktop } from './desktop/bridge';
 import { syncTitleBar, useDesktopSync } from './desktop/useDesktopSync';
 import { href, navigate, useRoute, type Route } from './lib/router';
 import { useShortcuts } from './lib/useShortcuts';
+import { useScrollMemory } from './lib/scrollMemory';
 import { useInterfaceZoom } from './lib/interfaceZoom';
 import { useLiveWrite } from './lib/useLiveWrite';
 import { KeyboardPage } from './pages/KeyboardPage';
@@ -30,6 +31,9 @@ import { lastProjectId, useProjectStore } from './store/projectStore';
 import { useDeviceStore } from './store/deviceStore';
 import { useSettingsStore } from './store/settingsStore';
 import { applyTheme } from './theme/applyTheme';
+
+/** The tab a section shows when the address names none (so both addresses share one remembered scroll). */
+const DEFAULT_TAB: Partial<Record<Route['section'], string>> = { advanced: 'tapdance', firmware: 'setup', projects: 'list', settings: 'quick' };
 
 /** Sections that take the whole main area (no page scrolling). */
 const FILL = new Set<Route['section']>(['keyboard', 'hardware']);
@@ -60,6 +64,12 @@ function renderPage(route: Route) {
       return <SettingsPage tab={route.tab} />;
   }
 }
+
+/**
+ * Sections with a right panel: the selected key (Keyboard), the selected geometry key (Hardware), the firmware
+ * features (Firmware). Elsewhere it held nothing about the page, so the page gets the width.
+ */
+const WITH_INSPECTOR = new Set<Route['section']>(['keyboard', 'hardware', 'firmware']);
 
 /** Sections that need an open project. */
 const NEEDS_PROJECT = new Set<Route['section']>(['keyboard', 'layers', 'encoders', 'macros', 'advanced', 'lighting', 'hardware', 'firmware']);
@@ -112,13 +122,15 @@ export function App() {
 
   const needsProject = NEEDS_PROJECT.has(route.section) && !project;
   const fill = FILL.has(route.section) && !needsProject;
+  const scrollRef = useScrollMemory(`${route.section}/${route.tab ?? DEFAULT_TAB[route.section] ?? ''}`);
+  const inspector = settings.layout.inspector && WITH_INSPECTOR.has(route.section);
 
   return (
-    <div className="app" data-sidebar={settings.layout.sidebar ? 'on' : 'off'} data-inspector={settings.layout.inspector ? 'on' : 'off'}>
+    <div className="app" data-sidebar={settings.layout.sidebar ? 'on' : 'off'} data-inspector={inspector ? 'on' : 'off'}>
       {isDesktop && (
         <div className="titlebar" aria-hidden="true">
           <span className="titlebar-text">
-            {settings.brand.name} <span className="titlebar-dim">· {settings.brand.tagline}</span>
+            {settings.brand.name}
             {projectName && <span className="titlebar-dim"> · {projectName}</span>}
           </span>
         </div>
@@ -146,15 +158,16 @@ export function App() {
             {renderPage(route)}
           </div>
         ) : (
-          <div className="page-scroll">
-            <div className="page-wrap" key={`${route.section}/${route.tab ?? ''}`}>
+          <div className="page-scroll" ref={scrollRef}>
+            {/* Keyed by section only: a tab switch keeps the page (its visited tabs stay mounted) and its scroll. */}
+            <div className="page-wrap" key={route.section}>
               {renderPage(route)}
             </div>
           </div>
         )}
       </main>
-      {settings.layout.inspector && <Inspector route={route} />}
-      {settings.layout.inspector && <PanelResizer side="right" />}
+      {inspector && <Inspector route={route} />}
+      {inspector && <PanelResizer side="right" />}
       <Deck />
       <LinkConflictDialog />
       <CloseDialog />

@@ -47,7 +47,7 @@ build/           app icon (icon.svg is the source)
 | VIA protocol, client (queue, timeouts), macros, matrix detection, write plan + read-back check | `src/core/via/*` (`simulator.ts` is for tests only) |
 | `keymap.c` / `rules.mk` / `config.h` generator (tap dance, combos, leader, unicode map) | `src/core/qmk/generate.ts`; `config.h` parameters — `configParams.ts` |
 | Layer C names (`Layer.cName`, else `L_<NAME>`); “own pipeline” mode (`firmware.pipeline`): `keymap.c` + `navi.h` (enums, `NAVI_SAFE_RANGE`, prototypes) + `navi_rules.mk` / `navi_config.h` that the user's own `rules.mk` / `config.h` include; hooks are `*_navi` (always defined), the user's QMK hooks call them | `generate.ts` (`layerIdentifiers`, `layerNameIssues`), `customCode.ts` (`NAVI_HOOKS`, `PIPELINE_SYMBOLS`, `safeHeaderName`) |
-| “Layer keys bring their layer to the top” (`firmware.layerKeysOnTop`): the layer turned on last wins, layers above it are hidden; generated `layer_state_set_user`/`_navi` + a layer key check in `process_record_*` (hidden layers' releases, `TG`/`TT`, `TO`, one-shot end), `navi_layers_on()` / `navi_layer_off()` for the user's C; checkbox in Advanced → NAVI behavior and on the Layers page (`components/advanced/LayerKeysOnTop.tsx`) | `src/core/qmk/layerOnTop.ts`, `generate.ts` |
+| “Layer keys bring their layer to the top” (`firmware.layerKeysOnTop`): the layer turned on last wins, layers above it are hidden; generated `layer_state_set_user`/`_navi` + a layer key check in `process_record_*` (hidden layers' releases, `TG`/`TT`, `TO`, one-shot end), `navi_layers_on()` / `navi_layer_off()` for the user's C; checkbox in Advanced → NAVI additions and on the Layers page (`components/advanced/LayerKeysOnTop.tsx`) | `src/core/qmk/layerOnTop.ts`, `generate.ts` |
 | Readable `keymap.c`: layers drawn by the geometry in box-drawing frames, `NAVI_LAYOUT` macro | `src/core/qmk/layoutText.ts` |
 | Lighting defaults of your own build (`RGB_MATRIX_DEFAULT_*`, brightness limit) | `src/core/lighting/buildDefaults.ts`, `components/lighting/BuildLighting.tsx` |
 | User's own lines in `keymap.c`/`rules.mk`/`config.h`, make variable allowlist, C cleanup | `src/core/qmk/customCode.ts`; checked again before writing — `electron/safety.cjs` |
@@ -68,7 +68,10 @@ build/           app icon (icon.svg is the source)
 | WebHID transport, `--probe-device` mode | `src/device/webhid.ts`, `src/device/probeRun.ts` |
 | Stores: project + undo/redo + draft; device; QMK; settings | `src/store/projectStore.ts`, `deviceStore.ts`, `qmkStore.ts`, `settingsStore.ts` |
 | Keyboard drawing (SVG, rotation, selection frame, drag) | `src/components/keyboard/KeyboardCanvas.tsx` |
-| Settings (the JSONC text is the source of truth) | `src/config/theme.config.ts` + `default.config.jsonc` (a test keeps them in sync) |
+| Tab bars: route tabs (links, sticky page bar) and state tabs (file switchers), WAI-ARIA keys (`tabsNav.ts`); visited tab panels stay mounted and hidden, so a hidden tab gets `active=false` and must pause its listeners, timers and polling; scroll remembered per section/tab | `src/components/Tabs.tsx`, `src/lib/scrollMemory.ts` (page key in `App.tsx` is the section only) |
+| Toasts: info ones fade (hover pauses), errors stay until closed with Copy and raw details (`toastError`); a portal into `body`, so they stay clickable over a `<Modal>`. Every delete calls `deletedToast(what)` right after its `apply`: Undo reverts only while that delete is still the newest history entry | `src/store/toastStore.ts`, `components/Toasts.tsx`, `src/lib/undoToast.ts` |
+| Right panel only on Keyboard, Hardware, Firmware (`WITH_INSPECTOR`) | `src/App.tsx`, `components/inspector/Inspector.tsx` |
+| Settings (the JSONC text is the source of truth); Settings → main edits colors, effects and sizes through it (one write per frame while dragging) | `src/config/theme.config.ts` + `default.config.jsonc` (a test keeps them in sync), `components/SettingsControls.tsx` |
 | Interface language | `src/i18n/index.ts` — visible text is written as `t('English', 'Русский')` |
 
 ## Build safety

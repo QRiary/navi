@@ -11,6 +11,7 @@ import { tapDanceKind } from '../../core/project/tapDances';
 import { TAP_DANCE_MAX_STEPS, TAP_DANCE_VARIANTS, type MacroStep, type Project, type TapDance, type TapDanceKind, type TapDanceOwnC, type TapDanceStep } from '../../core/project/types';
 import { tapDanceReservedNames } from '../../core/qmk/generate';
 import { t } from '../../i18n';
+import { deletedToast } from '../../lib/undoToast';
 import { useProjectStore, useSpec } from '../../store/projectStore';
 import { MacroSteps } from '../macros/MacroSteps';
 import { FeatureNote, IssueList, KeycodeField } from './common';
@@ -85,7 +86,7 @@ export function TapDanceTab({ project }: { project: Project }) {
                     onChange={(e) => patch(td.id, { tappingTerm: e.target.value ? Number(e.target.value) : undefined }, 'TD term', `tdterm:${td.id}`)}
                     aria-label={t('Tapping term', 'Время')}
                   />
-                  <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => set(project.tapDances.filter((x) => x.id !== td.id), t('delete tap dance', 'удаление tap dance'))}>
+                  <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => { set(project.tapDances.filter((x) => x.id !== td.id), t('delete tap dance', 'удаление tap dance')); deletedToast(td.name || t('tap dance', 'tap dance')); }}>
                     <Trash2 {...ICON} />
                   </button>
                 </div>
@@ -182,7 +183,7 @@ function EveryTapSteps({ td, onSteps }: { td: TapDance; onSteps: (steps: TapDanc
         <div key={i} className="field">
           <div className="field-row">
             <span className="kicker">{t(`Step ${i + 1}`, `Шаг ${i + 1}`)}</span>
-            <button className="icon-btn" disabled={steps.length <= 1} aria-label={t('Delete step', 'Удалить шаг')} onClick={() => onSteps(steps.filter((_, j) => j !== i), t('delete step', 'удаление шага'))}>
+            <button className="icon-btn" disabled={steps.length <= 1} aria-label={t('Delete step', 'Удалить шаг')} onClick={() => { onSteps(steps.filter((_, j) => j !== i), t('delete step', 'удаление шага')); deletedToast(t('tap dance step', 'шаг tap dance')); }}>
               <Trash2 {...ICON} />
             </button>
           </div>

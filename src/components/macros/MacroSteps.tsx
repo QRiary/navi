@@ -9,6 +9,7 @@ import { KeycodeField } from '../advanced/common';
 import type { MacroStep } from '../../core/project/types';
 import { useSpec } from '../../store/projectStore';
 import { t } from '../../i18n';
+import { deletedToast } from '../../lib/undoToast';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
@@ -85,7 +86,7 @@ export function MacroSteps({
           <button className="icon-btn" disabled={i === steps.length - 1} aria-label={t('Down', 'Ниже')} onClick={() => move(i, i + 1)}>
             <ArrowDown {...ICON} />
           </button>
-          <button className="icon-btn" aria-label={t('Delete step', 'Удалить шаг')} onClick={() => onChange(steps.filter((_, j) => j !== i), t('delete step', 'удаление шага'))}>
+          <button className="icon-btn" aria-label={t('Delete step', 'Удалить шаг')} onClick={() => { onChange(steps.filter((_, j) => j !== i), t('delete step', 'удаление шага')); deletedToast(t('macro step', 'шаг макроса')); }}>
             <Trash2 {...ICON} />
           </button>
         </div>

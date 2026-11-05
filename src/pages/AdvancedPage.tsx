@@ -1,6 +1,6 @@
 /**
  * ADVANCED SECTION: tap dance, combos, key overrides, own keycodes, leader, unicode,
- * NAVI's own behavior, behavior (config.h). All of this is code in the firmware (keymap.c / config.h): it works after building
+ * QMK settings (config.h), NAVI additions (its own C code). All of this is code in the firmware (keymap.c / config.h): it works after building
  * and flashing your own firmware (the Firmware section). It cannot be set up over VIA — and it says so.
  */
 import { useMemo, useState } from 'react';
@@ -16,6 +16,7 @@ import { aliasCName, ALIAS_LABEL_MAX, checkKeyAliases, KEY_ALIASES_MAX } from '.
 import { layerIdentifiers } from '../core/qmk/generate';
 import { customKeycodeValue, useActive, useLabelContext } from '../lib/projectContext';
 import { href } from '../lib/router';
+import { TabPanels, Tabs, type TabItem } from '../components/Tabs';
 import { useEditorStore } from '../store/editorStore';
 import { useProjectStore, useSpec } from '../store/projectStore';
 import { ActionEditor, FeatureNote, IssueList, KeycodeField } from '../components/advanced/common';
@@ -27,6 +28,7 @@ import { LayerKeysOnTopRow } from '../components/advanced/LayerKeysOnTop';
 import { ModsInput } from '../components/keyboard/KeycodeComposer';
 import { LayoutPreview } from '../components/keyboard/LayoutPreview';
 import { getLanguage, t } from '../i18n';
+import { deletedToast } from '../lib/undoToast';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
@@ -119,7 +121,7 @@ function CombosTab({ project }: { project: Project }) {
           <div className="panel-box">
             <div className="panel-box-head">
               <input className="input" value={combo.name} onChange={(e) => set(project.combos.map((c) => (c.id === combo.id ? { ...c, name: e.target.value.replace(/[^A-Za-z0-9_]/g, '_') } : c)), t('combo name', 'имя комбо'), `cname:${combo.id}`)} aria-label={t('Name', 'Имя')} />
-              <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => set(project.combos.filter((c) => c.id !== combo.id), t('delete combo', 'удаление комбо'))}>
+              <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => { set(project.combos.filter((c) => c.id !== combo.id), t('delete combo', 'удаление комбо')); deletedToast(combo.name || t('combo', 'комбо')); }}>
                 <Trash2 {...ICON} />
               </button>
             </div>
@@ -178,7 +180,7 @@ function OverridesTab({ project }: { project: Project }) {
             <KeycodeField value={o.trigger} label={t('Key', 'Клавиша')} onChange={(v) => patch(o.id, { trigger: v }, t('override key', 'клавиша подмены'))} />
             <span>→</span>
             <KeycodeField value={o.replacement} label={t('Replacement', 'Замена')} onChange={(v) => patch(o.id, { replacement: v }, t('override result', 'результат подмены'))} />
-            <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => set(project.keyOverrides.filter((x) => x.id !== o.id), t('delete override', 'удаление подмены'))}>
+            <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => { set(project.keyOverrides.filter((x) => x.id !== o.id), t('delete override', 'удаление подмены')); deletedToast(o.name || t('key override', 'подмена клавиши')); }}>
               <Trash2 {...ICON} />
             </button>
           </div>
@@ -212,7 +214,7 @@ function CustomTab({ project }: { project: Project }) {
             <input className="input" value={c.name} onChange={(e) => patch(c.id, { name: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_') }, t('custom keycode name', 'имя keycode'), `ckname:${c.id}`)} aria-label={t('Name', 'Имя')} />
             <input className="input" value={c.description} placeholder={t('description', 'описание')} onChange={(e) => patch(c.id, { description: e.target.value }, t('description', 'описание'), `ckdesc:${c.id}`)} />
             <ActionEditor action={c.action} coalesceKey={`ck:${c.id}`} onChange={(action, coalesce) => patch(c.id, { action }, t('custom action', 'действие keycode'), coalesce)} />
-            <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => set(project.customKeycodes.filter((x) => x.id !== c.id), t('delete keycode', 'удаление keycode'))}>
+            <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => { set(project.customKeycodes.filter((x) => x.id !== c.id), t('delete keycode', 'удаление keycode')); deletedToast(c.name || t('custom keycode', 'свой keycode')); }}>
               <Trash2 {...ICON} />
             </button>
           </div>
@@ -253,7 +255,7 @@ function AliasesTab({ project }: { project: Project }) {
               <input className="input" value={a.label} maxLength={ALIAS_LABEL_MAX} placeholder={t('Copy', 'Копировать')} onChange={(e) => patch(a.id, { label: e.target.value }, t('alias label', 'подпись псевдонима'), `kalabel:${a.id}`)} aria-label={t('Label', 'Подпись')} />
               <KeycodeField value={a.keycode} label={t('key', 'клавиша')} onChange={(v) => patch(a.id, { keycode: v }, t('alias key', 'клавиша псевдонима'))} />
               <span className="mono">{aliasCName(a.label.trim()) ?? '—'}</span>
-              <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => set(project.keyAliases.filter((x) => x.id !== a.id), t('delete alias', 'удаление псевдонима'))}>
+              <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => { set(project.keyAliases.filter((x) => x.id !== a.id), t('delete alias', 'удаление псевдонима')); deletedToast(a.label || t('alias', 'псевдоним')); }}>
                 <Trash2 {...ICON} />
               </button>
             </div>
@@ -277,8 +279,8 @@ function NaviBehaviorTab({ project }: { project: Project }) {
     <div className="page">
       <p className="field-hint">
         {t(
-          "Behaviors QMK does not have: NAVI writes them into keymap.c as its own C code. They apply after building and flashing. QMK's own settings are on the Behavior (config.h) tab.",
-          'Поведение, которого нет в QMK: NAVI пишет его в keymap.c своим кодом на C. Действует после сборки и прошивки. Собственные настройки QMK — на вкладке «Поведение (config.h)».',
+          "Behaviors QMK does not have: NAVI writes them into keymap.c as its own C code. They apply after building and flashing. QMK's own settings (config.h) are on the QMK settings tab.",
+          'Поведение, которого нет в QMK: NAVI пишет его в keymap.c своим кодом на C. Действует после сборки и прошивки. Собственные настройки QMK (config.h) — на вкладке «Настройки QMK».',
         )}
       </p>
       <section className="section">
@@ -366,39 +368,51 @@ function BehaviorTab({ project }: { project: Project }) {
 
 export function AdvancedPage({ tab }: { tab?: string }) {
   const project = useProjectStore((s) => s.project);
-  const current = ['tapdance', 'taphold', 'combos', 'overrides', 'custom', 'aliases', 'leader', 'unicode', 'navi', 'behavior'].includes(tab ?? '') ? tab! : 'tapdance';
   if (!project) return null;
-  const tabs: [string, string][] = [
-    ['tapdance', 'Tap Dance'],
-    ['taphold', t('Tap-hold', 'Тап-холд')],
-    ['combos', t('Combos', 'Комбо')],
-    ['overrides', t('Key overrides', 'Подмена сочетаний')],
-    ['custom', t('Custom keycodes', 'Свои keycodes')],
-    ['aliases', t('Aliases', 'Псевдонимы')],
-    ['leader', t('Leader key', 'Клавиша-лидер')],
-    ['unicode', t('Unicode', 'Юникод')],
-    ['navi', t('NAVI behavior', 'Поведение NAVI')],
-    ['behavior', t('Behavior (config.h)', 'Поведение (config.h)')],
+  const keys = t('Keys', 'Клавиши');
+  const codes = t('Codes', 'Коды');
+  const behavior = t('Behavior', 'Поведение');
+  const tabs: TabItem[] = [
+    { id: 'tapdance', label: 'Tap dance', group: keys },
+    { id: 'taphold', label: t('Tap-hold', 'Тап-холд'), group: keys },
+    { id: 'combos', label: t('Combos', 'Комбо'), group: keys },
+    { id: 'overrides', label: t('Key overrides', 'Подмена сочетаний'), group: keys },
+    { id: 'leader', label: t('Leader key', 'Клавиша-лидер'), group: keys },
+    { id: 'custom', label: t('Custom keycodes', 'Свои keycodes'), group: codes },
+    { id: 'aliases', label: t('Aliases', 'Псевдонимы'), group: codes },
+    { id: 'unicode', label: t('Unicode', 'Юникод'), group: codes },
+    { id: 'behavior', label: t('QMK settings', 'Настройки QMK'), group: behavior, title: t("QMK's own settings: defines NAVI writes into config.h", 'Собственные настройки QMK: define, которые NAVI пишет в config.h') },
+    { id: 'navi', label: t('NAVI additions', 'Дополнения NAVI'), group: behavior, title: t('Behaviors QMK does not have: C code NAVI generates into keymap.c', 'Поведение, которого нет в QMK: код на C, который NAVI генерирует в keymap.c') },
   ];
+  const current = tabs.some((i) => i.id === tab) ? tab! : 'tapdance';
+  const panel = (id: string) => {
+    switch (id) {
+      case 'tapdance':
+        return <TapDanceTab project={project} />;
+      case 'taphold':
+        return <TapHoldTab project={project} />;
+      case 'combos':
+        return <CombosTab project={project} />;
+      case 'overrides':
+        return <OverridesTab project={project} />;
+      case 'custom':
+        return <CustomTab project={project} />;
+      case 'aliases':
+        return <AliasesTab project={project} />;
+      case 'leader':
+        return <LeaderTab project={project} />;
+      case 'unicode':
+        return <UnicodeTab project={project} />;
+      case 'navi':
+        return <NaviBehaviorTab project={project} />;
+      case 'behavior':
+        return <BehaviorTab project={project} />;
+    }
+  };
   return (
     <div className="page">
-      <div className="tabs" role="tablist">
-        {tabs.map(([id, title]) => (
-          <a key={id} className={`tab ${current === id ? 'is-active' : ''}`} href={href({ section: 'advanced', tab: id })}>
-            {title}
-          </a>
-        ))}
-      </div>
-      {current === 'tapdance' && <TapDanceTab project={project} />}
-      {current === 'taphold' && <TapHoldTab project={project} />}
-      {current === 'combos' && <CombosTab project={project} />}
-      {current === 'overrides' && <OverridesTab project={project} />}
-      {current === 'custom' && <CustomTab project={project} />}
-      {current === 'aliases' && <AliasesTab project={project} />}
-      {current === 'leader' && <LeaderTab project={project} />}
-      {current === 'unicode' && <UnicodeTab project={project} />}
-      {current === 'navi' && <NaviBehaviorTab project={project} />}
-      {current === 'behavior' && <BehaviorTab project={project} />}
+      <Tabs idBase="advanced" label={t('Advanced', 'Расширенное')} items={tabs} current={current} href={(id) => href({ section: 'advanced', tab: id })} sticky />
+      <TabPanels idBase="advanced" ids={tabs.map((i) => i.id)} current={current} render={panel} />
     </div>
   );
 }

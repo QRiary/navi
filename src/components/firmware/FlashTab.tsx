@@ -14,10 +14,11 @@ import { useDeviceStore } from '../../store/deviceStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useQmkStore } from '../../store/qmkStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { toast } from '../../store/toastStore';
+import { toast, toastError } from '../../store/toastStore';
 import { BootloaderHelp } from '../device/BootloaderHelp';
 import { BuildLog } from './BuildLog';
 import { locale, t } from '../../i18n';
+import { Modal } from '../Modal';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
@@ -33,7 +34,8 @@ function familyName(f: number | null | undefined) {
   return known[f >>> 0] ?? `0x${(f >>> 0).toString(16)}`;
 }
 
-export function FlashTab() {
+/** `active`: the tab is shown (Firmware keeps visited tabs mounted). */
+export function FlashTab({ active = true }: { active?: boolean }) {
   const project = useProjectStore((s) => s.project);
   const firmware = useQmkStore((s) => s.firmware);
   const refreshFirmware = useQmkStore((s) => s.refreshFirmware);
@@ -41,6 +43,7 @@ export function FlashTab() {
   const scanDevices = useQmkStore((s) => s.scanDevices);
   const job = useQmkStore((s) => s.job);
   const qmkSettings = useSettingsStore((s) => s.settings.qmk);
+  const [deleting, setDeleting] = useState<FirmwareInfo | null>(null);
   const refreshDevices = useDeviceStore((s) => s.refresh);
   const [selected, setSelected] = useState<string | null>(null);
   const [polling, setPolling] = useState(false);
@@ -50,22 +53,24 @@ export function FlashTab() {
   const [backingUp, setBackingUp] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Fresh lists every time the tab is shown (it stays mounted while hidden).
   useEffect(() => {
+    if (!active) return;
     void refreshFirmware();
     void scanDevices();
-  }, [refreshFirmware, scanDevices]);
+  }, [active, refreshFirmware, scanDevices]);
   useEffect(() => {
     if (!selected && firmware[0]) setSelected(firmware[0].id);
   }, [firmware, selected]);
   useEffect(() => navi?.flash.onProgress((p) => setProgress(p)), []);
-  // While waiting for the bootloader — look every 2 seconds.
+  // While waiting for the bootloader — look every 2 seconds (paused while the tab is hidden).
   useEffect(() => {
-    if (!polling) return;
+    if (!polling || !active) return;
     pollRef.current = setInterval(() => void scanDevices(), 2000);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [polling, scanDevices]);
+  }, [polling, active, scanDevices]);
 
   if (!navi) return <p className="field-hint">{t('Flashing needs the desktop app.', 'Для прошивки нужно настольное приложение.')}</p>;
   const fw = firmware.find((f) => f.id === selected) ?? null;
@@ -151,7 +156,7 @@ export function FlashTab() {
       const size = mb(info.flash ? info.flash.end - info.flash.start : info.size);
       toast(t(`Saved: ${info.file} (${size} of flash)`, `Сохранено: ${info.file} (${size} памяти платы)`));
     } catch (err) {
-      toast((err as Error).message, 'error');
+      toastError(t('Couldn’t save the board’s firmware. Check the board is still in bootloader mode and try again.', 'Не удалось сохранить прошивку платы. Проверьте, что плата всё ещё в режиме загрузчика, и повторите.'), err);
     } finally {
       setBackingUp(null);
     }
@@ -189,7 +194,7 @@ export function FlashTab() {
                   <button className="icon-btn" aria-label={t('Save as', 'Сохранить как')} title={t('Save as…', 'Сохранить как…')} onClick={() => void navi!.firmware.export(f.id)}>
                     <Download {...ICON} />
                   </button>
-                  <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => void navi!.firmware.remove(f.id).then(refreshFirmware)}>
+                  <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => setDeleting(f)}>
                     <Trash2 {...ICON} />
                   </button>
                 </div>
@@ -291,6 +296,36 @@ export function FlashTab() {
         <BootloaderHelp />
       </div>
       {job?.kind === 'flash' && <BuildLog />}
+      {deleting && (
+        <Modal
+          title={t('Delete firmware file?', 'Удалить файл прошивки?')}
+          onClose={() => setDeleting(null)}
+          footer={
+            <>
+              <button className="btn" data-autofocus onClick={() => setDeleting(null)}>
+                {t('cancel', 'отмена')}
+              </button>
+              <button
+                className="btn btn--danger"
+                onClick={() => {
+                  const id = deleting.id;
+                  setDeleting(null);
+                  void navi!.firmware.remove(id).then(refreshFirmware);
+                }}
+              >
+                {t('delete', 'удалить')}
+              </button>
+            </>
+          }
+        >
+          <p className="field-hint">
+            {t(
+              `“${deleting.file}” is removed from disk. This can’t be undone.`,
+              `«${deleting.file}» будет удалён с диска. Это нельзя отменить.`,
+            )}
+          </p>
+        </Modal>
+      )}
     </div>
   );
 }

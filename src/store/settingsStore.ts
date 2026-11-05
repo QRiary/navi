@@ -17,7 +17,7 @@ interface SettingsState {
   /** Check and apply a new config text. Errors come in the answer, the settings do not change. */
   applyConfig: (text: string) => ConfigIssue[];
   /** Change one value in the config: setValue('theme', 'amber'). */
-  setValue: (key: string, value: string | boolean | number) => void;
+  setValue: (key: string, value: string | boolean | number | null) => void;
   reset: () => void;
 }
 

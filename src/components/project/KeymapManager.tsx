@@ -6,8 +6,8 @@ import { useState } from 'react';
 import { CopyPlus, Trash2 } from 'lucide-react';
 import { addKeymap, patchProject, removeKeymap, renameKeymap } from '../../core/project/ops';
 import { useProjectStore } from '../../store/projectStore';
-import { toast } from '../../store/toastStore';
 import { t } from '../../i18n';
+import { deletedToast } from '../../lib/undoToast';
 
 export function KeymapManager() {
   const project = useProjectStore((s) => s.project);
@@ -56,7 +56,7 @@ export function KeymapManager() {
               }
               apply((p) => removeKeymap(p, km.id), t('delete keymap', 'удаление раскладки'));
               setConfirm(false);
-              toast(t('Keymap deleted — Ctrl+Z to undo', 'Раскладка удалена — Ctrl+Z отменит'));
+              deletedToast(km.name || t('keymap', 'раскладка'));
             }}
           >
             <Trash2 size={14} strokeWidth={1.5} /> {confirm ? t('delete for sure?', 'точно удалить?') : t('delete', 'удалить')}

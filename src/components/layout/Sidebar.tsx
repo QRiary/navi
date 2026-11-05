@@ -32,11 +32,11 @@ export function Sidebar({ route }: { route: Route }) {
       <a className="brand" href={href({ section: 'keyboard' })} aria-label="NAVI">
         <Logo size="sm" />
       </a>
-      <div className="cell-label side-label">navigation</div>
+      <div className="cell-label side-label">{t('navigation', 'навигация')}</div>
       <nav className="side-nav" aria-label={t('Main navigation', 'Основная навигация')}>
         {NAV.map(({ section, label, icon: Icon }, i) => {
           const isActive = route.section === section;
-          const note = section === 'device' && (deviceStatus === 'connected' || deviceStatus === 'busy') ? 'on' : '';
+          const note = section === 'device' && (deviceStatus === 'connected' || deviceStatus === 'busy') ? t('on', 'вкл') : '';
           return (
             <a key={section} href={href({ section })} className={`side-link ${isActive ? 'is-active' : ''}`} aria-current={isActive ? 'page' : undefined} title={label()}>
               <span className="side-link-num" aria-hidden="true">
@@ -52,7 +52,7 @@ export function Sidebar({ route }: { route: Route }) {
 
       <section className="side-projects" aria-label={t('Projects', 'Проекты')}>
         <div className="side-projects-head">
-          <span className="cell-label">projects</span>
+          <span className="cell-label">{t('projects', 'проекты')}</span>
           <button className="icon-btn" aria-label={t('New project', 'Новый проект')} title={t('New project', 'Новый проект')} onClick={() => navigate({ section: 'projects', tab: 'new' })}>
             <Plus size={16} strokeWidth={1.5} />
           </button>

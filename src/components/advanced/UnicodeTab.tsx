@@ -10,6 +10,7 @@ import type { Project, UnicodeEntry } from '../../core/project/types';
 import { useProjectStore, useSpec } from '../../store/projectStore';
 import { FeatureNote, IssueList } from './common';
 import { getLanguage, t } from '../../i18n';
+import { deletedToast } from '../../lib/undoToast';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
@@ -175,7 +176,7 @@ export function UnicodeTab({ project }: { project: Project }) {
               <input className="input" value={u.name} onChange={(e) => patch(u.id, { name: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_') }, t('character name', 'имя символа'), `ucname:${u.id}`)} aria-label={t('Name', 'Имя')} />
               <CodepointInput entry={u} onChange={(cp) => patch(u.id, { codepoint: cp }, t('code point', 'код символа'))} />
               <span className="field-hint">{i < 128 ? `UP(${i}, …)` : ''}</span>
-              <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => setTable(project.unicodeMap.filter((x) => x.id !== u.id), t('delete character', 'удаление символа'))}>
+              <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => { setTable(project.unicodeMap.filter((x) => x.id !== u.id), t('delete character', 'удаление символа')); deletedToast(u.name || t('character', 'символ')); }}>
                 <Trash2 {...ICON} />
               </button>
             </div>
