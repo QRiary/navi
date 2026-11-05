@@ -12,6 +12,7 @@ import { navi } from '../../desktop/bridge';
 import { QMK_DOCS } from '../../lib/qmkDocs';
 import { href } from '../../lib/router';
 import { whyDisabled } from '../../lib/whyDisabled';
+import { issueLevelLabel } from '../../lib/issueLevel';
 import { Hint } from '../InfoTip';
 import { TabPanel, Tabs } from '../Tabs';
 import { useProjectStore } from '../../store/projectStore';
@@ -95,7 +96,7 @@ export function OwnTarget() {
       <ul className="issue-list" style={{ marginBottom: 8 }}>
         {gen.issues.map((i, n) => (
           <li key={n} className={`issue issue--${i.level}`}>
-            <span className="issue-where">{i.level === 'error' ? 'err' : 'note'}</span>
+            <span className="issue-where">{issueLevelLabel(i.level)}</span>
             {lang === 'ru' ? i.message.ru : i.message.en}
           </li>
         ))}

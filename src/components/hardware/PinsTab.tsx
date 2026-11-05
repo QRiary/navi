@@ -14,6 +14,7 @@ import { toast } from '../../store/toastStore';
 import { getLanguage, t } from '../../i18n';
 import { QMK_DOCS } from '../../lib/qmkDocs';
 import { whyDisabled } from '../../lib/whyDisabled';
+import { issueLevelLabel } from '../../lib/issueLevel';
 import { EmptyState } from '../EmptyState';
 import { Hint } from '../InfoTip';
 
@@ -329,11 +330,11 @@ export function PinsTab({ project }: { project: Project }) {
       <ul className="issue-list" style={{ marginTop: 'var(--gap)' }}>
         {issues.map((i, n) => (
           <li key={n} className={`issue issue--${i.level}`}>
-            <span className="issue-where">{i.level === 'error' ? 'err' : 'note'}</span>
+            <span className="issue-where">{issueLevelLabel(i.level)}</span>
             {lang === 'ru' ? i.message.ru : i.message.en}
           </li>
         ))}
-        {issues.length === 0 && <li className="issue issue--warning">ok</li>}
+        {issues.length === 0 && <li className="field-hint">{t('no problems', 'проблем нет')}</li>}
       </ul>
       <div className="field-row" style={{ marginTop: 'var(--gap)' }}>
         <a className="btn btn--primary" href={href({ section: 'firmware', tab: 'target' })}>

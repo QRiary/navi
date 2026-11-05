@@ -38,6 +38,7 @@ import { TabPanels, Tabs } from '../components/Tabs';
 import { EmptyState } from '../components/EmptyState';
 import { Hint } from '../components/InfoTip';
 import { whyDisabled } from '../lib/whyDisabled';
+import { issueLevelLabel } from '../lib/issueLevel';
 import { useDeviceStore } from '../store/deviceStore';
 import { useProjectStore } from '../store/projectStore';
 import { toast, toastError } from '../store/toastStore';
@@ -53,7 +54,7 @@ function Issues({ issues }: { issues: (ValidationIssue | ImportIssue)[] }) {
     <ul className="issue-list">
       {issues.slice(0, 40).map((i, n) => (
         <li key={n} className={`issue issue--${i.level}`}>
-          <span className="issue-where">{i.level === 'error' ? 'err' : 'warn'}</span>
+          <span className="issue-where">{issueLevelLabel(i.level)}</span>
           {'path' in i && i.path && <code>{i.path}</code>} {i.message}
         </li>
       ))}

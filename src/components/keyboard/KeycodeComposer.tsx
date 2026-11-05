@@ -27,7 +27,7 @@ const KIND_LABELS = (): Record<Kind, string> => ({
   layer: t('layer', 'слой'),
   'layer-mod': t('layer+mods', 'слой+моды'),
   'one-shot': t('one-shot', 'one-shot (до следующей клавиши)'),
-  'tap-dance': 'tap dance',
+  'tap-dance': t('tap dance', 'тап-дэнс'),
   unicode: t('unicode', 'юникод'),
   raw: t('expression', 'выражение'),
 });
@@ -364,7 +364,7 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
         </>
       )}
       {kind === 'tap-dance' && (
-        <select className="select" value={decoded.kind === 'tap-dance' ? decoded.index : ''} onChange={(e) => commit({ kind: 'tap-dance', index: Number(e.target.value) })} aria-label="Tap dance">
+        <select className="select" value={decoded.kind === 'tap-dance' ? decoded.index : ''} onChange={(e) => commit({ kind: 'tap-dance', index: Number(e.target.value) })} aria-label={t('Tap dance', 'Тап-дэнс')}>
           {project.tapDances.map((td) => (
             <option key={td.id} value={td.index}>
               TD({td.name})
@@ -401,7 +401,7 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
           }}
         >
           <input value={raw} onChange={(e) => setRaw(e.target.value)} spellCheck={false} aria-label={t('QMK expression', 'Выражение QMK')} />
-          <span className="expr-result">enter</span>
+          <span className="expr-result">{t('Enter to apply', 'Enter — применить')}</span>
         </form>
       )}
       {error && (

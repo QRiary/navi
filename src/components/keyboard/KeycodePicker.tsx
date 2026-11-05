@@ -72,10 +72,11 @@ export function KeycodePicker({ currentKeycode, onPick }: { currentKeycode: numb
   };
 
   if (!project) return null;
+  // the readable name shows; the QMK expression and the raw value go to the tooltip
   const parsedName = (v: number) => {
     const qmk = toQmk(spec, v);
     const n = labelCtx ? friendlyName(spec, v, labelCtx) : null;
-    return n && n.text !== n.qmk ? `${qmk} · ${n.text}` : qmk;
+    return { text: n ? n.text : qmk, title: `${qmk} · 0x${v.toString(16).toUpperCase().padStart(4, '0')}` };
   };
   const title =(c: (typeof CATEGORIES)[number]) => (getLanguage() === 'ru' ? c.title.ru : c.title.en);
 
@@ -130,8 +131,8 @@ export function KeycodePicker({ currentKeycode, onPick }: { currentKeycode: numb
               spellCheck={false}
             />
             {parsed && (
-              <span className="expr-result">
-                {'value' in parsed ? `0x${parsed.value.toString(16).toUpperCase().padStart(4, '0')} → ${parsedName(parsed.value)}` : parsed.error}
+              <span className="expr-result" title={'value' in parsed ? parsedName(parsed.value).title : undefined}>
+                {'value' in parsed ? `→ ${parsedName(parsed.value).text}` : parsed.error}
               </span>
             )}
           </form>

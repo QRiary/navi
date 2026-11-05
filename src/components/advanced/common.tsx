@@ -6,6 +6,8 @@ import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Keyboard, LayoutGrid } from 'lucide-react';
 import { decode, tryParseQmk } from '../../core/keycodes/codec';
 import { friendlyName, type FriendlyName } from '../../core/keycodes/friendly';
+import type { LabelContext } from '../../core/keycodes/labels';
+import type { KeycodeSpec } from '../../core/keycodes/spec';
 import { selectedKeycode } from '../../lib/keymapActions';
 import { useEditorStore } from '../../store/editorStore';
 import { KeycodePopover } from '../keyboard/KeycodePopover';
@@ -32,19 +34,15 @@ export function KeycodeField({ value, onChange, label, fromKeyboard = true }: { 
   const qmk = name?.qmk ?? '';
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [picking, setPicking] = useState(false);
-  const pickBtn = useRef<HTMLButtonElement>(null);
-  const closePicker = useCallback(() => setPicking(false), []);
   const selection = useEditorStore((s) => s.selection);
   const layer = useEditorStore((s) => s.layer);
   // Recomputed when the selection or the shown layer changes (the store getter reads them).
   const selected = useMemo(() => (fromKeyboard ? selectedKeycode() : null), [fromKeyboard, selection, layer, labelCtx]);
   const shown = text ?? (value ? qmk : '');
-  const typed = text !== null && text.trim() ? tryParseQmk(spec, text) : null;
   const preview = (() => {
     if (error) return error;
-    if (typed) return 'value' in typed && labelCtx ? meaning(friendlyName(spec, typed.value, labelCtx), typed.value) : '';
-    return value && name ? meaning(name, value) : '';
+    if (text !== null) return typedMeaning(spec, labelCtx, text);
+    return value && name ? keyMeaning(spec, name, value) : '';
   })();
   return (
     <span className="kc-field">
@@ -71,17 +69,7 @@ export function KeycodeField({ value, onChange, label, fromKeyboard = true }: { 
           </span>
         )}
       </form>
-      <button
-        ref={pickBtn}
-        type="button"
-        className="icon-btn"
-        aria-label={t('Pick from the catalog', 'Выбрать из каталога')}
-        title={t('Pick from the catalog', 'Выбрать из каталога')}
-        aria-expanded={picking}
-        onClick={() => setPicking((p) => !p)}
-      >
-        <LayoutGrid size={14} strokeWidth={1.5} />
-      </button>
+      <CatalogButton current={value} onPick={set} />
       {fromKeyboard && (
         <button
           type="button"
@@ -101,23 +89,8 @@ export function KeycodeField({ value, onChange, label, fromKeyboard = true }: { 
           <Keyboard size={14} strokeWidth={1.5} />
         </button>
       )}
-      {picking && (
-        <KeycodePopover
-          anchor={pickBtn}
-          current={value}
-          onClose={closePicker}
-          onPick={(v) => {
-            set(v);
-            setPicking(false);
-          }}
-        />
-      )}
     </span>
   );
-  function meaning(n: FriendlyName, v: number): string {
-    if (n.text !== n.qmk) return n.text;
-    return decode(spec, v).kind === 'unknown' ? t('unknown', 'неизвестно') : '';
-  }
   function set(v: number) {
     onChange(v);
     setText(null);
@@ -139,6 +112,52 @@ export function KeycodeField({ value, onChange, label, fromKeyboard = true }: { 
       setError(null);
     }
   }
+}
+
+/** What a keycode means, for the preview next to a QMK box: its readable name, “unknown”, or nothing when the name is the expression itself. */
+function keyMeaning(spec: KeycodeSpec, n: FriendlyName, v: number): string {
+  if (n.text !== n.qmk) return n.text;
+  return decode(spec, v).kind === 'unknown' ? t('unknown', 'неизвестно') : '';
+}
+
+/** The preview of what is being typed into a QMK box (a parse error shows only once it is committed). */
+function typedMeaning(spec: KeycodeSpec, labelCtx: LabelContext | null, text: string): string {
+  if (!text.trim() || !labelCtx) return '';
+  const r = tryParseQmk(spec, text);
+  return 'value' in r ? keyMeaning(spec, friendlyName(spec, r.value, labelCtx), r.value) : '';
+}
+
+/** The catalog button of a keycode box: opens the keycode picker under itself; a pick calls `onPick` and closes it. */
+function CatalogButton({ current, onPick, blocked }: { current: number; onPick: (v: number) => void; blocked?: string | false }) {
+  const [picking, setPicking] = useState(false);
+  const pickBtn = useRef<HTMLButtonElement>(null);
+  const closePicker = useCallback(() => setPicking(false), []);
+  return (
+    <>
+      <button
+        ref={pickBtn}
+        type="button"
+        className="icon-btn"
+        aria-label={t('Pick from the catalog', 'Выбрать из каталога')}
+        aria-expanded={picking}
+        {...whyDisabled(blocked, t('Pick from the catalog', 'Выбрать из каталога'))}
+        onClick={() => setPicking((p) => !p)}
+      >
+        <LayoutGrid size={14} strokeWidth={1.5} />
+      </button>
+      {picking && (
+        <KeycodePopover
+          anchor={pickBtn}
+          current={current}
+          onClose={closePicker}
+          onPick={(v) => {
+            onPick(v);
+            setPicking(false);
+          }}
+        />
+      )}
+    </>
+  );
 }
 
 /** One item of a chip list: a key (shown as its QMK name) or a named key list. */
@@ -176,6 +195,7 @@ export function KeyChips({
     setText('');
     setError(null);
   };
+  const preview = error ?? typedMeaning(spec, labelCtx, text);
   return (
     <div className="key-chips">
       {items.map((c, i) => (
@@ -206,6 +226,12 @@ export function KeyChips({
           onChange={(e) => setText(e.target.value)}
           onBlur={add}
         />
+        {preview && (
+          <span className="expr-result" title={preview}>
+            {preview}
+          </span>
+        )}
+        <CatalogButton current={0} onPick={onAdd} blocked={full} />
       </form>
       {extra}
     </div>
