@@ -14,6 +14,8 @@ import type { KeyLabel } from '../../core/keycodes/labels';
 
 export interface KeyView {
   label: KeyLabel;
+  /** Readable name for the tooltip (core/keycodes/friendly.ts): "Space · hold Num". */
+  name?: string;
   /** Label “from under” a transparent key (from a lower layer). */
   ghost?: string;
   changed?: boolean;
@@ -27,6 +29,8 @@ export interface KeyView {
 export interface EncoderView {
   cw: KeyLabel | null;
   ccw: KeyLabel | null;
+  cwName?: string;
+  ccwName?: string;
   selected?: 'cw' | 'ccw' | null;
 }
 
@@ -362,7 +366,7 @@ function KeyCap({
   const mainSize = label.main.length <= 2 ? S * 0.3 : label.main.length <= 5 ? S * 0.21 : S * 0.17;
   return (
     <g className={cls} transform={k.r ? `rotate(${k.r} ${rx} ${ry})` : undefined} onDoubleClick={onDoubleClick} data-key={k.id}>
-      <title>{`${label.qmk}${label.description && label.description !== label.qmk ? ` — ${label.description}` : ''}${k.matrix ? `  [${k.matrix[0]},${k.matrix[1]}]` : ''}`}</title>
+      <title>{keyTooltip(view, k)}</title>
       {k.shape === 'circle' ? (
         <ellipse className="kb-key-shape" cx={cx} cy={y + h / 2} rx={w / 2 - gap} ry={h / 2 - gap} />
       ) : (
@@ -415,7 +419,7 @@ function EncoderKnob({ e, S, view, onClick, hasPressKey }: { e: EncoderGeom; S: 
   const cwBox = stacked ? { x: ccwBox.x, y: cy + S * 0.03 } : { x: cx + r + S * 0.1, y: cy - S * 0.22 };
   return (
     <g className={`kb-encoder ${e.approximate ? 'is-approx' : ''}`} data-encoder={e.index}>
-      <title>{`Encoder ${e.index}: ↺ ${view?.ccw?.qmk ?? '—'}  ↻ ${view?.cw?.qmk ?? '—'}`}</title>
+      <title>{`Encoder ${e.index}: ↺ ${dirText(view?.ccwName, view?.ccw)}  ↻ ${dirText(view?.cwName, view?.cw)}`}</title>
       <circle className="kb-encoder-ring" cx={cx} cy={cy} r={r} />
       {!hasPressKey && (
         <>
@@ -454,3 +458,18 @@ function EncoderKnob({ e, S, view, onClick, hasPressKey }: { e: EncoderGeom; S: 
 }
 
 export { keyCenter };
+
+/** Key tooltip: what it does first (the readable name, the description), then the QMK code and the matrix position. */
+function keyTooltip(view: KeyView, k: KeyGeom): string {
+  const { label, name } = view;
+  const head = name && name !== label.qmk ? name : '';
+  const desc = label.description && label.description !== label.qmk && label.description !== head ? label.description : '';
+  const what = [head, desc].filter(Boolean).join(' — ');
+  const code = `${label.qmk}${k.matrix ? `  [${k.matrix[0]},${k.matrix[1]}]` : ''}`;
+  return what ? `${what}\n${code}` : code;
+}
+
+function dirText(name: string | undefined, label: KeyLabel | null | undefined): string {
+  if (!label) return '—';
+  return name && name !== label.qmk ? `${name} (${label.qmk})` : label.qmk;
+}

@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { buildCatalog, CATEGORIES, searchCatalog, type CategoryId } from '../../core/keycodes/catalog';
 import { tryParseQmk, toQmk } from '../../core/keycodes/codec';
+import { friendlyName } from '../../core/keycodes/friendly';
 import { keycodeNeeds, needStatus } from '../../core/keycodes/requirements';
 import { FEATURE_BY_ID, type FeatureState } from '../../core/features/registry';
 import { catalogContext, useLabelContext } from '../../lib/projectContext';
@@ -18,7 +19,8 @@ import { useProjectStore, useSpec } from '../../store/projectStore';
 import { t, getLanguage } from '../../i18n';
 import { KEYCODE_DRAG_TYPE } from './KeyboardCanvas';
 
-export function KeycodePicker({ currentKeycode }: { currentKeycode: number | null }) {
+/** `onPick` given: a pick goes to the caller (a keycode field's popover) instead of the selected keys. */
+export function KeycodePicker({ currentKeycode, onPick }: { currentKeycode: number | null; onPick?: (value: number) => void }) {
   const project = useProjectStore((s) => s.project);
   const spec = useSpec();
   const labelCtx = useLabelContext();
@@ -64,11 +66,18 @@ export function KeycodePicker({ currentKeycode }: { currentKeycode: number | nul
 
   const parsed = expr.trim() ? tryParseQmk(spec, expr, { unicode: project?.firmware.unicode }) : null;
   const applyExpr = () => {
-    if (parsed && 'value' in parsed && assignToSelection(parsed.value)) setExpr('');
+    if (!parsed || !('value' in parsed)) return;
+    if (onPick) onPick(parsed.value);
+    else if (assignToSelection(parsed.value)) setExpr('');
   };
 
   if (!project) return null;
-  const title = (c: (typeof CATEGORIES)[number]) => (getLanguage() === 'ru' ? c.title.ru : c.title.en);
+  const parsedName = (v: number) => {
+    const qmk = toQmk(spec, v);
+    const n = labelCtx ? friendlyName(spec, v, labelCtx) : null;
+    return n && n.text !== n.qmk ? `${qmk} · ${n.text}` : qmk;
+  };
+  const title =(c: (typeof CATEGORIES)[number]) => (getLanguage() === 'ru' ? c.title.ru : c.title.en);
 
   return (
     <div className="picker">
@@ -122,7 +131,7 @@ export function KeycodePicker({ currentKeycode }: { currentKeycode: number | nul
             />
             {parsed && (
               <span className="expr-result">
-                {'value' in parsed ? `0x${parsed.value.toString(16).toUpperCase().padStart(4, '0')} → ${toQmk(spec, parsed.value)}` : parsed.error}
+                {'value' in parsed ? `0x${parsed.value.toString(16).toUpperCase().padStart(4, '0')} → ${parsedName(parsed.value)}` : parsed.error}
               </span>
             )}
           </form>
@@ -143,7 +152,7 @@ export function KeycodePicker({ currentKeycode }: { currentKeycode: number | nul
                   e.dataTransfer.setData('text/plain', it.name);
                   e.dataTransfer.effectAllowed = 'copy';
                 }}
-                onClick={() => assignToSelection(it.value)}
+                onClick={() => (onPick ? onPick(it.value) : assignToSelection(it.value))}
               >
                 <span className="kc-tile-label">{it.label}</span>
                 <span className="kc-tile-name">{it.name}</span>

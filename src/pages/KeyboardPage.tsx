@@ -11,6 +11,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { Maximize2, Minus, Plus } from 'lucide-react';
 import { KeyboardCanvas, type KeyView } from '../components/keyboard/KeyboardCanvas';
 import { KeycodePicker } from '../components/keyboard/KeycodePicker';
+import { friendlyName } from '../core/keycodes/friendly';
 import { keyLabel } from '../core/keycodes/labels';
 import { keycodeNeeds, needStatus } from '../core/keycodes/requirements';
 import { effectiveKeycode, getKeycode } from '../core/project/ops';
@@ -113,6 +114,7 @@ export function KeyboardPage() {
       else if (editor.compare === 'layer') changed = keymap.layers[editor.compareLayer]?.keys[idx] !== keymap.layers[layer].keys[idx];
       return {
         label,
+        name: friendlyName(spec, value, labelCtx).text,
         ghost,
         dim,
         changed,
@@ -131,6 +133,8 @@ export function KeyboardPage() {
       return {
         cw: act ? keyLabel(spec, act.cw, labelCtx) : null,
         ccw: act ? keyLabel(spec, act.ccw, labelCtx) : null,
+        cwName: act ? friendlyName(spec, act.cw, labelCtx).text : undefined,
+        ccwName: act ? friendlyName(spec, act.ccw, labelCtx).text : undefined,
         selected: editor.encoderTarget?.index === e.index ? editor.encoderTarget.dir : null,
       };
     },

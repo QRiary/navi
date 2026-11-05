@@ -6,6 +6,7 @@
 import { useMemo, useState } from 'react';
 import { Copy } from 'lucide-react';
 import { tryParseQmk } from '../core/keycodes/codec';
+import { friendlyName } from '../core/keycodes/friendly';
 import { keyLabel } from '../core/keycodes/labels';
 import { featureStatus } from '../core/features/registry';
 import { copyEncoderToLayers, setEncoder, resizeEncoders } from '../core/project/ops';
@@ -39,6 +40,7 @@ function CodeCell({ value, onSet }: { value: number; onSet: (v: number) => void 
   const [error, setError] = useState<string | null>(null);
   if (!labelCtx) return null;
   const l = keyLabel(spec, value, labelCtx);
+  const name = friendlyName(spec, value, labelCtx);
   if (editing !== null) {
     return (
       <form
@@ -58,9 +60,9 @@ function CodeCell({ value, onSet }: { value: number; onSet: (v: number) => void 
     );
   }
   return (
-    <button className="kc-tile" style={{ minHeight: 34, cursor: 'text' }} onClick={() => setEditing(l.qmk)} title={l.description ?? l.qmk}>
+    <button className="kc-tile" style={{ minHeight: 34, cursor: 'text' }} onClick={() => setEditing(l.qmk)} title={`${l.qmk}${l.description ? `\n${l.description}` : ''}`}>
       <span className="kc-tile-label">{l.kind === 'transparent' ? '▽' : l.main || '∅'}</span>
-      <span className="kc-tile-name">{l.qmk}</span>
+      <span className="kc-tile-name">{name.text}</span>
     </button>
   );
 }
@@ -218,9 +220,9 @@ export function EncodersPage() {
             return (
               <div key={e} className="row" style={{ ['--row-cols' as string]: '60px minmax(0,1fr) auto' }}>
                 <span className="num">E{e}</span>
-                <span className="field-hint">
+                <span className="field-hint" title={pos ? friendlyName(spec, keymap.layers[0].keys[pos[0] * cols + pos[1]], labelCtx).qmk : undefined}>
                   {pos
-                    ? `${t('matrix', 'матрица')} [${pos[0]},${pos[1]}] · L0: ${keyLabel(spec, keymap.layers[0].keys[pos[0] * cols + pos[1]], labelCtx).qmk}`
+                    ? `${t('matrix', 'матрица')} [${pos[0]},${pos[1]}] · L0: ${friendlyName(spec, keymap.layers[0].keys[pos[0] * cols + pos[1]], labelCtx).text}`
                     : t('The press is not linked to a matrix position (unknown or no button). Link it in “Hardware → geometry”.', 'Нажатие не связано с позицией матрицы (неизвестно или кнопки нет). Свяжите в «Железо → геометрия».')}
                 </span>
                 {pos && (

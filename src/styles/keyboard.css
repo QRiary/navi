@@ -613,6 +613,48 @@
   color: var(--danger-color);
 }
 
+/* Keycode field: the QMK box, what it means, the catalog and "from the keyboard" buttons */
+.kc-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.kc-field .expr-input .expr-result {
+  overflow: hidden;
+  max-width: 180px;
+  text-overflow: ellipsis;
+}
+
+.kc-field .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.kc-popover {
+  position: fixed;
+  z-index: 310;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  border: var(--panel-border-width) solid var(--text-label);
+  background: var(--panel-background);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+/* A raw QMK expression under a readable name (Key inspector, write plan, diff) */
+.qmk-sub {
+  display: block;
+  color: var(--text-label);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+}
+
+.qmk-sub--inline {
+  display: inline;
+  margin-left: 6px;
+}
+
 /* ── Key chips: keys and key lists as compact chips, a field at the end adds one ── */
 .key-chips {
   display: flex;
@@ -886,6 +928,19 @@
 
 .layer-stack-row .dim {
   color: var(--text-label);
+}
+
+.layer-stack-row > span:nth-child(2) {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.big-keycode-text .big-keycode-name {
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 
 .status-chip {

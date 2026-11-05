@@ -10,6 +10,7 @@ import { LayoutPreview } from '../components/keyboard/LayoutPreview';
 import { KeymapManager } from '../components/project/KeymapManager';
 import { LayerKeysOnTopRow } from '../components/advanced/LayerKeysOnTop';
 import { decode } from '../core/keycodes/codec';
+import { friendlyName } from '../core/keycodes/friendly';
 import { keyLabel } from '../core/keycodes/labels';
 import { KC_NO, KC_TRNS } from '../core/project/factory';
 import { compareLayers, copyLayerKeys, duplicateLayer, fillLayer, insertLayer, moveLayer, removeLayer, renameLayer, setDefaultLayer, setLayerColor, setLayerCName } from '../core/project/ops';
@@ -38,7 +39,7 @@ export function LayersPage() {
 
   /** Which keys lead to each layer. */
   const reach = useMemo(() => {
-    const map = new Map<number, { from: number; qmk: string }[]>();
+    const map = new Map<number, { from: number; text: string; qmk: string }[]>();
     if (!active || !labelCtx) return map;
     active.keymap.layers.forEach((l, li) =>
       l.keys.forEach((v) => {
@@ -46,7 +47,7 @@ export function LayersPage() {
         const target = d.kind === 'layer' || d.kind === 'layer-tap' || d.kind === 'layer-mod' ? d.layer : null;
         if (target === null) return;
         if (!map.has(target)) map.set(target, []);
-        map.get(target)!.push({ from: li, qmk: keyLabel(spec, v, labelCtx).qmk });
+        map.get(target)!.push({ from: li, ...friendlyName(spec, v, labelCtx) });
       }),
     );
     return map;
@@ -128,9 +129,9 @@ export function LayersPage() {
                       </button>
                     ))}
                   </div>
-                  <span className="field-hint">
+                  <span className="field-hint" title={refs.length ? [...new Set(refs.map((r) => `L${r.from}: ${r.qmk}`))].join('\n') : undefined}>
                     {refs.length
-                      ? `${t('reached by', 'вход')}: ${[...new Set(refs.map((r) => `${r.qmk} (L${r.from})`))].slice(0, 6).join(', ')}`
+                      ? `${t('reached by', 'вход')}: ${[...new Set(refs.map((r) => `${r.text} (L${r.from})`))].slice(0, 6).join(', ')}`
                       : i === keymap.defaultLayer
                         ? t('always active as the base layer', 'всегда включён как базовый')
                         : t('⚠ no key leads to this layer', '⚠ ни одна клавиша не ведёт на этот слой')}

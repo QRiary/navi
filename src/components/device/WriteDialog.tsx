@@ -4,7 +4,8 @@
  */
 import { useMemo, useState } from 'react';
 import { X } from 'lucide-react';
-import { keyLabel } from '../../core/keycodes/labels';
+import { friendlyName } from '../../core/keycodes/friendly';
+import { KeyName } from '../KeyName';
 import { planWrite, type ApplyResult } from '../../core/via/sync';
 import { activeKeymap } from '../../core/project/ops';
 import { hardwareFacts } from '../../lib/hardwareFacts';
@@ -89,12 +90,12 @@ export function WriteDialog({ onClose }: { onClose: () => void }) {
                 <div className="diff" style={{ maxHeight: 260 }}>
                   {plan.keys.map((k, i) => (
                     <div key={`k${i}`}>
-                      L{k.layer} [{k.row},{k.col}]  <span className="d-del">{keyLabel(spec, k.before, labelCtx).qmk}</span> → <span className="d-add">{keyLabel(spec, k.after, labelCtx).qmk}</span>
+                      L{k.layer} [{k.row},{k.col}]  <KeyName className="d-del" name={friendlyName(spec, k.before, labelCtx)} /> → <KeyName className="d-add" name={friendlyName(spec, k.after, labelCtx)} />
                     </div>
                   ))}
                   {plan.encoders.map((e, i) => (
                     <div key={`e${i}`}>
-                      L{e.layer} E{e.encoder} {e.clockwise ? '↻' : '↺'}  <span className="d-del">{keyLabel(spec, e.before, labelCtx).qmk}</span> → <span className="d-add">{keyLabel(spec, e.after, labelCtx).qmk}</span>
+                      L{e.layer} E{e.encoder} {e.clockwise ? '↻' : '↺'}  <KeyName className="d-del" name={friendlyName(spec, e.before, labelCtx)} /> → <KeyName className="d-add" name={friendlyName(spec, e.after, labelCtx)} />
                     </div>
                   ))}
                 </div>

@@ -31,6 +31,7 @@ export function labelContext(project: Project, spec: KeycodeSpec, settings: { os
       const name = km.layers[l]?.name;
       return name && name.length <= 6 ? name : undefined;
     },
+    layerTitle: (l) => km.layers[l]?.name || undefined,
     tapDanceName: (i) => project.tapDances.find((t) => t.index === i)?.name,
     macroName: (i) => {
       const m = project.macros.find((x) => x.index === i);
