@@ -113,21 +113,34 @@ describe('key aliases on keys', () => {
 });
 
 describe('key aliases in the generated C', () => {
-  it('own pipeline: #define in navi.h after the enums; keymap.c keeps the plain keycodes', () => {
+  it('own pipeline: #define in navi.h after the enums; keymap.c names the keys by their aliases', () => {
     const p = withAliases([alias('Copy', 'C(KC_C)'), alias('Nav bksp', 'LT(1, KC_BSPC)')], true);
     const h = file(p, 'navi.h').text;
     const c = file(p, 'keymap.c').text;
     expect(h).toContain('#define NV_COPY LCTL(KC_C)\n#define NV_NAV_BKSP LT(L_LAYER_1, KC_BSPC)');
     expect(h.indexOf('#define NV_COPY')).toBeGreaterThan(h.indexOf('enum navi_layers'));
-    expect(c).not.toContain('NV_');
-    expect(c).toContain('LCTL(KC_C)');
+    expect(c).toContain('NV_COPY');
+    expect(c).toContain('NV_NAV_BKSP');
+    expect(c).not.toContain('LCTL(KC_C)');
+    expect(c).not.toContain('LT(L_LAYER_1, KC_BSPC)');
   });
 
-  it('without own pipeline: #define in keymap.c, before the keymap', () => {
+  it('without own pipeline: #define in keymap.c, before the keymap, which uses the alias', () => {
     const p = withAliases([alias('Copy', 'C(KC_C)')]);
     const c = file(p, 'keymap.c').text;
     expect(c).toContain('#define NV_COPY LCTL(KC_C)');
     expect(c.indexOf('#define NV_COPY')).toBeLessThan(c.indexOf('const uint16_t PROGMEM keymaps'));
+    expect(c.split('LCTL(KC_C)')).toHaveLength(2); // only in the #define
+    expect(c.lastIndexOf('NV_COPY')).toBeGreaterThan(c.indexOf('const uint16_t PROGMEM keymaps'));
+  });
+
+  it('aliases are used outside the keymap too (key overrides); a second alias of a key is defined but unused', () => {
+    const p0 = withAliases([alias('Copy', 'C(KC_C)'), alias('Copy 2', 'C(KC_C)')]);
+    const p: Project = { ...p0, keyOverrides: [{ id: 'o', name: 'ko_copy', mods: 0x02, trigger: q('KC_A'), replacement: q('C(KC_C)') }] };
+    const c = file(p, 'keymap.c').text;
+    expect(c).toContain('#define NV_COPY_2 LCTL(KC_C)');
+    expect(c).toMatch(/ko_make_basic\([^)]*, KC_A, NV_COPY\)/);
+    expect(c.split('NV_COPY_2')).toHaveLength(2);
   });
 
   it('an alias with an error is reported and not written', () => {
