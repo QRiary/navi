@@ -15,6 +15,7 @@ import { useQmkStore } from '../../store/qmkStore';
 import { toast } from '../../store/toastStore';
 import { getLanguage, t } from '../../i18n';
 import { CustomLines } from './CustomLines';
+import { Modal } from '../Modal';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
@@ -201,35 +202,34 @@ export function FilesTab() {
         </ul>
       )}
       {confirm && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true">
-          <div className="modal">
-            <div className="modal-head">
-              <h2>{t('write keymap files', 'запись файлов keymap')}</h2>
-            </div>
-            <div className="modal-body">
-              <p className="field-hint">
-                {t('These files will be written to', 'Будут записаны файлы в')} <code>{keymapSources?.dir}</code>:
-              </p>
-              <ul className="steps-list">
-                {changedFiles.map((f) => (
-                  <li key={f.name}>
-                    <strong>{f.name}</strong> — {keymapSources?.files.some((x) => x.name === f.name) ? t('replaced (old copy goes to backups)', 'заменяется (старая копия — в резервную папку)') : t('new file', 'новый файл')}
-                  </li>
-                ))}
-              </ul>
-              {pipelineOn && <p className="field-hint">{t("rules.mk and config.h are yours: NAVI doesn't touch them.", 'rules.mk и config.h ваши: NAVI их не трогает.')}</p>}
-              <p className="field-hint">{t('Other files in the folder are not touched.', 'Другие файлы в папке не трогаются.')}</p>
-            </div>
-            <div className="modal-foot">
+        <Modal
+          title={t('write keymap files', 'запись файлов keymap')}
+          onClose={() => setConfirm(false)}
+          busy={writing}
+          footer={
+            <>
               <button className="btn" onClick={() => setConfirm(false)} disabled={writing}>
                 {t('cancel', 'отмена')}
               </button>
               <button className="btn btn--primary" onClick={() => void write()} disabled={writing}>
                 {writing ? t('writing…', 'запись…') : t('write', 'записать')}
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p className="field-hint">
+            {t('These files will be written to', 'Будут записаны файлы в')} <code>{keymapSources?.dir}</code>:
+          </p>
+          <ul className="steps-list">
+            {changedFiles.map((f) => (
+              <li key={f.name}>
+                <strong>{f.name}</strong> — {keymapSources?.files.some((x) => x.name === f.name) ? t('replaced (old copy goes to backups)', 'заменяется (старая копия — в резервную папку)') : t('new file', 'новый файл')}
+              </li>
+            ))}
+          </ul>
+          {pipelineOn && <p className="field-hint">{t("rules.mk and config.h are yours: NAVI doesn't touch them.", 'rules.mk и config.h ваши: NAVI их не трогает.')}</p>}
+          <p className="field-hint">{t('Other files in the folder are not touched.', 'Другие файлы в папке не трогаются.')}</p>
+        </Modal>
       )}
     </div>
   );

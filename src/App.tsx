@@ -1,7 +1,8 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { EffectsOverlay } from './components/EffectsOverlay';
 import { Toasts } from './components/Toasts';
 import { LinkConflictDialog } from './components/project/LinkConflictDialog';
+import { CloseDialog } from './components/project/CloseDialog';
 import { PanelResizer } from './components/PanelResizer';
 import { Deck } from './components/layout/Deck';
 import { Sidebar } from './components/layout/Sidebar';
@@ -24,7 +25,7 @@ import { DevicePage } from './pages/DevicePage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { setLanguage, t } from './i18n';
-import { isDirty, lastProjectId, useProjectStore } from './store/projectStore';
+import { lastProjectId, useProjectStore } from './store/projectStore';
 import { useDeviceStore } from './store/deviceStore';
 import { useSettingsStore } from './store/settingsStore';
 import { applyTheme } from './theme/applyTheme';
@@ -107,19 +108,6 @@ export function App() {
     });
   }, [projectDevice]);
 
-  // Unsaved changes → ask when the window closes (main.cjs: will-prevent-unload).
-  const saved = useProjectStore((s) => s.saved);
-  const dirty = useMemo(() => isDirty({ project, saved }), [project, saved]);
-  useEffect(() => {
-    if (!dirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [dirty]);
-
   const needsProject = NEEDS_PROJECT.has(route.section) && !project;
   const fill = FILL.has(route.section) && !needsProject;
 
@@ -167,6 +155,7 @@ export function App() {
       {settings.layout.inspector && <PanelResizer side="right" />}
       <Deck />
       <LinkConflictDialog />
+      <CloseDialog />
       <Toasts />
       <EffectsOverlay />
     </div>

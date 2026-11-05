@@ -386,14 +386,25 @@ export function useSpec(): KeycodeSpec {
 }
 
 /** Save (Ctrl+S, the save button) and say what happened to the linked file. */
-export async function saveProject(): Promise<void> {
+/** Writes the draft right away instead of after the usual delay (the window is about to close). */
+export async function flushDraft(): Promise<void> {
+  if (draftTimer) clearTimeout(draftTimer);
+  draftTimer = null;
+  const { project, saved } = useProjectStore.getState();
+  if (project && isDirty({ project, saved })) await projectRepo.saveDraft(project.id, serializeProject(project));
+}
+
+/** Save with a toast for the outcome; the result, or null when saving failed. */
+export async function saveProject(): Promise<SaveResult | null> {
   try {
     const result = await useProjectStore.getState().save();
     if (result === 'saved') toast(t('Project saved', 'Проект сохранён'));
     else if (result === 'file-missing') toast(t('Saved in NAVI, but the linked file is not found: relink or unlink it in Projects → current', 'Сохранено в NAVI, но связанный файл не найден: перепривяжите или отвяжите его в «Проекты → текущий»'), 'error');
     else toast(t('Saved in NAVI. The linked file changed outside NAVI: choose which version to keep', 'Сохранено в NAVI. Связанный файл изменился вне NAVI: выберите, какую версию оставить'));
+    return result;
   } catch (err) {
     toast((err as Error).message, 'error');
+    return null;
   }
 }
 

@@ -71,7 +71,7 @@ export function KeycodePicker({ currentKeycode }: { currentKeycode: number | nul
   const title = (c: (typeof CATEGORIES)[number]) => (getLanguage() === 'ru' ? c.title.ru : c.title.en);
 
   return (
-    <div className="picker">
+    <div className="picker" data-key-shortcuts="">
       <nav className="picker-cats" aria-label={t('Keycode categories', 'Категории keycodes')}>
         {CATEGORIES.filter((c) => (counts.get(c.id) ?? 0) > 0).map((c) => (
           <button

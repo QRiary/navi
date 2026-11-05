@@ -168,6 +168,11 @@ export interface NaviBridge {
   saveFile(opts: { name: string; text: string; filters?: { name: string; extensions: string[] }[] }): Promise<string | null>;
   openFile(opts: { filters?: { name: string; extensions: string[] }[] }): Promise<{ name: string; path: string; text: string } | null>;
   probeResult(result: unknown): Promise<void>;
+  /** Tells the main process the interface language (context menu, fallback close box) and unsaved state (electron/closeGuard.cjs). */
+  reportUiState(update: { language?: 'en' | 'ru'; dirty?: boolean }): Promise<void>;
+  /** The window is being closed with unsaved changes: show the dialog, answer 'shown' at once, then 'close' or 'stay'. */
+  onCloseRequest(cb: () => void): () => void;
+  answerClose(choice: 'shown' | 'close' | 'stay'): Promise<void>;
   projects: {
     list(): Promise<StoredSummary[]>;
     read(id: string): Promise<{ saved: string | null; draft: string | null }>;
