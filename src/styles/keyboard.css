@@ -733,6 +733,32 @@
   border-color: var(--danger-color);
 }
 
+/* The "+ key" box: the box, what the typed keycode means (like KeycodeField's), the catalog button */
+.key-chip-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.key-chip-add .expr-result {
+  overflow: hidden;
+  max-width: 180px;
+  color: var(--text-label);
+  font-size: var(--fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.key-chip-add.is-error .expr-result {
+  color: var(--danger-color);
+}
+
+.key-chip-add .icon-btn {
+  width: 24px;
+  height: 24px;
+}
+
 /* A line under a row (tap-hold: the hold keys): label, then the chips using the full width. */
 .row-sub {
   display: flex;

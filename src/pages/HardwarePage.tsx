@@ -32,6 +32,7 @@ import { getLanguage, locale, t } from '../i18n';
 import { deletedToast } from '../lib/undoToast';
 import { QMK_DOCS } from '../lib/qmkDocs';
 import { whyDisabled } from '../lib/whyDisabled';
+import { issueLevelLabel } from '../lib/issueLevel';
 import { Hint } from '../components/InfoTip';
 import { PinsTab } from '../components/hardware/PinsTab';
 
@@ -311,7 +312,7 @@ function GeometryEditor({ visible }: { visible: boolean }) {
         <div style={{ padding: '8px var(--pad)', borderTop: 'var(--border)', maxHeight: 90, overflowY: 'auto' }}>
           {issues.slice(0, 6).map((i, n) => (
             <div key={n} className={`issue issue--${i.level}`} style={{ marginBottom: 2 }}>
-              <span className="issue-where">{i.level}</span>
+              <span className="issue-where">{issueLevelLabel(i.level)}</span>
               {getLanguage() === 'ru' ? i.message.ru : i.message.en}
             </div>
           ))}

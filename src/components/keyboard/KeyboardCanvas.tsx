@@ -11,6 +11,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { boxFromPoints, geometryBounds, hitKey, keyCenter, keysInBox, knobKey, type Box, type Point } from '../../core/layout/geometry';
 import type { EncoderGeom, Geometry, KeyGeom } from '../../core/project/types';
 import type { KeyLabel } from '../../core/keycodes/labels';
+import { fitLabel } from './fitLabel';
 
 export interface KeyView {
   label: KeyLabel;
@@ -314,6 +315,12 @@ function trimLabel(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
+/** Main label sizes to try, largest first: short labels start as big as before, any label may shrink to the floor (S × 0.17, the old smallest). */
+function capSizes(text: string, S: number): number[] {
+  const len = Array.from(text).length;
+  return len <= 2 ? [S * 0.3, S * 0.21, S * 0.17] : len <= 5 ? [S * 0.21, S * 0.17] : [S * 0.17];
+}
+
 function KeyCap({
   k,
   S,
@@ -343,7 +350,8 @@ function KeyCap({
   const y = (k.y + (offset?.y ?? 0)) * S;
   const rx = (k.rx + (offset?.x ?? 0)) * S;
   const ry = (k.ry + (offset?.y ?? 0)) * S;
-  const maxChars = Math.max(3, Math.floor((w - gap * 2) / (S * 0.16)));
+  // text room: the cap's face minus one gap of padding on each side
+  const room = w - gap * 4;
   const cls = [
     'kb-key',
     `kb-key--${label.kind}`,
@@ -363,7 +371,9 @@ function KeyCap({
   const cx = x + w / 2;
   const hasHold = !!label.hold;
   const mainY = y + h / 2 + (hasHold ? -S * 0.08 : label.top ? S * 0.06 : 0);
-  const mainSize = label.main.length <= 2 ? S * 0.3 : label.main.length <= 5 ? S * 0.21 : S * 0.17;
+  const mainText = label.kind === 'transparent' && view.ghost ? view.ghost : label.main;
+  const main = fitLabel(mainText, room, capSizes(mainText, S), label.top && hasHold ? 1 : 2);
+  const lineGap = main.size * 1.15;
   return (
     <g className={cls} transform={k.r ? `rotate(${k.r} ${rx} ${ry})` : undefined} onDoubleClick={onDoubleClick} data-key={k.id}>
       <title>{keyTooltip(view, k)}</title>
@@ -375,17 +385,23 @@ function KeyCap({
       {label.kind === 'layer' || label.kind === 'layer-tap' ? <rect className="kb-key-meter" x={x + gap * 2} y={y + h - gap * 2 - 2} width={w - gap * 4} height={2} /> : null}
       {label.top && (
         <text className="kb-key-top" x={cx} y={y + gap + S * 0.17}>
-          {trimLabel(label.top, maxChars + 2)}
+          {fitLabel(label.top, room, [S * 0.15], 1, 0.02).lines[0]}
         </text>
       )}
-      <text className="kb-key-main" x={cx} y={mainY} style={{ fontSize: mainSize }}>
-        {trimLabel(label.kind === 'transparent' && view.ghost ? view.ghost : label.main, maxChars)}
+      <text className="kb-key-main" x={cx} y={mainY} style={{ fontSize: main.size }}>
+        {main.lines.length === 1
+          ? main.lines[0]
+          : main.lines.map((line, i) => (
+              <tspan key={i} x={cx} y={mainY + (i - 0.5) * lineGap}>
+                {line}
+              </tspan>
+            ))}
       </text>
       {hasHold && (
         <>
           <line className="kb-key-sep" x1={x + gap * 3} x2={x + w - gap * 3} y1={y + h * 0.64} y2={y + h * 0.64} />
           <text className="kb-key-hold" x={cx} y={y + h * 0.64 + S * 0.15}>
-            {trimLabel(label.hold!, maxChars + 1)}
+            {fitLabel(label.hold!, room, [S * 0.15], 1, 0.08).lines[0]}
           </text>
         </>
       )}

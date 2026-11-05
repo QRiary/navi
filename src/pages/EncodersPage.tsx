@@ -58,12 +58,12 @@ function CodeCell({ value, onSet }: { value: number; onSet: (v: number) => void 
         }}
       >
         <input autoFocus value={editing} onChange={(e) => setEditing(e.target.value)} onBlur={() => setEditing(null)} onKeyDown={(e) => e.key === 'Escape' && setEditing(null)} spellCheck={false} />
-        <span className="expr-result">{error ?? 'enter'}</span>
+        <span className="expr-result">{error ?? t('Enter to apply', 'Enter — применить')}</span>
       </form>
     );
   }
   return (
-    <button className="kc-tile" style={{ minHeight: 34, cursor: 'text' }} onClick={() => setEditing(l.qmk)} title={`${l.qmk}${l.description ? `\n${l.description}` : ''}`}>
+    <button className="kc-tile" style={{ minHeight: 34, cursor: 'text' }} onClick={() => setEditing(l.qmk)} title={[name.text, l.description, name.qmk].filter((s, i, all) => s && all.indexOf(s) === i).join('\n')}>
       <span className="kc-tile-label">{l.kind === 'transparent' ? '▽' : l.main || '∅'}</span>
       <span className="kc-tile-name">{name.text}</span>
     </button>
@@ -226,8 +226,8 @@ export function EncodersPage() {
               }}
             >
               {p.name()}{' '}
-              <span className="kicker">
-                {p.ccw} / {p.cw}
+              <span className="kicker" title={`${p.ccw} / ${p.cw}`}>
+                {[p.ccw, p.cw].map((x) => { const r = tryParseQmk(spec, x); return 'value' in r ? friendlyName(spec, r.value, labelCtx).text : x; }).join(' / ')}
               </span>
             </button>
           ))}
@@ -254,7 +254,7 @@ export function EncodersPage() {
             return (
               <div key={e} className="row" style={{ ['--row-cols' as string]: '60px minmax(0,1fr) auto' }}>
                 <span className="num">E{e}</span>
-                <span className="field-hint" title={pos ? friendlyName(spec, keymap.layers[0].keys[pos[0] * cols + pos[1]], labelCtx).qmk : undefined}>
+                <span className="field-hint" title={pos ? ((n) => (n.text === n.qmk ? n.qmk : `${n.text}\n${n.qmk}`))(friendlyName(spec, keymap.layers[0].keys[pos[0] * cols + pos[1]], labelCtx)) : undefined}>
                   {pos
                     ? `${t('matrix', 'матрица')} [${pos[0]},${pos[1]}] · L0: ${friendlyName(spec, keymap.layers[0].keys[pos[0] * cols + pos[1]], labelCtx).text}`
                     : t(

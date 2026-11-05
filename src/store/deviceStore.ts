@@ -9,6 +9,7 @@ import { detectMatrix, probeCapabilities, probeRgbMatrixEffectCount, readSnapsho
 import { CHANNEL, LIGHT_VALUE, ViaDisconnectedError, ViaError } from '../core/via/protocol';
 import { applyWrite, type ApplyResult, type WritePlan } from '../core/via/sync';
 import type { LightingState } from '../core/project/types';
+import { t } from '../i18n';
 import { deviceKey, hidSupported, listViaDevices, WebHidTransport } from '../device/webhid';
 
 export interface DeviceListItem {
@@ -117,7 +118,7 @@ export const useDeviceStore = create<DeviceState>()((set, get) => {
     async connect(key) {
       const device = hidByKey.get(key);
       if (!device) {
-        set({ status: 'error', error: 'device not found — reconnect it and refresh' });
+        set({ status: 'error', error: t('device not found — reconnect it and refresh', 'устройство не найдено — переподключите его и обновите') });
         return false;
       }
       await get().disconnect();

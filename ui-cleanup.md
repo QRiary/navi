@@ -130,8 +130,8 @@ keycode and key override rows pushed their delete button out of the panel at 110
    people writing C need it (Firmware tabs stay raw).
 3. ✅ `KeycodeField`: friendly preview next to the box, a button that opens the keycode picker, and "pick from
    the keyboard" where a key position makes sense.
-   Left over: `KeyChips`' "+ key" box has no preview or catalog button (`common.tsx`).
-4. (Step 1 has landed: next.) Key caps: fit text (shrink to a floor, then two lines) before ellipsis; full name in the tooltip.
+   Left over: `KeyChips`' "+ key" box has no preview or catalog button (`common.tsx`). (Done in Step 9.3.)
+4. ✅ (Done in Step 9.1.) Key caps: fit text (shrink to a floor, then two lines) before ellipsis; full name in the tooltip.
 
 ## Step 4: page structure and safety nets (🟠 6/10)
 
@@ -299,17 +299,30 @@ Loose ends found 2026-11-05 (the earlier steps' "Left over" lines + a read-only 
 Macros, Hardware, Device, Projects, Firmware, the composer and the picker). Line numbers from 2fdeb75.
 
 **Do**
-1. Step 3.4, still open: key caps fit their text (shrink to a floor, then two lines) before the ellipsis
+1. ✅ Step 3.4, still open: key caps fit their text (shrink to a floor, then two lines) before the ellipsis
    (`KeyboardCanvas.tsx:346-388`, `trimLabel` + `maxChars`); full name stays in the tooltip.
-2. Friendly name first, raw QMK in the tooltip only: encoder tile tooltip (`EncodersPage.tsx:66`, builds from
+   Done as: `components/keyboard/fitLabel.ts` (pure, tested) counts characters, since the drawing's font is
+   monospace (0.6 em per glyph): no DOM measuring. Short labels start at their old size (0.3 / 0.21 of the key)
+   and shrink to the floor, 0.17 of the key (the old smallest size, ~9 px at 100%); then two lines, broken at a
+   space or `_ - / +` (most even break), hard-cut only a word with none; "…" only on the second line. One line
+   when a key has both a top and a hold label (no room). The top and hold labels keep one line but fit by width too.
+2. ✅ Friendly name first, raw QMK in the tooltip only: encoder tile tooltip (`EncodersPage.tsx:66`, builds from
    `l.qmk` + `keyLabel`), encoder-press row tooltip (`:257`), preset chips (`:228-231`, `KC_VOLD / KC_VOLU`),
    the picker's parsed preview (`KeycodePicker.tsx:78`, `qmk · text`).
-3. `KeyChips`' "+ key" box gets the `KeycodeField` preview and catalog button (Step 3 leftover, `common.tsx`).
-4. Strings outside `t()`: the `enter` hint (`KeycodeComposer.tsx:404`, `EncodersPage.tsx:61`), `aria-label="Tap
+   Done as: the picker preview reads "→ Copy"; the QMK expression and the hex value moved to its tooltip.
+3. ✅ `KeyChips`' "+ key" box gets the `KeycodeField` preview and catalog button (Step 3 leftover, `common.tsx`).
+   Done as: `KeycodeField`'s preview and catalog button became `typedMeaning` / `CatalogButton` in `common.tsx`,
+   used by both; a pick from the catalog adds the key at once; the button is disabled with the box when the list
+   is full. No "take the selected key" button there (not asked).
+4. ✅ Strings outside `t()`: the `enter` hint (`KeycodeComposer.tsx:404`, `EncodersPage.tsx:61`), `aria-label="Tap
    dance"` (`KeycodeComposer.tsx:367`), kind label `'tap dance'` (`:27`), `deviceStore.ts:120` "device not
    found", the pin check's bare `ok` (`PinsTab.tsx:336`, styled as a warning: make it a neutral "no problems").
-5. Issue levels printed raw ("error"/"warning"/"err"/"warn"/"note": `HardwarePage.tsx:314`, `ProjectsPage.tsx:56`,
+   Done as: "Enter to apply" / "Enter — применить"; "no problems" is a plain `field-hint` line.
+   Left over: the Advanced tab title `'Tap dance'` in `lib/sections.ts` is still outside `t()` (not listed).
+5. ✅ Issue levels printed raw ("error"/"warning"/"err"/"warn"/"note": `HardwarePage.tsx:314`, `ProjectsPage.tsx:56`,
    `OwnTarget.tsx:98`, `PinsTab.tsx:332`, `BuildLog.tsx:49`): one shared level → `t()` label.
+   Done as: `issueLevelLabel` in `src/lib/issueLevel.ts` (error / warning / note / info; ru: ошибка / внимание /
+   заметка / сведения). OwnTarget and PinsTab printed "note" for a warning: they now say "warning".
 
 ## Step 10: errors, deletes, keyboard access (🟡 5/10)
 
