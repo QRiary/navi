@@ -15,6 +15,7 @@ import { useActive, useLabelContext } from '../lib/projectContext';
 import { href, navigate } from '../lib/router';
 import { QMK_DOCS } from '../lib/qmkDocs';
 import { resolveBlur } from '../lib/encoderEdit';
+import { CatalogButton, typedMeaning } from '../components/advanced/common';
 import { EmptyState } from '../components/EmptyState';
 import { ListFilter } from '../components/ListFilter';
 import { matchesQuery, useListFilter } from '../lib/find';
@@ -59,21 +60,43 @@ function CodeCell({ value, onSet }: { value: number; onSet: (v: number) => void 
     cancel();
   };
   if (editing !== null) {
+    // Like every keycode field: the expression with what it means beside it, and the catalog button. Focus moving
+    // between the box, the button and the catalog it opens (a portal) isn't leaving the field.
+    const preview = error ?? typedMeaning(spec, labelCtx, editing);
     return (
-      <form
-        className={`expr-input ${error ? 'is-error' : ''}`}
-        onSubmit={(e) => {
-          e.preventDefault();
-          const r = tryParseQmk(spec, editing);
-          if ('error' in r) return setError(r.error);
-          onSet(r.value);
-          setEditing(null);
-          setError(null);
+      <span
+        className="kc-field"
+        onBlur={(e) => {
+          const to = e.relatedTarget as Element | null;
+          if (to && (e.currentTarget.contains(to) || to.closest('.kc-popover'))) return;
+          onBlur();
         }}
       >
-        <input autoFocus value={editing} onChange={(e) => setEditing(e.target.value)} onBlur={onBlur} onKeyDown={(e) => e.key === 'Escape' && cancel()} spellCheck={false} />
-        <span className="expr-result">{error ?? t('Enter to apply', 'Enter — применить')}</span>
-      </form>
+        <form
+          className={`expr-input ${error ? 'is-error' : ''}`}
+          onSubmit={(e) => {
+            e.preventDefault();
+            const r = tryParseQmk(spec, editing);
+            if ('error' in r) return setError(r.error);
+            onSet(r.value);
+            cancel();
+          }}
+        >
+          <input autoFocus value={editing} onChange={(e) => setEditing(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && cancel()} spellCheck={false} aria-label={t('Keycode', 'Keycode')} />
+          {preview && (
+            <span className="expr-result" title={preview}>
+              {preview}
+            </span>
+          )}
+        </form>
+        <CatalogButton
+          current={value}
+          onPick={(v) => {
+            onSet(v);
+            cancel();
+          }}
+        />
+      </span>
     );
   }
   return (

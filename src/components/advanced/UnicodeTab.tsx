@@ -8,7 +8,7 @@ import { checkUnicodeMap } from '../../core/features/advanced';
 import { newId } from '../../core/layout/geometry';
 import type { Project, UnicodeEntry } from '../../core/project/types';
 import { useProjectStore, useSpec } from '../../store/projectStore';
-import { FeatureNote, IssueList } from './common';
+import { CharInput, FeatureNote, IssueList } from './common';
 import { getLanguage, t } from '../../i18n';
 import { QMK_DOCS } from '../../lib/qmkDocs';
 import { deletedToast } from '../../lib/undoToast';
@@ -43,7 +43,6 @@ const INPUT_MODES: { id: string; title: string; en: string; ru: string }[] = [
 const ROW_COLS = '24px minmax(150px, 0.5fr) minmax(0, 1.5fr) 44px';
 
 const hex = (cp: number) => `U+${cp.toString(16).toUpperCase().padStart(4, '0')}`;
-const printable = (cp: number) => (cp >= 0x20 && !(cp >= 0x7f && cp < 0xa0) && !(cp >= 0xd800 && cp <= 0xdfff) && cp <= 0x10ffff ? String.fromCodePoint(cp) : '');
 
 function CodepointInput({ entry, onChange }: { entry: UnicodeEntry; onChange: (cp: number) => void }) {
   const [text, setText] = useState<string | null>(null);
@@ -256,16 +255,7 @@ export function UnicodeTab({ project }: { project: Project }) {
             {shownMap.map(({ u, i }) => (
               <div key={u.id} className="row" {...findAttr('unicode:' + u.id)} style={{ ['--row-cols' as string]: '50px 60px minmax(120px, 1fr) 110px 120px auto' }}>
                 <span className="kicker">UM({i})</span>
-                <input
-                  className="input"
-                  style={{ width: 52, textAlign: 'center', fontSize: 'var(--fs-lg, 18px)' }}
-                  value={printable(u.codepoint)}
-                  onChange={(e) => {
-                    const cp = e.target.value.codePointAt(0);
-                    if (cp !== undefined) patch(u.id, { codepoint: cp }, t('character', 'символ'), `ucchar:${u.id}`);
-                  }}
-                  aria-label={t('Character', 'Символ')}
-                />
+                <CharInput codepoint={u.codepoint} onChange={(cp) => patch(u.id, { codepoint: cp }, t('character', 'символ'), `ucchar:${u.id}`)} />
                 <input
                   className="input"
                   value={u.name}

@@ -25,9 +25,22 @@ import { getLanguage, t } from '../../i18n';
 /**
  * Keycode field: a validated QMK expression, what it means next to it ("Space · hold Num", "unknown" or the parse
  * error), a button opening the keycode catalog, and (`fromKeyboard`) one taking the keycode of the key selected on
- * the Keyboard page's shown layer.
+ * the Keyboard page's shown layer. `accept` limits what the field takes: it returns why a keycode is refused (shown
+ * as the field's error), or null.
  */
-export function KeycodeField({ value, onChange, label, fromKeyboard = true }: { value: number; onChange: (v: number) => void; label: string; fromKeyboard?: boolean }) {
+export function KeycodeField({
+  value,
+  onChange,
+  label,
+  fromKeyboard = true,
+  accept,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  label: string;
+  fromKeyboard?: boolean;
+  accept?: (v: number) => string | null;
+}) {
   const spec = useSpec();
   const labelCtx = useLabelContext();
   const name = labelCtx ? friendlyName(spec, value, labelCtx) : null;
@@ -92,25 +105,18 @@ export function KeycodeField({ value, onChange, label, fromKeyboard = true }: { 
     </span>
   );
   function set(v: number) {
+    const refused = accept?.(v);
+    if (refused) return setError(refused); // a typed text stays for fixing; a catalog pick leaves the value as it was
     onChange(v);
     setText(null);
     setError(null);
   }
   function commit() {
     if (text === null) return;
-    if (!text.trim()) {
-      onChange(0);
-      setText(null);
-      setError(null);
-      return;
-    }
+    if (!text.trim()) return set(0);
     const r = tryParseQmk(spec, text);
     if ('error' in r) setError(r.error);
-    else {
-      onChange(r.value);
-      setText(null);
-      setError(null);
-    }
+    else set(r.value);
   }
 }
 
@@ -121,14 +127,14 @@ function keyMeaning(spec: KeycodeSpec, n: FriendlyName, v: number): string {
 }
 
 /** The preview of what is being typed into a QMK box (a parse error shows only once it is committed). */
-function typedMeaning(spec: KeycodeSpec, labelCtx: LabelContext | null, text: string): string {
+export function typedMeaning(spec: KeycodeSpec, labelCtx: LabelContext | null, text: string): string {
   if (!text.trim() || !labelCtx) return '';
   const r = tryParseQmk(spec, text);
   return 'value' in r ? keyMeaning(spec, friendlyName(spec, r.value, labelCtx), r.value) : '';
 }
 
 /** The catalog button of a keycode box: opens the keycode picker under itself; a pick calls `onPick` and closes it. */
-function CatalogButton({ current, onPick, blocked }: { current: number; onPick: (v: number) => void; blocked?: string | false }) {
+export function CatalogButton({ current, onPick, blocked }: { current: number; onPick: (v: number) => void; blocked?: string | false }) {
   const [picking, setPicking] = useState(false);
   const pickBtn = useRef<HTMLButtonElement>(null);
   const closePicker = useCallback(() => setPicking(false), []);
@@ -162,6 +168,33 @@ function CatalogButton({ current, onPick, blocked }: { current: number; onPick: 
 
 /** One item of a chip list: a key (shown as its QMK name) or a named key list. */
 export type KeyChip = { kind: 'key'; value: number } | { kind: 'list'; id: string; name: string };
+
+/** For `KeycodeField.accept`: only a basic key (0x00–0xFF), the only kind QMK takes with modifiers and VIA in a macro. */
+export const basicKeyOnly = (v: number): string | null =>
+  v > 0xff ? t('Basic keys only: letters, digits, symbols, F-keys…', 'Только обычные клавиши: буквы, цифры, символы, F-клавиши…') : null;
+
+/** The character of a code point, or nothing for a control character, a lone surrogate or one past Unicode. */
+const printable = (cp: number) => (cp >= 0x20 && !(cp >= 0x7f && cp < 0xa0) && !(cp >= 0xd800 && cp <= 0xdfff) && cp <= 0x10ffff ? String.fromCodePoint(cp) : '');
+
+/**
+ * One character of text (a Unicode key, a Unicode map entry), shown large: the current one; typing replaces it (the
+ * last character typed counts), so there's no need to delete the old one first.
+ */
+export function CharInput({ codepoint, onChange }: { codepoint: number | null; onChange: (cp: number) => void }) {
+  return (
+    <input
+      className="input"
+      style={{ width: 52, textAlign: 'center', fontSize: 'var(--fs-lg, 18px)' }}
+      value={codepoint === null ? '' : printable(codepoint)}
+      aria-label={t('Character', 'Символ')}
+      onFocus={(e) => e.target.select()}
+      onChange={(e) => {
+        const cp = [...e.target.value].pop()?.codePointAt(0);
+        if (cp !== undefined) onChange(cp);
+      }}
+    />
+  );
+}
 
 /**
  * Keys as compact chips (× removes one) with a field at the end that adds a key on Enter; `extra` sits after it

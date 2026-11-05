@@ -6,10 +6,9 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { decode, encode, LAYER_FN_RANGES, type Decoded, type LayerFn } from '../../core/keycodes/codec';
 import type { KeycodeSpec } from '../../core/keycodes/spec';
-import { preferredName } from '../../core/keycodes/codec';
 import type { HoldAction, Project } from '../../core/project/types';
 import { ensureTapHold, plainTapHold, tapHoldSlots } from '../../core/project/tapHoldActions';
-import { KeycodeField } from '../advanced/common';
+import { basicKeyOnly, CharInput, KeycodeField } from '../advanced/common';
 import { activeKeymap } from '../../core/project/ops';
 import { reservedStandInBases } from '../../lib/keymapActions';
 import { useEditorStore } from '../../store/editorStore';
@@ -58,54 +57,36 @@ function kindOf(d: Decoded): Kind {
   }
 }
 
-/** Choice of a basic key (0x00–0xFF), grouped by QMK groups. */
-export function BasicKeySelect({ spec, value, onChange, label }: { spec: KeycodeSpec; value: number; onChange: (v: number) => void; label: string }) {
-  const groups = useMemo(() => {
-    const map = new Map<string, { value: number; name: string; label: string }[]>();
-    for (const d of spec.keycodes) {
-      if (d.value > 0xff) continue;
-      const g = d.group ?? 'other';
-      if (!map.has(g)) map.set(g, []);
-      map.get(g)!.push({ value: d.value, name: preferredName(d), label: d.label ?? '' });
-    }
-    return [...map.entries()];
-  }, [spec]);
-  return (
-    <select className="select" value={value} onChange={(e) => onChange(Number(e.target.value))} aria-label={label}>
-      {groups.map(([g, list]) => (
-        <optgroup key={g} label={g}>
-          {list.map((k) => (
-            <option key={k.value} value={k.value}>
-              {k.name}
-              {k.label && k.label !== k.name ? `  ${k.label}` : ''}
-            </option>
-          ))}
-        </optgroup>
-      ))}
-    </select>
-  );
-}
-
-/** Modifiers: Ctrl/Shift/Alt/GUI + side. The value is the 5 MOD_* bits. */
-export function ModsInput({ mods, onChange }: { mods: number; onChange: (m: number) => void }) {
+/**
+ * Modifiers: Ctrl/Shift/Alt/GUI + side. The value is the 5 MOD_* bits. `required`: unticking the last one is refused
+ * with a line saying so under the boxes (it shows until the modifiers change).
+ */
+export function ModsInput({ mods, onChange, required }: { mods: number; onChange: (m: number) => void; required?: boolean }) {
   const right = (mods & 0x10) !== 0;
+  const [refusedAt, setRefusedAt] = useState<number | null>(null);
+  const set = (m: number) => {
+    if (required && (m & 0x0f) === 0) return setRefusedAt(mods);
+    setRefusedAt(null);
+    onChange(m);
+  };
   const bit = (b: number, name: string) => (
     <label className="checkbox" key={name}>
-      <input type="checkbox" checked={(mods & b) !== 0} onChange={(e) => onChange(e.target.checked ? mods | b : mods & ~b)} />
+      <input type="checkbox" checked={(mods & b) !== 0} onChange={(e) => set(e.target.checked ? mods | b : mods & ~b)} />
       {name}
     </label>
   );
   return (
+    <>
     <div className="field-row">
       {bit(0x01, 'Ctrl')}
       {bit(0x02, 'Shift')}
       {bit(0x04, 'Alt')}
       {bit(0x08, 'GUI')}
       <div className="seg" role="group" aria-label={t('Side', 'Сторона')}>
-        <button type="button" className={!right ? 'is-on' : ''} onClick={() => onChange(mods & ~0x10)}>
+        <button type="button" className={!right ? 'is-on' : ''} onClick={() => set(mods & ~0x10)}>
           {t('left', 'левые')}
         </button>
-        <button type="button" className={right ? 'is-on' : ''} onClick={() => onChange(mods | 0x10)}>
+        <button type="button" className={right ? 'is-on' : ''} onClick={() => set(mods | 0x10)}>
           {t('right', 'правые')}
         </button>
       </div>
@@ -116,6 +97,12 @@ export function ModsInput({ mods, onChange }: { mods: number; onChange: (m: numb
         )}
       </InfoTip>
     </div>
+    {refusedAt === mods && (
+      <p className="field-hint" role="alert" style={{ color: 'var(--danger-color)' }}>
+        {t('Choose at least one modifier', 'Выберите хотя бы один модификатор')}
+      </p>
+    )}
+    </>
   );
 }
 
@@ -133,21 +120,17 @@ export function LayerSelect({ project, value, max, onChange }: { project: Projec
   );
 }
 
-const noModsError = () => t('Choose at least one modifier', 'Выберите хотя бы один модификатор');
-
 /** The two slots of a tap-hold key: tap = any keycode; hold = modifiers, a layer (+ modifiers) or any keycode. */
 function TapHoldSlots({
   project,
   tap,
   hold,
   onChange,
-  onError,
 }: {
   project: Project;
   tap: number;
   hold: HoldAction;
   onChange: (tap: number, hold: HoldAction) => void;
-  onError: (message: string) => void;
 }) {
   const holdMods = hold.type === 'key' ? 0 : hold.mods;
   const kinds: { type: HoldAction['type']; label: string; make: () => HoldAction }[] = [
@@ -171,7 +154,7 @@ function TapHoldSlots({
           ))}
         </div>
       </div>
-      {hold.type === 'mods' && <ModsInput mods={hold.mods} onChange={(m) => ((m & 0x0f) === 0 ? onError(noModsError()) : onChange(tap, { type: 'mods', mods: m }))} />}
+      {hold.type === 'mods' && <ModsInput required mods={hold.mods} onChange={(m) => onChange(tap, { type: 'mods', mods: m })} />}
       {hold.type === 'layer' && (
         <>
           <div className="field-row">
@@ -345,11 +328,8 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
             fromKeyboard={false}
             value={base}
             label={t('Key sent with the modifiers', 'Клавиша, отправляемая с модификаторами')}
-            onChange={(b) =>
-              b > 0xff
-                ? setError(t('With modifiers QMK takes only a basic key: a letter, digit, symbol, F-key or the like.', 'С модификаторами QMK принимает только обычную клавишу: букву, цифру, символ, F-клавишу и т. п.'))
-                : commit({ kind: 'mods', mods, base: b })
-            }
+            accept={basicKeyOnly}
+            onChange={(b) => commit({ kind: 'mods', mods, base: b })}
           />
         </div>
       )}
@@ -379,15 +359,12 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
       )}
       {(kind === 'mods' || kind === 'one-shot' || kind === 'layer-mod') && (
         <ModsInput
+          required
           mods={mods}
-          onChange={(m) =>
-            (m & 0x0f) === 0
-              ? setError(noModsError())
-              : commit(kind === 'mods' ? { kind: 'mods', mods: m, base } : kind === 'layer-mod' ? { kind: 'layer-mod', layer, mods: m } : { kind: 'one-shot-mod', mods: m })
-          }
+          onChange={(m) => commit(kind === 'mods' ? { kind: 'mods', mods: m, base } : kind === 'layer-mod' ? { kind: 'layer-mod', layer, mods: m } : { kind: 'one-shot-mod', mods: m })}
         />
       )}
-      {kind === 'tap-hold' && <TapHoldSlots project={project} tap={slots.tap} hold={slots.hold} onChange={commitTapHold} onError={setError} />}
+      {kind === 'tap-hold' && <TapHoldSlots project={project} tap={slots.tap} hold={slots.hold} onChange={commitTapHold} />}
       {kind === 'layer' && (
         <>
           <div className="field-row">
@@ -423,18 +400,7 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
       {kind === 'unicode' && (
         <div className="field-row">
           <span className="field-hint">{t('character:', 'символ:')}</span>
-          <input
-            className="input"
-            style={{ width: 70 }}
-            // Shows the key's character; a typed one replaces it (the last character typed counts).
-            value={decoded.kind === 'unicode' ? String.fromCodePoint(decoded.codepoint) : ''}
-            aria-label={t('Character', 'Символ')}
-            onFocus={(e) => e.target.select()}
-            onChange={(e) => {
-              const cp = [...e.target.value].pop()?.codePointAt(0);
-              if (cp !== undefined) commit({ kind: 'unicode', codepoint: cp });
-            }}
-          />
+          <CharInput codepoint={decoded.kind === 'unicode' ? decoded.codepoint : null} onChange={(cp) => commit({ kind: 'unicode', codepoint: cp })} />
           <span className="field-hint">{t('UC() supports U+0000…U+7FFF (UNICODE_ENABLE).', 'UC() — символы U+0000…U+7FFF (UNICODE_ENABLE).')}</span>
         </div>
       )}

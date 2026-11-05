@@ -103,7 +103,7 @@ function OverridesTab({ project }: { project: Project }) {
               />
               {/* Modifiers on a second line under the keys: one line doesn't fit a normal window. */}
               <div style={{ gridColumn: '2 / -1', gridRow: 2 }}>
-                <ModsInput mods={o.mods} onChange={(m) => (m & 0x0f ? patch(o.id, { mods: m }, t('override mods', 'модификаторы подмены')) : undefined)} />
+                <ModsInput required mods={o.mods} onChange={(m) => patch(o.id, { mods: m }, t('override mods', 'модификаторы подмены'))} />
               </div>
               <KeycodeField value={o.trigger} label={t('Key', 'Клавиша')} onChange={(v) => patch(o.id, { trigger: v }, t('override key', 'клавиша подмены'))} />
               <span>→</span>
