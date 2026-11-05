@@ -10,13 +10,14 @@ import { selectedKeycode } from '../../lib/keymapActions';
 import { useEditorStore } from '../../store/editorStore';
 import { KeycodePopover } from '../keyboard/KeycodePopover';
 import type { AdvancedIssue } from '../../core/features/advanced';
-import { featureStatus, type FeatureId } from '../../core/features/registry';
+import { buildNote } from '../../core/features/buildNote';
+import type { FeatureId } from '../../core/features/registry';
+import { whyDisabled } from '../../lib/whyDisabled';
 import type { CustomAction, Project } from '../../core/project/types';
 import { hardwareFacts } from '../../lib/hardwareFacts';
 import { useLabelContext } from '../../lib/projectContext';
 import { href } from '../../lib/router';
 import { useSpec } from '../../store/projectStore';
-import { StatusChip } from '../inspector/KeyInspector';
 import { getLanguage, t } from '../../i18n';
 
 /**
@@ -55,27 +56,46 @@ export function KeycodeField({ value, onChange, label, fromKeyboard = true }: { 
           commit();
         }}
       >
-        <input value={shown} placeholder="KC_NO" aria-label={label} spellCheck={false} title={name && value ? `${name.text}\n${name.qmk}` : undefined} onChange={(e) => setText(e.target.value)} onBlur={() => commit()} />
+        <input
+          value={shown}
+          placeholder="KC_NO"
+          aria-label={label}
+          spellCheck={false}
+          title={name && value ? `${name.text}\n${name.qmk}` : undefined}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => commit()}
+        />
         {preview && (
           <span className="expr-result" title={preview}>
             {preview}
           </span>
         )}
       </form>
-      <button ref={pickBtn} type="button" className="icon-btn" aria-label={t('Pick from the catalog', 'Выбрать из каталога')} title={t('Pick from the catalog', 'Выбрать из каталога')} aria-expanded={picking} onClick={() => setPicking((p) => !p)}>
+      <button
+        ref={pickBtn}
+        type="button"
+        className="icon-btn"
+        aria-label={t('Pick from the catalog', 'Выбрать из каталога')}
+        title={t('Pick from the catalog', 'Выбрать из каталога')}
+        aria-expanded={picking}
+        onClick={() => setPicking((p) => !p)}
+      >
         <LayoutGrid size={14} strokeWidth={1.5} />
       </button>
       {fromKeyboard && (
         <button
           type="button"
           className="icon-btn"
-          disabled={!selected}
           aria-label={t('Take the selected key', 'Взять выбранную клавишу')}
-          title={
+          {...whyDisabled(
+            !selected && t('Select a key on the Keyboard page to take its keycode', 'Выберите клавишу на странице «Клавиатура», чтобы взять её keycode'),
             selected && labelCtx
-              ? t(`Take the key selected on the Keyboard page (layer ${selected.layer}): ${friendlyName(spec, selected.keycode, labelCtx).text}`, `Взять клавишу, выбранную на странице «Клавиатура» (слой ${selected.layer}): ${friendlyName(spec, selected.keycode, labelCtx).text}`)
-              : t('Select a key on the Keyboard page to take its keycode', 'Выберите клавишу на странице «Клавиатура», чтобы взять её keycode')
-          }
+              ? t(
+                  `Take the key selected on the Keyboard page (layer ${selected.layer}): ${friendlyName(spec, selected.keycode, labelCtx).text}`,
+                  `Взять клавишу, выбранную на странице «Клавиатура» (слой ${selected.layer}): ${friendlyName(spec, selected.keycode, labelCtx).text}`,
+                )
+              : undefined,
+          )}
           onClick={() => selected && set(selected.keycode)}
         >
           <Keyboard size={14} strokeWidth={1.5} />
@@ -133,14 +153,15 @@ export function KeyChips({
   onRemove,
   onAdd,
   label,
-  disabled,
+  full,
   extra,
 }: {
   items: KeyChip[];
   onRemove: (index: number) => void;
   onAdd: (v: number) => void;
   label: string;
-  disabled?: boolean;
+  /** Why no key can be added (the list is full): disables the “+ key” box with this as its tooltip. */
+  full?: string | false;
   extra?: ReactNode;
 }) {
   const spec = useSpec();
@@ -181,8 +202,7 @@ export function KeyChips({
           placeholder={t('+ key', '+ клавиша')}
           aria-label={label}
           spellCheck={false}
-          disabled={disabled}
-          title={error ?? undefined}
+          {...whyDisabled(full, error ?? undefined)}
           onChange={(e) => setText(e.target.value)}
           onBlur={add}
         />
@@ -207,16 +227,18 @@ export function IssueList({ issues }: { issues: AdvancedIssue[] }) {
   );
 }
 
-export function FeatureNote({ project, feature }: { project: Project; feature: FeatureId }) {
-  const st = featureStatus(feature, project.firmware.flags, hardwareFacts(project));
+/**
+ * The firmware-status sentence at the top of an Advanced tab: is the feature in the user's build, why, and what it
+ * takes to work on the keyboard (`buildNote`). `firstUse` finishes "…turns on by itself when you …".
+ */
+export function FeatureNote({ project, feature, firstUse }: { project: Project; feature: FeatureId; firstUse?: { en: string; ru: string } }) {
+  const spec = useSpec();
+  const note = buildNote(project, feature, spec, hardwareFacts(project), firstUse);
   const lang = getLanguage();
-  const build = project.firmware.buildFeatures[feature];
   return (
     <div className="notice">
       <span>
-        {t('Current firmware', 'Текущая прошивка')}: <StatusChip state={st.state} likely={st.likely} text={lang === 'ru' ? st.reason.ru : st.reason.en} /> · {t('your build', 'ваша сборка')}:{' '}
-        <strong>{build ? t('enabled', 'включено') : t('off', 'выключено')}</strong> ( <a href={href({ section: 'firmware', tab: 'features' })}>{t('change', 'изменить')}</a> ) —{' '}
-        {t('defined in keymap.c, works after building and flashing your firmware.', 'задаётся в keymap.c, работает после сборки и прошивки вашей прошивки.')}
+        {lang === 'ru' ? note.text.ru : note.text.en} <a href={href({ section: 'firmware', tab: 'features' })}>{t('Firmware features', 'Функции прошивки')}</a>
       </span>
     </div>
   );
