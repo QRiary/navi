@@ -22,6 +22,8 @@ diff shrinks to the cleanup by itself. Rebase only if a PR in the stack gets squ
   - Wave 2, one after the other: Step 4 (structure), then Step 5 (hints: annotates the restructured pages).
   - Wave 3: Steps 6 and 7 in parallel (both touch `LayoutPreview.tsx`: Step 6 adds clicks as optional
     props), then Step 8 alone.
+  - Wave 4 (loose ends, added 2026-11-05 before opening the PR): Steps 9 and 10 in parallel, then Step 11
+    (it moves the composer's kind chips that Step 9 retranslates).
 - Each step lists what the owner reported (**R**) and what the audit found (**F**). Mark a line done in this
   file when its session lands; delete the file when all are done.
 
@@ -290,6 +292,55 @@ titles are defined twice (`Sidebar.tsx:9-21`, `TopBar.tsx:10-22`) and tab lists 
    scroll it below the sticky blocks and flash it.
    Left over: no filter on Encoders, Lighting, Hardware, Firmware (features table) and NAVI additions; the search
    doesn't look inside the config JSONC text.
+
+## Step 9: key names and text, the rest (🟡 5/10)
+
+Loose ends found 2026-11-05 (the earlier steps' "Left over" lines + a read-only code pass over Encoders, Lighting,
+Macros, Hardware, Device, Projects, Firmware, the composer and the picker). Line numbers from 2fdeb75.
+
+**Do**
+1. Step 3.4, still open: key caps fit their text (shrink to a floor, then two lines) before the ellipsis
+   (`KeyboardCanvas.tsx:346-388`, `trimLabel` + `maxChars`); full name stays in the tooltip.
+2. Friendly name first, raw QMK in the tooltip only: encoder tile tooltip (`EncodersPage.tsx:66`, builds from
+   `l.qmk` + `keyLabel`), encoder-press row tooltip (`:257`), preset chips (`:228-231`, `KC_VOLD / KC_VOLU`),
+   the picker's parsed preview (`KeycodePicker.tsx:78`, `qmk · text`).
+3. `KeyChips`' "+ key" box gets the `KeycodeField` preview and catalog button (Step 3 leftover, `common.tsx`).
+4. Strings outside `t()`: the `enter` hint (`KeycodeComposer.tsx:404`, `EncodersPage.tsx:61`), `aria-label="Tap
+   dance"` (`KeycodeComposer.tsx:367`), kind label `'tap dance'` (`:27`), `deviceStore.ts:120` "device not
+   found", the pin check's bare `ok` (`PinsTab.tsx:336`, styled as a warning: make it a neutral "no problems").
+5. Issue levels printed raw ("error"/"warning"/"err"/"warn"/"note": `HardwarePage.tsx:314`, `ProjectsPage.tsx:56`,
+   `OwnTarget.tsx:98`, `PinsTab.tsx:332`, `BuildLog.tsx:49`): one shared level → `t()` label.
+
+## Step 10: errors, deletes, keyboard access (🟡 5/10)
+
+**Do**
+1. Raw `err.message` / `String(err)` still shown (Step 4.6 missed these): device connect (`deviceStore.ts:62` →
+   `DevicePage.tsx:203-205`), flash result (`FlashTab.tsx:163,179`, shown at `:392`), project import/open
+   issues (`ProjectsPage.tsx:100,121,172,472`, `HardwarePage.tsx:620`: a raw `JSON.parse` error), composer
+   (`KeycodeComposer.tsx:223,242`). A sentence saying what failed and what to do; raw text behind "details".
+2. Deletes (Step 4.5 missed these): project delete (`ProjectsPage.tsx:404`, moved to `.trash`, toast without
+   Undo: add restore; the armed second click also changes `aria-label`), "remove pin description"
+   (`PinsTab.tsx:342`, silent), macro "clear" (`MacrosPage.tsx`, silent): `deletedToast` with Undo.
+3. Encoder inline edit cancels on blur (`EncodersPage.tsx:60`): a right-click or stray click throws away a
+   half-typed expression. Blur commits when valid, else keeps the text and the error.
+4. Result and error notices announce themselves: `role="status"` / `role="alert"` on the flash result
+   (`FlashTab.tsx:392`), device errors (`DevicePage.tsx:205`) and the other `.notice` blocks.
+5. Disabled reasons reach the keyboard and screen readers (Step 5 leftover): `whyDisabled` keeps the button
+   focusable (`aria-disabled` + blocked click) or ties the reason with `aria-describedby`.
+   `hintsConvention.test.ts` also rejects a bare `disabled` attribute, not only `disabled={…}`.
+
+## Step 11: structure leftovers (🟠 6/10)
+
+**Do**
+1. The layer tab bars (Deck, Keyboard page) and the composer's kind chips onto `<Tabs>` (Step 4 leftover); tabs
+   not visited yet still get a panel element so `aria-controls` points somewhere.
+2. Filter boxes on Encoders, Lighting, Hardware, Firmware → Features and NAVI additions, like Step 8's (Esc
+   clears, shown / total count).
+3. Combos: an open combo that the filter hides closes, or the list says it's filtered out (Step 6 leftover).
+4. Firmware → Features at the smallest window (980px): "feature" and "needed by" columns keep a readable width
+   (Step 5 leftover).
+5. Tips on tap dance "every tap" Shift/Ctrl columns and `ModsInput`; the Step 5 empty-state block on Hardware's
+   "other controls", the macro step list (`MacrosPage.tsx:208`) and the build env chips (`BuildTab.tsx:120`).
 
 ## Not in this plan
 - A redesign or new visual style: the look stays.
