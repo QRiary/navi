@@ -102,14 +102,16 @@ languages (closing with unsaved changes).
 - Combo list rows show the combo's C name (`CM_HM_END_NEWTAB_AT2`) as the title.
 
 **Do**
-1. One core helper `friendlyName(spec, value, ctx)`: alias → tap-hold action ("Space · hold Num") → tap dance
+1. ✅ One core helper `friendlyName(spec, value, ctx)`: alias → tap-hold action ("Space · hold Num") → tap dance
    name → custom keycode name → `keyLabel().main` (+ hold part) → raw expression last. Tests on the owner's kinds
    of keys (stand-ins, `TD()`, `LT`, mod-taps, aliases).
-2. Use it in every place above. The raw expression moves to a tooltip and a "QMK" toggle/secondary line where
+2. ✅ Use it in every place above. The raw expression moves to a tooltip and a "QMK" toggle/secondary line where
    people writing C need it (Firmware tabs stay raw).
-3. `KeycodeField`: friendly preview next to the box, a button that opens the keycode picker, and "pick from
+3. ✅ `KeycodeField`: friendly preview next to the box, a button that opens the keycode picker, and "pick from
    the keyboard" where a key position makes sense.
-4. Key caps: fit text (shrink to a floor, then two lines) before ellipsis; full name in the tooltip.
+   Left over: the catalog popover (`KeycodePopover.tsx`) must pause global shortcuts like Step 2's Modal (Del /
+   Ctrl+Z act behind it now); `KeyChips`' "+ key" box has no preview or catalog button (`common.tsx`).
+4. (After Step 1 lands.) Key caps: fit text (shrink to a floor, then two lines) before ellipsis; full name in the tooltip.
 
 ## Step 4: page structure and safety nets (🟠 6/10)
 
