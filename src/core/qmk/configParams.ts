@@ -25,6 +25,8 @@ export interface ConfigParam {
   group: string;
   title: Text;
   hint?: Text;
+  /** QMK docs page for it (https://docs.qmk.fm/…#anchor, checked by npm run check:docs). */
+  docs?: string;
   /** QMK default value (if known; for the hint). */
   qmkDefault?: number | boolean;
   min?: number;
@@ -46,7 +48,7 @@ const GROUPS: Record<string, Text> = {
 };
 
 /** Labels for the most useful parameters (the rest are shown by name). */
-const DOCS: Record<string, { title: Text; hint?: Text; qmkDefault?: number | boolean; min?: number; max?: number }> = {
+const DOCS: Record<string, { title: Text; hint?: Text; docs?: string; qmkDefault?: number | boolean; min?: number; max?: number }> = {
   TAPPING_TERM: { title: { en: 'Tapping term, ms', ru: 'Время tap/hold, мс' }, hint: { en: 'Shorter than this = tap, longer = hold (mod-tap, layer-tap, tap dance).', ru: 'Короче — нажатие, дольше — удержание (mod-tap, layer-tap, tap dance).' }, qmkDefault: 200, min: 50, max: 1000 },
   PERMISSIVE_HOLD: { title: { en: 'Permissive hold', ru: 'Permissive hold' }, hint: { en: 'Another key pressed and released while holding → hold, even before the tapping term.', ru: 'Другая клавиша нажата и отпущена во время удержания → удержание, даже раньше срока.' }, qmkDefault: false },
   HOLD_ON_OTHER_KEY_PRESS: { title: { en: 'Hold on other key press', ru: 'Удержание при нажатии другой клавиши' }, hint: { en: 'Any other key press while holding → hold immediately.', ru: 'Любая другая клавиша во время удержания → сразу удержание.' }, qmkDefault: false },
@@ -113,6 +115,7 @@ export function configParams(): ConfigParam[] {
       group,
       title: doc?.title ?? { en: define, ru: define },
       hint: doc?.hint,
+      docs: doc?.docs,
       qmkDefault: doc?.qmkDefault,
       min: doc?.min,
       max: doc?.max,
