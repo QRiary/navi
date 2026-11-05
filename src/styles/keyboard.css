@@ -141,8 +141,8 @@
 }
 
 .kb-key-shape {
-  fill: var(--cell-background);
-  stroke: var(--border-color);
+  fill: var(--key-background);
+  stroke: var(--key-border);
   stroke-width: 1px;
   vector-effect: non-scaling-stroke;
   rx: var(--key-radius);
@@ -153,7 +153,7 @@
 
 .kb-key:hover .kb-key-shape {
   stroke: var(--text-label);
-  fill: var(--hover-background);
+  fill: color-mix(in srgb, var(--key-background) 92%, var(--text-primary));
 }
 
 .kb-key text {
@@ -181,7 +181,7 @@
 }
 
 .kb-key-sep {
-  stroke: var(--border-color);
+  stroke: var(--key-border);
   stroke-width: 1px;
   vector-effect: non-scaling-stroke;
 }
@@ -244,7 +244,7 @@
 
 .kb-key--mod-tap .kb-key-shape,
 .kb-key--layer-tap .kb-key-shape {
-  stroke: color-mix(in srgb, var(--text-label) 80%, var(--border-color));
+  stroke: color-mix(in srgb, var(--text-label) 80%, var(--key-border));
 }
 
 .kb-key--modifier .kb-key-main,
@@ -296,7 +296,7 @@
 }
 
 .kb-key.is-pressed .kb-key-shape {
-  fill: color-mix(in srgb, var(--meter-to) 35%, var(--cell-background));
+  fill: color-mix(in srgb, var(--meter-to) 35%, var(--key-background));
   stroke: var(--meter-to);
 }
 
@@ -305,7 +305,7 @@
 }
 
 .kb-key.is-changed .kb-key-shape {
-  stroke: color-mix(in srgb, var(--meter-from) 70%, var(--border-color));
+  stroke: color-mix(in srgb, var(--meter-from) 70%, var(--key-border));
 }
 
 .kb-key.is-drag-source {
@@ -334,8 +334,8 @@
 }
 
 .kb-encoder-cap {
-  fill: var(--cell-background);
-  stroke: var(--border-color);
+  fill: var(--key-background);
+  stroke: var(--key-border);
   vector-effect: non-scaling-stroke;
 }
 
@@ -350,8 +350,8 @@
 }
 
 .kb-encoder-dir rect {
-  fill: var(--cell-background);
-  stroke: var(--border-color);
+  fill: var(--key-background);
+  stroke: var(--key-border);
   vector-effect: non-scaling-stroke;
 }
 

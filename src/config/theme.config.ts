@@ -30,6 +30,10 @@ export interface ThemePalette {
   hover: string;
   /** Borders. */
   border: string;
+  /** Keycap fill in keyboard drawings (keys and encoders). A preset without it uses `cell`. */
+  key: string;
+  /** Keycap outline in keyboard drawings. A preset without it uses `border`. */
+  keyBorder: string;
   /** Main text. */
   text: string;
   /** Secondary text. */
@@ -51,7 +55,15 @@ export interface ThemePreset {
   name: string;
   /** Description in two languages: { en, ru }. */
   description: { en: string; ru: string };
-  palette: ThemePalette;
+  palette: PresetPalette;
+}
+
+/** A preset's colors: the key colors may be left out, then they follow `cell` and `border`. */
+export type PresetPalette = Omit<ThemePalette, 'key' | 'keyBorder'> & Partial<Pick<ThemePalette, 'key' | 'keyBorder'>>;
+
+/** Fills the key colors a palette left out from `cell` and `border`. */
+export function completePalette(p: PresetPalette): ThemePalette {
+  return { ...p, key: p.key ?? p.cell, keyBorder: p.keyBorder ?? p.border };
 }
 
 export const THEME_PRESETS: ThemePreset[] = [
@@ -195,6 +207,8 @@ export const PALETTE_KEYS = [
   'cell',
   'hover',
   'border',
+  'key',
+  'keyBorder',
   'text',
   'textDim',
   'label',

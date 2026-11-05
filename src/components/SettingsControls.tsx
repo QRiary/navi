@@ -5,8 +5,9 @@
  */
 import { RotateCcw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { PALETTE_KEYS, SETTINGS_RANGES, THEME_PRESETS, type PaletteKey } from '../config/theme.config';
+import { PALETTE_KEYS, SETTINGS_RANGES, type PaletteKey } from '../config/theme.config';
 import { useSettingsStore } from '../store/settingsStore';
+import { resolvePalette } from '../theme/applyTheme';
 import { t } from '../i18n';
 import { whyDisabled } from '../lib/whyDisabled';
 import { Slider } from './Slider';
@@ -76,11 +77,15 @@ function colorLabel(key: PaletteKey): string {
     case 'panel':
       return t('Panel background', 'Фон панелей');
     case 'cell':
-      return t('Cells, keys and fields', 'Ячейки, клавиши и поля');
+      return t('Cells and fields', 'Ячейки и поля');
     case 'hover':
       return t('Hover highlight', 'Подсветка при наведении');
     case 'border':
       return t('Borders', 'Рамки');
+    case 'key':
+      return t('Keys in keyboard drawings', 'Клавиши на схемах клавиатуры');
+    case 'keyBorder':
+      return t('Key outlines', 'Рамки клавиш');
     case 'text':
       return t('Main text', 'Основной текст');
     case 'textDim':
@@ -122,10 +127,11 @@ function ColorRow({ name, override, base }: { name: PaletteKey; override: string
 }
 
 export function ColorsSection() {
-  const theme = useSettingsStore((s) => s.settings.theme);
-  const colors = useSettingsStore((s) => s.settings.colors);
+  const settings = useSettingsStore((s) => s.settings);
+  const colors = settings.colors;
   const setValue = useSettingsStore((s) => s.setValue);
-  const palette = (THEME_PRESETS.find((p) => p.id === theme) ?? THEME_PRESETS[0]).palette;
+  // A color's own value without its override: the preset's, or for keys whatever they follow (cell / border).
+  const base = (k: PaletteKey) => resolvePalette({ ...settings, colors: { ...colors, [k]: null } })[k];
   const overridden = PALETTE_KEYS.filter((k) => colors[k]);
   return (
     <section className="section">
@@ -141,7 +147,7 @@ export function ColorsSection() {
       </div>
       <div className="panel-box rows">
         {PALETTE_KEYS.map((k) => (
-          <ColorRow key={k} name={k} override={colors[k] ?? undefined} base={palette[k]} />
+          <ColorRow key={k} name={k} override={colors[k] ?? undefined} base={base(k)} />
         ))}
       </div>
     </section>
