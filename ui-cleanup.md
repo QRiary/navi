@@ -193,14 +193,18 @@ links would help (their examples are clear).
   what to do, shown even when the project already uses the feature.
 
 **Do**
-1. One `InfoTip` ("?" next to a label: hover or focus shows 1-3 plain sentences + an optional "QMK docs" link,
+1. ✅ One `InfoTip` ("?" next to a label: hover or focus shows 1-3 plain sentences + an optional "QMK docs" link,
    opened in the system browser). Every QMK concept and every non-obvious field gets one; each docs URL is opened
-   and checked when added.
-2. Fill the missing `configParams` hints and Russian titles.
-3. Disabled controls say why (tooltip or inline text): one convention, applied to all 41.
-4. Empty-state block for every list: one line on what it does, one example, the add button.
-5. Rewrite the firmware-status banner as a plain sentence with the action ("Tap dance isn't in your firmware
+   and checked when added (`npm run check:docs`; it found 3 dead registry links, fixed).
+2. ✅ Fill the missing `configParams` hints and Russian titles (all 41 shown params; docs links on 34).
+3. ✅ Disabled controls say why (tooltip or inline text): one convention, applied to all 41 (`whyDisabled`, ~80
+   sites; `hintsConvention.test.ts` rejects a bare `disabled={…}`).
+4. ✅ Empty-state block for every list: one line on what it does, one example, the add button.
+5. ✅ Rewrite the firmware-status banner as a plain sentence with the action ("Tap dance isn't in your firmware
    yet: it's added when you build and flash" / "...turned off: turn on").
+   Left over: no tips on tap dance "every tap" Shift/Ctrl columns and `ModsInput`; Hardware's "other controls" list
+   and the macro step list keep their old empty look; a disabled button's reason is a mouse tooltip only
+   (keyboard and screen readers can't reach a disabled button).
 
 ## Step 6: combos tab (🟠 7/10)
 
