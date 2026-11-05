@@ -7,6 +7,7 @@ import { decode } from './codec';
 import { keyLabel, modsLabel, type LabelContext } from './labels';
 import type { KeycodeSpec } from './spec';
 import type { HoldAction } from '../project/types';
+import { t } from '../../i18n';
 
 export interface FriendlyName {
   /** What the key does, for people: "Space · hold Num", "Copy", "Ctrl+Z". */
@@ -34,7 +35,10 @@ function holdText(spec: KeycodeSpec, hold: HoldAction, ctx: LabelContext): strin
   return mods;
 }
 
-const withHold = (tap: string, hold: string) => (tap ? `${tap} · hold ${hold}` : `hold ${hold}`);
+const withHold = (tap: string, hold: string) => {
+  const word = t('hold', 'удержание');
+  return tap ? `${tap} · ${word} ${hold}` : `${word} ${hold}`;
+};
 
 function friendlyText(spec: KeycodeSpec, v: number, ctx: LabelContext): string | undefined {
   const alias = ctx.alias?.(v);
