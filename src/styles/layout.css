@@ -58,7 +58,7 @@
 }
 
 .titlebar-text {
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   letter-spacing: var(--label-spacing);
   text-transform: uppercase;
   color: var(--text-secondary);
@@ -216,12 +216,12 @@
 }
 
 .side-link-num {
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   color: var(--text-label);
 }
 
 .side-link-note {
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   color: var(--text-label);
 }
 
@@ -238,7 +238,6 @@
 
 .side-link.is-active :is(.side-link-num, .side-link-note) {
   color: inherit;
-  opacity: 0.6;
 }
 
 .side-projects {
@@ -294,7 +293,7 @@
 }
 
 .side-item-meta {
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   color: var(--text-label);
 }
 
@@ -307,7 +306,7 @@
 .side-foot {
   padding: 12px 18px;
   border-top: var(--border);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   letter-spacing: var(--label-spacing);
   text-transform: uppercase;
   text-align: center;
@@ -446,7 +445,7 @@
 }
 
 .inspector-head h2 {
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   font-weight: 500;
   letter-spacing: var(--label-spacing);
   text-transform: uppercase;
@@ -517,7 +516,8 @@
     padding: 0;
   }
   .deck {
-    grid-template-columns: minmax(200px, 1fr) minmax(280px, 1.4fr) minmax(200px, 1fr);
+    /* the right cell holds the save state and two buttons: it needs the room more than the center */
+    grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.2fr) minmax(300px, 1.2fr);
   }
 }
 

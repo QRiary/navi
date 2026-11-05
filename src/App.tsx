@@ -12,6 +12,7 @@ import { isDesktop } from './desktop/bridge';
 import { syncTitleBar, useDesktopSync } from './desktop/useDesktopSync';
 import { href, navigate, useRoute, type Route } from './lib/router';
 import { useShortcuts } from './lib/useShortcuts';
+import { useInterfaceZoom } from './lib/interfaceZoom';
 import { useLiveWrite } from './lib/useLiveWrite';
 import { KeyboardPage } from './pages/KeyboardPage';
 import { LayersPage } from './pages/LayersPage';
@@ -80,6 +81,7 @@ export function App() {
   }, [settings.brand.name, projectName]);
   useDesktopSync();
   useShortcuts(route);
+  useInterfaceZoom();
   useLiveWrite();
 
   // Startup: project list, the last opened one; look for keyboards.

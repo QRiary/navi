@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('navi', {
   writeConfig: invoke('navi:write-config'),
   onConfigChanged: (cb) => subscribe('navi:config-changed', cb),
   setTitleBarColors: invoke('navi:titlebar'),
+  setZoom: invoke('navi:set-zoom'),
+  onZoomStep: (cb) => subscribe('navi:zoom-step', cb),
   openPath: invoke('navi:open-path'),
   openExternal: invoke('navi:open-external'),
   saveFile: invoke('navi:file:save'),

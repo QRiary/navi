@@ -163,6 +163,10 @@ export interface NaviBridge {
   writeConfig(text: string): Promise<void>;
   onConfigChanged(cb: (text: string) => void): () => void;
   setTitleBarColors(colors: { color: string; symbolColor: string }): Promise<void>;
+  /** Interface size: the window's zoom factor (0.8…2). */
+  setZoom(factor: number): Promise<void>;
+  /** Ctrl+= / Ctrl+- / Ctrl+0 pressed: +1 / -1 / 0 (reset). */
+  onZoomStep(cb: (step: 1 | -1 | 0) => void): () => void;
   openPath(which: 'data' | 'projects' | 'firmware' | 'config'): Promise<string>;
   openExternal(url: string): Promise<void>;
   saveFile(opts: { name: string; text: string; filters?: { name: string; extensions: string[] }[] }): Promise<string | null>;

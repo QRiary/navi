@@ -64,8 +64,11 @@
 }
 
 .layer-tab-num {
-  font-size: var(--fs-2xs);
-  opacity: 0.6;
+  font-size: var(--fs-xs);
+}
+
+.layer-tab:not(.is-active) .layer-tab-num {
+  color: var(--text-label);
 }
 
 .layer-swatch {
@@ -85,7 +88,7 @@
   place-items: center;
   height: 28px;
   padding: 0 9px;
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   letter-spacing: 0.08em;
   text-transform: lowercase;
   color: var(--text-label);
@@ -107,7 +110,7 @@
 
 .zoom-value {
   min-width: 46px;
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   text-align: center;
   color: var(--text-label);
   font-variant-numeric: tabular-nums;
@@ -399,7 +402,7 @@
   bottom: 10px;
   display: flex;
   gap: 12px;
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   color: var(--text-label);
   pointer-events: none;
 }
@@ -481,7 +484,11 @@
 
 .picker-cat-count {
   font-size: var(--fs-2xs);
-  opacity: 0.6;
+  color: var(--text-label);
+}
+
+.picker-cat.is-active .picker-cat-count {
+  color: inherit;
 }
 
 .picker-main {
@@ -543,7 +550,7 @@
 }
 
 .kc-tile-name {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-label);
   white-space: nowrap;
   overflow: hidden;
@@ -600,7 +607,7 @@
 }
 
 .expr-input .expr-result {
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   color: var(--text-label);
   white-space: nowrap;
 }
@@ -676,7 +683,7 @@
   background: var(--cell-background);
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   white-space: nowrap;
 }
 
@@ -711,7 +718,7 @@
   background: transparent;
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   outline: none;
 }
 
@@ -744,7 +751,7 @@
 
 .key-chips .select {
   height: 24px;
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
 }
 
 /* ── Inspector: fields and rows ────────────────────────────────────── */
@@ -756,7 +763,7 @@
 }
 
 .field-label {
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   font-weight: 500;
   letter-spacing: var(--label-spacing);
   text-transform: uppercase;
@@ -835,7 +842,7 @@
   color: var(--text-label);
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   padding-top: 2px;
 }
 
@@ -1093,13 +1100,25 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
 }
 
 .save-state span {
+  max-width: 100%;
   color: var(--text-label);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* In a narrow window the project name gives way, not the buttons beside it */
+.deck-cell--right > * {
+  flex-shrink: 0;
+}
+
+.deck-cell--right > .save-state {
+  flex-shrink: 1;
 }
 
 .save-state--dirty strong {
@@ -1291,7 +1310,7 @@
 }
 
 .modal-head h2 {
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   font-weight: 500;
   letter-spacing: var(--label-spacing);
   text-transform: uppercase;
@@ -1355,7 +1374,7 @@
 .chip {
   padding: 4px 9px;
   border: var(--border);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   letter-spacing: 0.06em;
   color: var(--text-secondary);
 }

@@ -213,7 +213,7 @@
   width: 46px;
   height: 24px;
   border: var(--border);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-label);
@@ -272,5 +272,5 @@
 }
 
 .theme-desc {
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
 }
