@@ -40,16 +40,16 @@ diff shrinks to the cleanup by itself. Rebase only if a PR in the stack gets squ
 - `electron/main.cjs:56-61`: fixed 1440x900, no saved bounds or maximized state.
 
 **Do**
-1. Raise the type ramp: nothing functional below 12px, body 14px, `--fs-2xs` only for non-interactive tags.
+1. ✅ Raise the type ramp: nothing functional below 12px, body 14px, `--fs-2xs` only for non-interactive tags.
    Dim text to at least 4.5:1 on every panel color, in every palette (check `paper` too).
-2. "Interface size" on Settings → main (80-200%, steps of 10%), stored in the config, applied as the Electron
+2. ✅ "Interface size" on Settings → main (80-200%, steps of 10%), stored in the config, applied as the Electron
    zoom factor (scales everything evenly, keyboard drawing included). Ctrl+= / Ctrl+- / Ctrl+0 and Ctrl+wheel
    change the same value. Keep `typography.scale` for text-only scaling or fold it in (one of the two, not both
    visible).
-3. Save window bounds (`getNormalBounds()`) and the maximized flag in userData on move/resize/close; restore at
+3. ✅ Save window bounds (`getNormalBounds()`) and the maximized flag in userData on move/resize/close; restore at
    start if the rectangle is still on a connected display, else center on the primary display at the default
    size.
-4. Check: rerun `impeccable detect --cdp` on Keyboard, Advanced and Firmware: zero low-contrast and
+4. ✅ Check: rerun `impeccable detect --cdp` on Keyboard, Advanced and Firmware: zero low-contrast and
    undersized-text findings.
 
 ## Step 2: desktop basics that don't work (🟡 5/10)
@@ -110,7 +110,7 @@ languages (closing with unsaved changes).
 3. ✅ `KeycodeField`: friendly preview next to the box, a button that opens the keycode picker, and "pick from
    the keyboard" where a key position makes sense.
    Left over: `KeyChips`' "+ key" box has no preview or catalog button (`common.tsx`).
-4. (After Step 1 lands.) Key caps: fit text (shrink to a floor, then two lines) before ellipsis; full name in the tooltip.
+4. (Step 1 has landed: next.) Key caps: fit text (shrink to a floor, then two lines) before ellipsis; full name in the tooltip.
 
 ## Step 4: page structure and safety nets (🟠 6/10)
 
