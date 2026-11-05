@@ -13,6 +13,9 @@ import { copyEncoderToLayers, setEncoder, resizeEncoders } from '../core/project
 import { hardwareFacts } from '../lib/hardwareFacts';
 import { useActive, useLabelContext } from '../lib/projectContext';
 import { href, navigate } from '../lib/router';
+import { QMK_DOCS } from '../lib/qmkDocs';
+import { EmptyState } from '../components/EmptyState';
+import { Hint } from '../components/InfoTip';
 import { useEditorStore } from '../store/editorStore';
 import { useProjectStore, useSpec } from '../store/projectStore';
 import { StatusChip } from '../components/inspector/KeyInspector';
@@ -95,12 +98,17 @@ export function EncodersPage() {
 
   if (count === 0) {
     return (
-      <div className="empty-state">
-        <p>{t('No encoders in this project. Set the number of encoders in “Hardware” and place them on the layout.', 'В проекте нет энкодеров. Укажите их число в разделе «Железо» и поставьте на схему.')}</p>
+      <EmptyState
+        what={t(
+          'An encoder is a rotary knob; here you choose what turning it each way does on each layer. This project has none yet: set their number in “Hardware” and place them on the layout.',
+          'Энкодер — поворотная ручка; здесь выбирают, что делает поворот в каждую сторону на каждом слое. В проекте их пока нет: укажите число в разделе «Железо» и поставьте на схему.',
+        )}
+        example={t('clockwise = volume up, counter-clockwise = volume down.', 'по часовой — громче, против часовой — тише.')}
+      >
         <a className="btn" href={href({ section: 'hardware', tab: 'profile' })}>
           {t('hardware profile', 'профиль железа')}
         </a>
-      </div>
+      </EmptyState>
     );
   }
 
@@ -110,12 +118,26 @@ export function EncodersPage() {
     <div className="page">
       <div className="notice">
         <span>
-          <strong>{t('Encoder map', 'Карта энкодеров')}</strong> <StatusChip state={mapStatus.state} likely={mapStatus.likely} text={lang === 'ru' ? mapStatus.reason.ru : mapStatus.reason.en} /> ·{' '}
-          {t('Encoders', 'Энкодеры')} <StatusChip state={encStatus.state} likely={encStatus.likely} text={lang === 'ru' ? encStatus.reason.ru : encStatus.reason.en} />
+          <strong>
+            <Hint
+              docs={QMK_DOCS.encoderMap}
+              tip={t(
+                'The encoder map is a table in the firmware that gives each encoder a key for clockwise and for counter-clockwise on every layer. With it (and VIA) the actions can be changed without rebuilding.',
+                'Карта энкодеров — таблица в прошивке: для каждого энкодера и каждого слоя клавиша на поворот по часовой и против. Если она есть (и VIA), действия меняются без пересборки.',
+              )}
+            >
+              {t('Encoder map', 'Карта энкодеров')}
+            </Hint>
+          </strong>{' '}
+          <StatusChip state={mapStatus.state} likely={mapStatus.likely} text={lang === 'ru' ? mapStatus.reason.ru : mapStatus.reason.en} /> · {t('Encoders', 'Энкодеры')}{' '}
+          <StatusChip state={encStatus.state} likely={encStatus.likely} text={lang === 'ru' ? encStatus.reason.ru : encStatus.reason.en} />
           <br />
           {mapStatus.state === 'available'
             ? t('Actions below can be written to the keyboard over VIA right away (bottom bar → “to keyboard”).', 'Действия ниже можно сразу записать в клавиатуру по VIA (внизу → «в клавиатуру»).')
-            : t('Without an encoder map in the firmware, these actions go only into your own firmware build (keymap.c → encoder_map).', 'Без карты энкодеров в прошивке эти действия попадут только в вашу сборку (keymap.c → encoder_map).')}
+            : t(
+                'Without an encoder map in the firmware, these actions go only into your own firmware build (keymap.c → encoder_map).',
+                'Без карты энкодеров в прошивке эти действия попадут только в вашу сборку (keymap.c → encoder_map).',
+              )}
         </span>
       </div>
       <div className="panel-box">
@@ -203,7 +225,10 @@ export function EncodersPage() {
                 }
               }}
             >
-              {p.name()} <span className="kicker">{p.ccw} / {p.cw}</span>
+              {p.name()}{' '}
+              <span className="kicker">
+                {p.ccw} / {p.cw}
+              </span>
             </button>
           ))}
         </div>
@@ -211,7 +236,16 @@ export function EncodersPage() {
 
       <section className="section">
         <div className="section-head">
-          <h2>{t('encoder press', 'нажатие энкодера')}</h2>
+          <h2>
+            <Hint
+              tip={t(
+                'Many encoders also click when pushed in. The click is an ordinary key in the matrix, so it is assigned like any key on the Keyboard page, not in the encoder map.',
+                'Многие энкодеры ещё и нажимаются. Нажатие — обычная клавиша матрицы: его назначают как любую клавишу на странице «Клавиатура», а не в карте энкодеров.',
+              )}
+            >
+              {t('encoder press', 'нажатие энкодера')}
+            </Hint>
+          </h2>
         </div>
         <div className="panel-box rows">
           {Array.from({ length: count }, (_, e) => {
@@ -223,7 +257,10 @@ export function EncodersPage() {
                 <span className="field-hint" title={pos ? friendlyName(spec, keymap.layers[0].keys[pos[0] * cols + pos[1]], labelCtx).qmk : undefined}>
                   {pos
                     ? `${t('matrix', 'матрица')} [${pos[0]},${pos[1]}] · L0: ${friendlyName(spec, keymap.layers[0].keys[pos[0] * cols + pos[1]], labelCtx).text}`
-                    : t('The press is not linked to a matrix position (unknown or no button). Link it in “Hardware → geometry”.', 'Нажатие не связано с позицией матрицы (неизвестно или кнопки нет). Свяжите в «Железо → геометрия».')}
+                    : t(
+                        'The press is not linked to a matrix position (unknown or no button). Link it in “Hardware → geometry”.',
+                        'Нажатие не связано с позицией матрицы (неизвестно или кнопки нет). Свяжите в «Железо → геометрия».',
+                      )}
                 </span>
                 {pos && (
                   <button
@@ -253,7 +290,10 @@ export function EncodersPage() {
         >
           {t('assign on the layout (catalog)', 'назначать на схеме (каталог)')}
         </button>
-        <button className="btn btn--ghost" onClick={() => apply((p) => ({ ...p, keymaps: p.keymaps.map((k) => (k.id === keymap.id ? resizeEncoders(k, count) : k)) }), t('encoder slots', 'слоты энкодеров'))}>
+        <button
+          className="btn btn--ghost"
+          onClick={() => apply((p) => ({ ...p, keymaps: p.keymaps.map((k) => (k.id === keymap.id ? resizeEncoders(k, count) : k)) }), t('encoder slots', 'слоты энкодеров'))}
+        >
           {t('fill missing slots', 'дополнить пустые места')}
         </button>
       </div>

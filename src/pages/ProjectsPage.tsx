@@ -8,7 +8,20 @@ import { createBlankProject, createDilemmaProject, createProject, emptyHardware 
 import { activeGeometry, activeKeymap } from '../core/project/ops';
 import { diffProjects } from '../core/project/diff';
 import { parseProjectText, serializeProject, validateProject, type ValidationIssue } from '../core/project/validate';
-import { detectFileKind, exportQmkKeymapJson, exportViaBackup, exportViaDefinition, importKle, importQmkKeymapJson, importQmkLayout, importViaBackup, importViaDefinition, layoutOrder, listQmkLayouts, type ImportIssue } from '../core/io/formats';
+import {
+  detectFileKind,
+  exportQmkKeymapJson,
+  exportViaBackup,
+  exportViaDefinition,
+  importKle,
+  importQmkKeymapJson,
+  importQmkLayout,
+  importViaBackup,
+  importViaDefinition,
+  layoutOrder,
+  listQmkLayouts,
+  type ImportIssue,
+} from '../core/io/formats';
 import { serializeKle } from '../core/io/kle';
 import { loadSpec } from '../core/keycodes/spec';
 import { hasCustomCode } from '../core/qmk/customCode';
@@ -21,6 +34,9 @@ import { projectFromDevice } from '../lib/projectFromDevice';
 import { projectRepo } from '../platform/projectRepo';
 import { href, navigate } from '../lib/router';
 import { TabPanels, Tabs } from '../components/Tabs';
+import { EmptyState } from '../components/EmptyState';
+import { Hint } from '../components/InfoTip';
+import { whyDisabled } from '../lib/whyDisabled';
 import { useDeviceStore } from '../store/deviceStore';
 import { useProjectStore } from '../store/projectStore';
 import { toast, toastError } from '../store/toastStore';
@@ -110,7 +126,15 @@ function NewProject() {
         if (project) {
           // Own code from a foreign file does not get into the firmware until the user reviews it.
           const review = hasCustomCode(project.firmware.custom);
-          if (review) iss.push({ level: 'warning', path: 'firmware.custom', message: t('The project contains its own code for the firmware files — review it in Firmware → keymap files before building.', 'В проекте есть свой код для файлов прошивки — просмотрите его в «Прошивка → файлы keymap» перед сборкой.') });
+          if (review)
+            iss.push({
+              level: 'warning',
+              path: 'firmware.custom',
+              message: t(
+                'The project contains its own code for the firmware files — review it in Firmware → keymap files before building.',
+                'В проекте есть свой код для файлов прошивки — просмотрите его в «Прошивка → файлы keymap» перед сборкой.',
+              ),
+            });
           setIssues([...iss]);
           await done({ ...project, id: newId('prj'), firmware: { ...project.firmware, customReview: review || undefined } }, t('Project imported (as a copy)', 'Проект импортирован (копией)'));
         }
@@ -129,7 +153,15 @@ function NewProject() {
         if (layouts.length === 1) await fromQmkInfo(json as Record<string, unknown>, layouts[0]);
         else setLayoutChoice({ info: json as Record<string, unknown>, layouts });
       } else if (kind === 'qmk-keymap' || kind === 'via-backup') {
-        setIssues([{ level: 'warning', message: t('This is a keymap, not a keyboard: open a project and import it in “Projects → current project”.', 'Это раскладка, а не клавиатура: откройте проект и импортируйте её в «Проекты → текущий проект».') }]);
+        setIssues([
+          {
+            level: 'warning',
+            message: t(
+              'This is a keymap, not a keyboard: open a project and import it in “Projects → current project”.',
+              'Это раскладка, а не клавиатура: откройте проект и импортируйте её в «Проекты → текущий проект».',
+            ),
+          },
+        ]);
       } else {
         setIssues([{ level: 'error', message: t('Unknown file format', 'Неизвестный формат файла') }]);
       }
@@ -170,19 +202,33 @@ function NewProject() {
             </button>
           </div>
           <div className="panel-box-body">
-            <p className="field-hint">{t('Reads everything VIA gives (read-only): matrix, layers, keymap, encoders, macros, lighting.', 'Читает всё, что отдаёт VIA (только чтение): матрицу, слои, раскладку, энкодеры, макросы, подсветку.')}</p>
+            <p className="field-hint">
+              {t(
+                'Reads everything VIA gives (read-only): matrix, layers, keymap, encoders, macros, lighting.',
+                'Читает всё, что отдаёт VIA (только чтение): матрицу, слои, раскладку, энкодеры, макросы, подсветку.',
+              )}
+            </p>
             <div className="rows" style={{ marginTop: 12 }}>
               {devices.map((d) => (
                 <div className="row" key={d.key} style={{ ['--row-cols' as string]: 'minmax(0,1fr) auto' }}>
                   <span>
-                    {d.productName} <span className="kicker">{d.vendorId.toString(16).padStart(4, '0')}:{d.productId.toString(16).padStart(4, '0')}</span>
+                    {d.productName}{' '}
+                    <span className="kicker">
+                      {d.vendorId.toString(16).padStart(4, '0')}:{d.productId.toString(16).padStart(4, '0')}
+                    </span>
                   </span>
-                  <button className="btn btn--primary" disabled={status === 'connecting' || status === 'busy'} onClick={() => void fromDevice(d.key)}>
+                  <button
+                    className="btn btn--primary"
+                    {...whyDisabled((status === 'connecting' || status === 'busy') && t('Wait: the keyboard is busy', 'Подождите: клавиатура занята'))}
+                    onClick={() => void fromDevice(d.key)}
+                  >
                     {t('create', 'создать')}
                   </button>
                 </div>
               ))}
-              {devices.length === 0 && <p className="field-hint">{t('No VIA keyboards found. Connect it by USB and press “search”.', 'Клавиатуры с VIA не найдены. Подключите по USB и нажмите «искать».')}</p>}
+              {devices.length === 0 && (
+                <p className="field-hint">{t('No VIA keyboards found. Connect it by USB and press “search”.', 'Клавиатуры с VIA не найдены. Подключите по USB и нажмите «искать».')}</p>
+              )}
             </div>
             {status === 'connected' && caps && snapshot && (
               <p className="field-hint" style={{ marginTop: 8 }}>
@@ -216,7 +262,9 @@ function NewProject() {
             </span>
           </div>
           <div className="panel-box-body">
-            <p className="field-hint">{t('A grid of keys for every matrix position; then shape it in the geometry editor.', 'Сетка клавиш по позициям матрицы; дальше — форма в редакторе геометрии.')}</p>
+            <p className="field-hint">
+              {t('A grid of keys for every matrix position; then shape it in the geometry editor.', 'Сетка клавиш по позициям матрицы; дальше — форма в редакторе геометрии.')}
+            </p>
             <div className="field-row" style={{ marginTop: 12 }}>
               <label className="field-hint">
                 {t('rows', 'строк')} <input className="input input--num" type="number" min={1} max={32} value={rows} onChange={(e) => setRows(Number(e.target.value))} />
@@ -229,7 +277,10 @@ function NewProject() {
               </label>
               <button
                 className="btn"
-                disabled={rows < 1 || cols < 1 || rows > 32 || cols > 32 || (split && rows % 2 !== 0)}
+                {...whyDisabled(
+                  (split && rows % 2 !== 0 && t('A split keyboard needs an even number of rows', 'У сплита должно быть чётное число строк')) ||
+                    ((rows < 1 || cols < 1 || rows > 32 || cols > 32) && t('Rows and columns: from 1 to 32', 'Строк и столбцов: от 1 до 32')),
+                )}
                 onClick={() => void done(createBlankProject(t('My keyboard', 'Моя клавиатура'), rows, cols, split), t('Project created', 'Проект создан'))}
               >
                 <Plus {...ICON} /> {t('create', 'создать')}
@@ -245,20 +296,29 @@ function NewProject() {
             </span>
           </div>
           <div className="panel-box-body">
-            <p className="field-hint">{t('NAVI project · QMK keyboard.json / info.json · VIA keyboard definition · KLE raw data.', 'Проект NAVI · QMK keyboard.json / info.json · определение клавиатуры VIA · KLE raw data.')}</p>
+            <p className="field-hint">
+              {t('NAVI project · QMK keyboard.json / info.json · VIA keyboard definition · KLE raw data.', 'Проект NAVI · QMK keyboard.json / info.json · определение клавиатуры VIA · KLE raw data.')}
+            </p>
             <div className="field-row" style={{ marginTop: 12 }}>
               <button className="btn" onClick={() => void importFile()}>
                 <FolderOpen {...ICON} /> {t('choose file…', 'выбрать файл…')}
               </button>
               {navi && (
-                <button className="btn" onClick={() => void openLinked()} title={t('The project stays linked to this NAVI project file: Save writes it back there', 'Проект остаётся связан с этим файлом проекта NAVI: «Сохранить» записывает его туда')}>
+                <button
+                  className="btn"
+                  onClick={() => void openLinked()}
+                  title={t('The project stays linked to this NAVI project file: Save writes it back there', 'Проект остаётся связан с этим файлом проекта NAVI: «Сохранить» записывает его туда')}
+                >
                   <Link2 {...ICON} /> {t('open a file (linked)…', 'открыть файл (со связью)…')}
                 </button>
               )}
             </div>
             {navi && (
               <p className="field-hint" style={{ marginTop: 8 }}>
-                {t('Import makes a copy. A linked NAVI project stays tied to its file (e.g. in your git repo): Save writes it back.', 'Импорт делает копию. Связанный проект NAVI остаётся привязан к своему файлу (например, в вашем git-репозитории): «Сохранить» записывает его обратно.')}
+                {t(
+                  'Import makes a copy. A linked NAVI project stays tied to its file (e.g. in your git repo): Save writes it back.',
+                  'Импорт делает копию. Связанный проект NAVI остаётся привязан к своему файлу (например, в вашем git-репозитории): «Сохранить» записывает его обратно.',
+                )}
               </p>
             )}
             {layoutChoice && (
@@ -301,7 +361,8 @@ function ProjectList() {
         {list.map((p) => (
           <div key={p.id} className={`row ${p.id === currentId ? 'is-active' : ''}`} style={{ ['--row-cols' as string]: 'minmax(0,1.4fr) minmax(0,1fr) 90px 150px auto' }}>
             <button style={{ textAlign: 'left' }} onClick={() => void open(p.id).then((ok) => ok && navigate({ section: 'keyboard' }))}>
-              <strong>{p.name}</strong> {p.unsaved && <span className="badge badge--info">{t('draft', 'черновик')}</span>} {p.broken && <span className="badge badge--warn">{t('broken', 'повреждён')}</span>}
+              <strong>{p.name}</strong> {p.unsaved && <span className="badge badge--info">{t('draft', 'черновик')}</span>}{' '}
+              {p.broken && <span className="badge badge--warn">{t('broken', 'повреждён')}</span>}
             </button>
             <span className="field-hint">{p.keyboard}</span>
             <span className="kicker">
@@ -331,10 +392,14 @@ function ProjectList() {
           </div>
         ))}
         {list.length === 0 && (
-          <div className="row">
-            <span />
-            <a href={href({ section: 'projects', tab: 'new' })}>{t('No projects yet — create one', 'Проектов пока нет — создайте')}</a>
-          </div>
+          <EmptyState
+            what={t('A project is one keyboard with its keymaps, macros and settings, saved on disk.', 'Проект — это одна клавиатура с её раскладками, макросами и настройками, сохранённая на диске.')}
+            example={t('“Dilemma 4x6”, read from the connected keyboard or made from the template.', '«Dilemma 4x6», прочитанный с подключённой клавиатуры или созданный из шаблона.')}
+          >
+            <a className="btn btn--primary" href={href({ section: 'projects', tab: 'new' })}>
+              {t('Create a project', 'Создать проект')}
+            </a>
+          </EmptyState>
         )}
       </div>
     </div>
@@ -374,7 +439,10 @@ function CurrentProject() {
               ...p,
               keymaps: [...p.keymaps, res.keymap],
               activeKeymapId: res.keymap.id,
-              macros: [...p.macros.filter((m) => !res.macros.some((x) => x.index === m.index)), ...res.macros.map((m) => ({ id: newId('macro'), index: m.index, name: `M${m.index}`, steps: m.steps }))],
+              macros: [
+                ...p.macros.filter((m) => !res.macros.some((x) => x.index === m.index)),
+                ...res.macros.map((m) => ({ id: newId('macro'), index: m.index, name: `M${m.index}`, steps: m.steps })),
+              ],
             }),
             t('import VIA backup', 'импорт VIA'),
           );
@@ -405,10 +473,16 @@ function CurrentProject() {
             <button className="btn" onClick={() => void saveTextFile(`${base}.navi.json`, serializeProject(project), [{ name: 'NAVI project', extensions: ['json'] }]).then(done)}>
               <Download {...ICON} /> {t('NAVI project (everything)', 'проект NAVI (всё)')}
             </button>
-            <button className="btn" onClick={() => void saveTextFile(`${project.firmware.keymap}.keymap.json`, JSON.stringify(exportQmkKeymapJson(project, km, spec, geo), null, 1), JSON_FILTERS).then(done)}>
+            <button
+              className="btn"
+              onClick={() => void saveTextFile(`${project.firmware.keymap}.keymap.json`, JSON.stringify(exportQmkKeymapJson(project, km, spec, geo), null, 1), JSON_FILTERS).then(done)}
+            >
               <Download {...ICON} /> QMK keymap.json ({t('Configurator', 'Configurator')})
             </button>
-            <button className="btn" onClick={() => void saveTextFile(`${base}.via.layout.json`, JSON.stringify(exportViaBackup(project, km, spec, snapshotMacros ?? 16), null, 1), JSON_FILTERS).then(done)}>
+            <button
+              className="btn"
+              onClick={() => void saveTextFile(`${base}.via.layout.json`, JSON.stringify(exportViaBackup(project, km, spec, snapshotMacros ?? 16), null, 1), JSON_FILTERS).then(done)}
+            >
               <Download {...ICON} /> {t('VIA layout backup', 'резервная копия VIA')}
             </button>
             <button className="btn" onClick={() => void exportKle().then(done)}>
@@ -461,13 +535,23 @@ function LinkedFile() {
       .then((res) => {
         if (ok && res !== null) toast(ok);
       })
-      .catch((err: Error) => toastError(t('That action on the linked file failed. Check the file is reachable and try again.', 'Действие со связанным файлом не удалось. Проверьте, что файл доступен, и повторите.'), err));
+      .catch((err: Error) =>
+        toastError(t('That action on the linked file failed. Check the file is reachable and try again.', 'Действие со связанным файлом не удалось. Проверьте, что файл доступен, и повторите.'), err),
+      );
 
   return (
     <section className="panel-box" style={{ marginBottom: 'var(--gap)' }}>
       <div className="panel-box-head">
         <span className="cell-label">
-          <Link2 size={13} strokeWidth={1.5} /> {t('linked file', 'связанный файл')}
+          <Link2 size={13} strokeWidth={1.5} />{' '}
+          <Hint
+            tip={t(
+              'Links this project to a NAVI project file you keep elsewhere, for example in your own git repo. Saving then writes the project there too, and NAVI shows the differences if the file was changed outside.',
+              'Связывает проект с файлом проекта NAVI, который вы храните в другом месте, например в своём git-репозитории. «Сохранить» тогда записывает проект и туда, а если файл изменили снаружи, NAVI покажет различия.',
+            )}
+          >
+            {t('linked file', 'связанный файл')}
+          </Hint>
         </span>
         {link?.missing && <span className="badge badge--warn">{t('not found', 'не найден')}</span>}
       </div>
@@ -479,8 +563,14 @@ function LinkedFile() {
             </p>
             <p className="field-hint">
               {link.missing
-                ? t('The file is not at this path any more (moved or deleted). NAVI keeps its own copy; relink to the file or unlink.', 'Файла больше нет по этому пути (перемещён или удалён). У NAVI есть своя копия; привяжите файл заново или отвяжите.')
-                : t('Save (Ctrl+S) also writes this file. If it changes outside NAVI (git pull, a hand edit), NAVI shows the differences before anything is overwritten.', '«Сохранить» (Ctrl+S) записывает и этот файл. Если он изменится вне NAVI (git pull, правка вручную), NAVI покажет различия, прежде чем что-то перезаписать.')}
+                ? t(
+                    'The file is not at this path any more (moved or deleted). NAVI keeps its own copy; relink to the file or unlink.',
+                    'Файла больше нет по этому пути (перемещён или удалён). У NAVI есть своя копия; привяжите файл заново или отвяжите.',
+                  )
+                : t(
+                    'Save (Ctrl+S) also writes this file. If it changes outside NAVI (git pull, a hand edit), NAVI shows the differences before anything is overwritten.',
+                    '«Сохранить» (Ctrl+S) записывает и этот файл. Если он изменится вне NAVI (git pull, правка вручную), NAVI покажет различия, прежде чем что-то перезаписать.',
+                  )}
             </p>
             <div className="field-row">
               <button className="btn" onClick={() => run(relink)}>
@@ -494,7 +584,10 @@ function LinkedFile() {
         ) : (
           <>
             <p className="field-hint">
-              {t('Not linked. Link the project to a file (e.g. in your own git repo): Save will write it there too. The link is kept only in NAVI, never in the file.', 'Не связан. Свяжите проект с файлом (например, в вашем git-репозитории): «Сохранить» будет записывать и его. Связь хранится только в NAVI, не в файле.')}
+              {t(
+                'Not linked. Link the project to a file (e.g. in your own git repo): Save will write it there too. The link is kept only in NAVI, never in the file.',
+                'Не связан. Свяжите проект с файлом (например, в вашем git-репозитории): «Сохранить» будет записывать и его. Связь хранится только в NAVI, не в файле.',
+              )}
             </p>
             <div className="field-row">
               <button className="btn" onClick={() => run(linkToFile, t('Linked: the saved version is written to the file', 'Связано: сохранённая версия записана в файл'))}>
@@ -535,7 +628,15 @@ function RevisionList() {
     <section className="section">
       <div className="section-head">
         <h2>
-          <History size={13} strokeWidth={1.5} /> {t('versions', 'версии')}
+          <History size={13} strokeWidth={1.5} />{' '}
+          <Hint
+            tip={t(
+              'Every save keeps the earlier version here (the last 50). Compare shows what changed against the project now; restore loads that version as an unsaved change you can undo.',
+              'Каждое сохранение оставляет здесь прошлую версию (последние 50). «Сравнить» показывает отличия от проекта сейчас; «восстановить» загружает версию как несохранённое изменение, которое можно отменить.',
+            )}
+          >
+            {t('versions', 'версии')}
+          </Hint>
         </h2>
         {changes && (
           <button className="text-btn" onClick={() => setShowUnsaved(!showUnsaved)}>
@@ -588,12 +689,7 @@ function RevisionList() {
               )}
             </div>
           ))}
-          {list.length === 0 && (
-            <div className="row">
-              <span />
-              <span className="field-hint">{t('Earlier versions appear after the next saves.', 'Прошлые версии появятся после следующих сохранений.')}</span>
-            </div>
-          )}
+          {list.length === 0 && <EmptyState what={t('Earlier versions appear after the next saves.', 'Прошлые версии появятся после следующих сохранений.')} />}
         </div>
       </div>
       {navi && (

@@ -10,6 +10,7 @@ import { toastError } from '../../store/toastStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { t } from '../../i18n';
 import { Modal } from '../Modal';
+import { whyDisabled } from '../../lib/whyDisabled';
 
 export function CloseDialog() {
   const project = useProjectStore((s) => s.project);
@@ -52,7 +53,10 @@ export function CloseDialog() {
       await flushDraft();
       answer('close');
     } catch (err) {
-      toastError(t('Couldn’t save the draft, so the project was not closed. Save it with Ctrl+S and try again.', 'Не удалось сохранить черновик, поэтому проект не закрыт. Сохраните его (Ctrl+S) и повторите.'), err);
+      toastError(
+        t('Couldn’t save the draft, so the project was not closed. Save it with Ctrl+S and try again.', 'Не удалось сохранить черновик, поэтому проект не закрыт. Сохраните его (Ctrl+S) и повторите.'),
+        err,
+      );
       answer('stay');
     } finally {
       setBusy(null);
@@ -74,27 +78,22 @@ export function CloseDialog() {
       busy={busy !== null}
       footer={
         <>
-          <button className="btn" onClick={() => answer('stay')} disabled={busy !== null}>
+          <button className="btn" onClick={() => answer('stay')} {...whyDisabled(busy !== null && t('Wait: saving…', 'Подождите: идёт сохранение…'))}>
             {t('cancel', 'отмена')}
           </button>
-          <button className="btn" onClick={() => void discard()} disabled={busy !== null}>
+          <button className="btn" onClick={() => void discard()} {...whyDisabled(busy !== null && t('Wait: saving…', 'Подождите: идёт сохранение…'))}>
             {t("don't save", 'не сохранять')}
           </button>
-          <button className="btn btn--primary" data-autofocus onClick={() => void save()} disabled={busy !== null}>
+          <button className="btn btn--primary" data-autofocus onClick={() => void save()} {...whyDisabled(busy !== null && t('Wait: saving…', 'Подождите: идёт сохранение…'))}>
             {busy === 'save' ? t('saving…', 'сохранение…') : t('save', 'сохранить')}
           </button>
         </>
       }
     >
       <p className="field-hint">
-        {t(
-          `“${project?.name ?? ''}” has unsaved changes. Save them before closing?`,
-          `В «${project?.name ?? ''}» есть несохранённые изменения. Сохранить их перед закрытием?`,
-        )}
+        {t(`“${project?.name ?? ''}” has unsaved changes. Save them before closing?`, `В «${project?.name ?? ''}» есть несохранённые изменения. Сохранить их перед закрытием?`)}
       </p>
-      <p className="field-hint">
-        {t("Don't save: the edits stay in the draft and reopen next time.", 'Не сохранять: правки остаются в черновике и откроются при следующем запуске.')}
-      </p>
+      <p className="field-hint">{t("Don't save: the edits stay in the draft and reopen next time.", 'Не сохранять: правки остаются в черновике и откроются при следующем запуске.')}</p>
     </Modal>
   );
 }

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { PALETTE_KEYS, SETTINGS_RANGES, THEME_PRESETS, type PaletteKey } from '../config/theme.config';
 import { useSettingsStore } from '../store/settingsStore';
 import { t } from '../i18n';
+import { whyDisabled } from '../lib/whyDisabled';
 import { Slider } from './Slider';
 
 /** Local copy of a stored value + a write function that runs once per frame with the newest value. */
@@ -70,19 +71,32 @@ export function SelectRow({ settingKey, value, label, options }: { settingKey: s
 
 function colorLabel(key: PaletteKey): string {
   switch (key) {
-    case 'background': return t('Window background', 'Фон окна');
-    case 'panel': return t('Panel background', 'Фон панелей');
-    case 'cell': return t('Cells, keys and fields', 'Ячейки, клавиши и поля');
-    case 'hover': return t('Hover highlight', 'Подсветка при наведении');
-    case 'border': return t('Borders', 'Рамки');
-    case 'text': return t('Main text', 'Основной текст');
-    case 'textDim': return t('Secondary text', 'Второстепенный текст');
-    case 'label': return t('UPPERCASE labels', 'Подписи ЗАГЛАВНЫМИ');
-    case 'accent': return t('Accent: active elements', 'Акцент: активные элементы');
-    case 'accentText': return t('Text on the accent', 'Текст на акценте');
-    case 'meterFrom': return t('Meters: gradient start', 'Шкалы: начало градиента');
-    case 'meterTo': return t('Meters: gradient end', 'Шкалы: конец градиента');
-    case 'danger': return t('Errors', 'Ошибки');
+    case 'background':
+      return t('Window background', 'Фон окна');
+    case 'panel':
+      return t('Panel background', 'Фон панелей');
+    case 'cell':
+      return t('Cells, keys and fields', 'Ячейки, клавиши и поля');
+    case 'hover':
+      return t('Hover highlight', 'Подсветка при наведении');
+    case 'border':
+      return t('Borders', 'Рамки');
+    case 'text':
+      return t('Main text', 'Основной текст');
+    case 'textDim':
+      return t('Secondary text', 'Второстепенный текст');
+    case 'label':
+      return t('UPPERCASE labels', 'Подписи ЗАГЛАВНЫМИ');
+    case 'accent':
+      return t('Accent: active elements', 'Акцент: активные элементы');
+    case 'accentText':
+      return t('Text on the accent', 'Текст на акценте');
+    case 'meterFrom':
+      return t('Meters: gradient start', 'Шкалы: начало градиента');
+    case 'meterTo':
+      return t('Meters: gradient end', 'Шкалы: конец градиента');
+    case 'danger':
+      return t('Errors', 'Ошибки');
   }
 }
 
@@ -95,7 +109,12 @@ function ColorRow({ name, override, base }: { name: PaletteKey; override: string
       <span>{label}</span>
       <input type="color" className="color-input" aria-label={label} value={local} onChange={(e) => setLocal(e.target.value)} />
       <code className="num">{local}</code>
-      <button className="icon-btn" disabled={override === undefined} title={t('Reset to the palette color', 'Вернуть цвет палитры')} aria-label={t(`Reset “${label}” to the palette color`, `Вернуть цвет палитры: «${label}»`)} onClick={() => setValue(`colors.${name}`, null)}>
+      <button
+        className="icon-btn"
+        {...whyDisabled(override === undefined && t('Already the palette color', 'Уже цвет палитры'), t('Reset to the palette color', 'Вернуть цвет палитры'))}
+        aria-label={t(`Reset “${label}” to the palette color`, `Вернуть цвет палитры: «${label}»`)}
+        onClick={() => setValue(`colors.${name}`, null)}
+      >
         <RotateCcw size={14} strokeWidth={1.5} />
       </button>
     </div>
@@ -112,7 +131,11 @@ export function ColorsSection() {
     <section className="section">
       <div className="section-head">
         <h2>{t('colors', 'цвета')}</h2>
-        <button className="btn" disabled={overridden.length === 0} onClick={() => overridden.forEach((k) => setValue(`colors.${k}`, null))}>
+        <button
+          className="btn"
+          {...whyDisabled(overridden.length === 0 && t('No color differs from the palette', 'Ни один цвет не отличается от палитры'))}
+          onClick={() => overridden.forEach((k) => setValue(`colors.${k}`, null))}
+        >
           <RotateCcw size={14} strokeWidth={1.5} /> {t('reset all colors', 'сбросить все цвета')}
         </button>
       </div>
