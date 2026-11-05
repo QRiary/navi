@@ -15,7 +15,7 @@ import { parseProjectText, serializeProject, validateProject } from './validate'
 
 const spec = loadSpec('latest');
 const q = (s: string) => parseQmk(spec, s);
-const setting = (expr: string, extra: Partial<TapHoldSetting> = {}, id = expr.replace(/\W/g, '_')): TapHoldSetting => ({ id, keycode: q(expr), ...extra });
+const setting = (expr: string, extra: Partial<TapHoldSetting> = {}, id = expr.replace(/\W/g, '_')): TapHoldSetting => ({ id, keycodes: [q(expr)], ...extra });
 
 function base(): Project {
   let p = createDilemmaProject();
@@ -54,7 +54,7 @@ describe('tap-hold settings: model', () => {
 
   it('untrusted JSON: an unknown flavor and out-of-range terms are reported', () => {
     const raw = JSON.parse(serializeProject(base()));
-    raw.tapHolds = [{ id: 'a', keycode: q('LSFT_T(KC_F)'), flavor: 'sometimes', tappingTerm: 'x' }];
+    raw.tapHolds = [{ id: 'a', keycodes: [q('LSFT_T(KC_F)')], flavor: 'sometimes', tappingTerm: 'x' }];
     const { issues } = validateProject(raw);
     expect(issues.some((i) => i.path.startsWith('tapHolds[0]'))).toBe(true);
   });
@@ -234,7 +234,7 @@ describe('tap-hold settings follow layer changes', () => {
     let p = withSettings([setting('LT(2, KC_SPC)', { tappingTerm: 220, holdOnKeys: [q('MO(2)')] })]);
     const km = activeKeymap(p);
     p = moveLayer(p, km.id, spec, 2, 1);
-    expect(p.tapHolds[0].keycode).toBe(q('LT(1, KC_SPC)'));
+    expect(p.tapHolds[0].keycodes).toEqual([q('LT(1, KC_SPC)')]);
     expect(p.tapHolds[0].holdOnKeys).toEqual([q('MO(1)')]);
   });
 
@@ -242,7 +242,7 @@ describe('tap-hold settings follow layer changes', () => {
     let p = withSettings([setting('LT(2, KC_SPC)', { tappingTerm: 220 }), setting('LSFT_T(KC_F)', { holdOnKeys: [q('MO(2)'), q('KC_SLSH')] })]);
     const km = activeKeymap(p);
     p = removeLayer(p, km.id, spec, 2);
-    expect(p.tapHolds.map((t) => t.keycode)).toEqual([q('LSFT_T(KC_F)')]);
+    expect(p.tapHolds.map((t) => t.keycodes)).toEqual([[q('LSFT_T(KC_F)')]]);
     expect(p.tapHolds[0].holdOnKeys).toEqual([q('KC_SLSH')]);
   });
 });

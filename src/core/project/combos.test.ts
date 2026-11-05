@@ -37,7 +37,7 @@ const pipe = (p: Project): Project => ({ ...p, firmware: { ...p.firmware, pipeli
 const holdKeys = (p: Project): Project => {
   const id = activeKeymap(p).id;
   p = setKeycodes(p, id, 0, [[1, 0]], q('LSFT_T(KC_A)'));
-  return { ...p, tapHolds: [{ id: 'th_a', keycode: q('LSFT_T(KC_A)'), holdOnKeys: [q('KC_Z')] }] };
+  return { ...p, tapHolds: [{ id: 'th_a', keycodes: [q('LSFT_T(KC_A)')], holdOnKeys: [q('KC_Z')] }] };
 };
 
 describe('combo reference layers', () => {
@@ -125,7 +125,7 @@ describe('combo results through the tap-hold logic', () => {
   it('hold-preferred only (no hold keys): tracking without interrupters', () => {
     let p = base([combo('qw', [[0, 0], [0, 1]], 'KC_Z')]);
     p = setKeycodes(p, activeKeymap(p).id, 0, [[1, 0]], q('LSFT_T(KC_A)'));
-    p = { ...p, tapHolds: [{ id: 'th_a', keycode: q('LSFT_T(KC_A)'), flavor: 'hold-preferred' }] };
+    p = { ...p, tapHolds: [{ id: 'th_a', keycodes: [q('LSFT_T(KC_A)')], flavor: 'hold-preferred' }] };
     const c = file(p, 'keymap.c');
     expect(c).toContain('COMBO(qw_keys, KC_NO),');
     expect(c).toContain('        navi_note_press(keycode);');
@@ -178,8 +178,8 @@ describe('Layer.comboRef in the project', () => {
   it('schema 10: a format 9 file opens unchanged (every layer reads layer 0)', () => {
     const v9 = JSON.parse(serializeProject(createDilemmaProject()));
     v9.schemaVersion = 9;
-    expect(PROJECT_SCHEMA_VERSION).toBe(10);
-    expect(migrateProject(v9)).toMatchObject({ from: 9, data: { schemaVersion: 10 } });
+    expect(PROJECT_SCHEMA_VERSION).toBeGreaterThanOrEqual(10);
+    expect(migrateProject(v9)).toMatchObject({ from: 9, data: { schemaVersion: PROJECT_SCHEMA_VERSION } });
     const { project, issues } = validateProject(v9);
     expect(issues.filter((i) => i.level === 'error')).toEqual([]);
     expect(project!.keymaps[0].layers.every((l) => l.comboRef === undefined)).toBe(true);

@@ -92,9 +92,10 @@ export function projectKeycodeRefs(project: Project): Set<number> {
   for (const s of project.leaderSequences) if (s.action.type === 'tap') refs.add(s.action.keycode);
   for (const a of project.keyAliases) refs.add(a.keycode);
   for (const s of project.tapHolds) {
-    refs.add(s.keycode);
+    for (const k of s.keycodes) refs.add(k);
     for (const k of s.holdOnKeys ?? []) refs.add(k);
   }
+  for (const l of project.keyLists) for (const k of l.keys) refs.add(k);
   return refs;
 }
 
@@ -142,7 +143,8 @@ export function replaceKeycode(p: Project, from: number, to: number): Project {
     customKeycodes: p.customKeycodes.map((c) => (c.action.type === 'tap' ? { ...c, action: { ...c.action, keycode: f(c.action.keycode) } } : c)),
     leaderSequences: p.leaderSequences.map((s) => (s.action.type === 'tap' ? { ...s, action: { ...s.action, keycode: f(s.action.keycode) } } : s)),
     keyAliases: p.keyAliases.map((a) => ({ ...a, keycode: f(a.keycode) })),
-    tapHolds: p.tapHolds.map((s) => ({ ...s, keycode: f(s.keycode), ...(s.holdOnKeys ? { holdOnKeys: s.holdOnKeys.map(f) } : {}) })),
+    tapHolds: p.tapHolds.map((s) => ({ ...s, keycodes: s.keycodes.map(f), ...(s.holdOnKeys ? { holdOnKeys: s.holdOnKeys.map(f) } : {}) })),
+    keyLists: p.keyLists.map((l) => ({ ...l, keys: l.keys.map(f) })),
     tapHoldActions: p.tapHoldActions.map((a) => (a.keycode === from ? { ...a, keycode: to } : a)),
   };
 }

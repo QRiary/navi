@@ -5,31 +5,89 @@
  * REPLACES the global flag (HOLD_ON_OTHER_KEY_PRESS, PERMISSIVE_HOLD) in QMK, so the default branch of each hook
  * repeats what the global flag would have said and keys without a flavor keep behaving as before.
  */
-import type { TapHoldSetting } from '../project/types';
+import { keyListCNames } from '../project/tapHolds';
+import type { KeyList, TapHoldSetting } from '../project/types';
 
-export interface TapHoldPlan {
-  /** `case X: return N;` pieces, in setting order. */
-  terms: { code: string; term: number }[];
-  quick: { code: string; term: number }[];
-  /** Flavor cases of get_hold_on_other_key_press: hold-preferred → true, else false; hold keys come first. */
-  holdPress: { code: string; flavor?: TapHoldSetting['flavor']; holdKeys: string[] }[];
-  permissive: { code: string; value: boolean }[];
+export interface HoldPress {
+  codes: string[];
+  flavor?: TapHoldSetting['flavor'];
+  /** Single hold keys, then the C arrays of the key lists. */
+  holdKeys: string[];
+  holdLists: string[];
 }
 
-export function planTapHolds(settings: TapHoldSetting[], kc: (v: number) => string): TapHoldPlan {
-  const plan: TapHoldPlan = { terms: [], quick: [], holdPress: [], permissive: [] };
+export interface TapHoldPlan {
+  /** `case X: return N;` pieces, in setting order; a setting with several keycodes shares one body. */
+  terms: { codes: string[]; term: number }[];
+  quick: { codes: string[]; term: number }[];
+  /** Flavor cases of get_hold_on_other_key_press: hold-preferred → true, else false; hold keys come first. */
+  holdPress: HoldPress[];
+  permissive: { codes: string[]; value: boolean }[];
+  /** Key lists the hold keys use: one static array each. */
+  lists: { name: string; keys: string[] }[];
+}
+
+export function planTapHolds(settings: TapHoldSetting[], kc: (v: number) => string, keyLists: KeyList[] = []): TapHoldPlan {
+  const plan: TapHoldPlan = {
+    terms: [],
+    quick: [],
+    holdPress: [],
+    permissive: [],
+    lists: [],
+  };
+  const cNames = keyListCNames(keyLists);
+  const usedLists = new Set<string>();
   for (const s of settings) {
-    const code = kc(s.keycode);
-    if (s.tappingTerm !== undefined) plan.terms.push({ code, term: s.tappingTerm });
-    if (s.quickTapTerm !== undefined) plan.quick.push({ code, term: s.quickTapTerm });
+    const codes = s.keycodes.map(kc);
+    if (s.tappingTerm !== undefined) plan.terms.push({ codes, term: s.tappingTerm });
+    if (s.quickTapTerm !== undefined) plan.quick.push({ codes, term: s.quickTapTerm });
     const holdKeys = (s.holdOnKeys ?? []).filter((k) => k > 1).map(kc);
-    if (s.flavor !== undefined || holdKeys.length) plan.holdPress.push({ code, flavor: s.flavor, holdKeys });
-    if (s.flavor !== undefined) plan.permissive.push({ code, value: s.flavor === 'balanced' });
+    // An empty list holds on nothing: left out, so no empty C array.
+    const lists = (s.holdOnLists ?? []).filter((id) => keyLists.some((l) => l.id === id && l.keys.some((k) => k > 1)));
+    lists.forEach((id) => usedLists.add(id));
+    const holdLists = lists.map((id) => cNames.get(id)!);
+    if (s.flavor !== undefined || holdKeys.length || holdLists.length) plan.holdPress.push({ codes, flavor: s.flavor, holdKeys, holdLists });
+    if (s.flavor !== undefined) plan.permissive.push({ codes, value: s.flavor === 'balanced' });
   }
+  for (const l of keyLists)
+    if (usedLists.has(l.id))
+      plan.lists.push({
+        name: cNames.get(l.id)!,
+        keys: l.keys.filter((k) => k > 1).map(kc),
+      });
   return plan;
 }
 
-export const hasHoldKeys = (plan: TapHoldPlan) => plan.holdPress.some((h) => h.holdKeys.length > 0);
+const holdsOn = (h: HoldPress) => h.holdKeys.length > 0 || h.holdLists.length > 0;
+export const hasHoldKeys = (plan: TapHoldPlan) => plan.holdPress.some(holdsOn);
+export const anyHoldsOn = (tracked: HoldPress[]) => tracked.some(holdsOn);
+
+/** The C test "v is one of the hold keys". */
+const holdTest = (h: HoldPress, v: string) => [...h.holdKeys.map((k) => `${v} == ${k}`), ...h.holdLists.map((l) => `NAVI_IN_KEYS(${l}, ${v})`)].join(' || ');
+
+/** `case A:` lines for every code, the last one followed by `tail` (if any) on the same line. */
+export function caseLines(codes: string[], tail?: string, indent = '        '): string[] {
+  return codes.map((c, i) => `${indent}case ${c}:${tail !== undefined && i === codes.length - 1 ? ` ${tail}` : ''}`);
+}
+
+/** The key lists as static arrays and the lookup the hold tests use. */
+export function keyListsCode(lists: TapHoldPlan['lists']): string[] {
+  if (!lists.length) return [];
+  const out = ['// ── Key lists (Advanced → Tap-hold): hold keys several tap-hold settings share ──'];
+  for (const l of lists) out.push(`static const uint16_t ${l.name}[] = { ${l.keys.join(', ')} };`);
+  out.push(
+    '',
+    'static bool navi_in_keys(const uint16_t *keys, uint8_t count, uint16_t keycode) {',
+    '    for (uint8_t i = 0; i < count; i++) {',
+    '        if (keys[i] == keycode) return true;',
+    '    }',
+    '    return false;',
+    '}',
+    '#define NAVI_IN_KEYS(keys, keycode) navi_in_keys(keys, sizeof(keys) / sizeof((keys)[0]), keycode)',
+    '',
+  );
+  return out;
+}
 
 /**
  * Keys whose settings say “hold when another key is pressed” (hold-preferred, or hold keys): QMK's replay trap
@@ -38,13 +96,22 @@ export const hasHoldKeys = (plan: TapHoldPlan) => plan.holdPress.some((h) => h.h
  * waiting_buffer_scan_tap) without asking get_hold_on_other_key_press. Seen in a host test on qmk_firmware 180f394b48:
  * LT(1, KC_SPC) held, hold-preferred LSFT_T(KC_P) rolled over KC_C typed “pc”, not “C”.
  */
-export const replayTracked = (plan: TapHoldPlan) => plan.holdPress.filter((h) => h.flavor === 'hold-preferred' || h.holdKeys.length > 0);
+export const replayTracked = (plan: TapHoldPlan) => plan.holdPress.filter((h) => h.flavor === 'hold-preferred' || holdsOn(h));
 
 /**
  * pre_process_record (it sees real key events only, before QMK's tapping logic): the key pressed last for hold keys,
  * and the real key order for the replay fix.
  */
-export function preProcessHook(hook: string, opts: { lastPressed: boolean; replay: boolean; interrupters: boolean; comboLayer?: boolean; comboEvents?: boolean }): string[] {
+export function preProcessHook(
+  hook: string,
+  opts: {
+    lastPressed: boolean;
+    replay: boolean;
+    interrupters: boolean;
+    comboLayer?: boolean;
+    comboEvents?: boolean;
+  },
+): string[] {
   const out: string[] = [];
   // Combo results NAVI plays (comboEvents) need where each key's first interrupter sits.
   const at = opts.interrupters && opts.comboEvents;
@@ -110,7 +177,10 @@ export function preProcessHook(hook: string, opts: { lastPressed: boolean; repla
   if (opts.comboLayer) out.push('    navi_key_layer = navi_layer_of(record); // for combo_ref_from_layer: pre_process_record runs before combos');
   if (opts.lastPressed) out.push('    if (record->event.pressed) navi_last_pressed = keycode;');
   if (opts.comboEvents) {
-    out.push('    navi_in_press = IS_KEYEVENT(record->event) && record->event.pressed && record->event.key.row < MATRIX_ROWS && record->event.key.col < MATRIX_COLS;', '    navi_press_key = record->event.key;');
+    out.push(
+      '    navi_in_press = IS_KEYEVENT(record->event) && record->event.pressed && record->event.key.row < MATRIX_ROWS && record->event.key.col < MATRIX_COLS;',
+      '    navi_press_key = record->event.key;',
+    );
     if (opts.lastPressed) out.push('    navi_press_keycode = keycode;');
   }
   if (opts.replay) out.push('    navi_watch_presses(keycode, record);');
@@ -128,7 +198,7 @@ export function preProcessHook(hook: string, opts: { lastPressed: boolean; repla
 export function comboEventCode(hook: string, combos: { result: string; keys: [number, number][]; name: string }[], opts: { lastPressed: boolean; interrupters: boolean }): string[] {
   const out = [
     '// ── Combo results seen by the tap-hold logic like real key presses (their QMK result is KC_NO) ──',
-    '// Is the key at row, col one of the combo\'s keys (row, col pairs)?',
+    "// Is the key at row, col one of the combo's keys (row, col pairs)?",
     'static bool navi_combo_has(const uint8_t *keys, uint8_t count, uint8_t row, uint8_t col) {',
     '    for (uint8_t i = 0; i < count; i++) {',
     '        if (keys[2 * i] == row && keys[2 * i + 1] == col) return true;',
@@ -146,7 +216,7 @@ export function comboEventCode(hook: string, combos: { result: string; keys: [nu
     '    if (pressed) {',
     '        uint8_t      r0 = navi_press_key.row;',
     '        matrix_row_t b0 = before ? (matrix_row_t)1 << navi_press_key.col : 0;',
-    '        if (before) navi_down[r0] &= ~b0; // not down yet in QMK\'s order',
+    "        if (before) navi_down[r0] &= ~b0; // not down yet in QMK's order",
   ];
   if (opts.interrupters) {
     out.push(
@@ -238,7 +308,7 @@ export function naviSendCode(o: { flag: boolean; guard: boolean }): string[] {
 
 export function tapHoldsCode(o: {
   standIns: StandIn[];
-  tracked: TapHoldPlan['holdPress'];
+  tracked: HoldPress[];
   interrupters: boolean;
   layerOff: string;
   /** navi_sending exists (navi_send is emitted with its flag). */
@@ -250,7 +320,7 @@ export function tapHoldsCode(o: {
   if (o.standIns.length) out.push('// ── Tap-hold keys with actions: NAVI_TH_n are stand-in MT / LT keycodes, QMK decides tap or hold on them ──', '');
   if (replay) {
     out.push('static matrix_row_t navi_held_tap[MATRIX_ROWS]; // a tap NAVI turned into a hold, until its release', '');
-    const needGlobal = o.tracked.some((h) => h.flavor === undefined && h.holdKeys.length > 0);
+    const needGlobal = o.tracked.some((h) => h.flavor === undefined && holdsOn(h));
     if (needGlobal) out.push('#ifdef HOLD_ON_OTHER_KEY_PRESS', '#    define NAVI_HOLD_ON_OTHER_KEY_PRESS true', '#else', '#    define NAVI_HOLD_ON_OTHER_KEY_PRESS false', '#endif', '');
     out.push(
       '// Would get_hold_on_other_key_press have said “hold” at the first key pressed while this one was down?',
@@ -263,11 +333,11 @@ export function tapHoldsCode(o: {
     );
     for (const h of o.tracked) {
       if (h.flavor === 'hold-preferred') {
-        out.push(`        case ${h.code}: return true;`);
+        out.push(...caseLines(h.codes, 'return true;'));
         continue;
       }
       const answer = h.flavor === undefined ? 'NAVI_HOLD_ON_OTHER_KEY_PRESS' : 'false';
-      out.push(`        case ${h.code}:`, `            if (${h.holdKeys.map((k) => `navi_interrupter[row][col] == ${k}`).join(' || ')}) return true;`, `            return ${answer};`);
+      out.push(...caseLines(h.codes), `            if (${holdTest(h, 'navi_interrupter[row][col]')}) return true;`, `            return ${answer};`);
     }
     out.push('        default: return false;', '    }', '#endif', '}', '');
     // The hold side of a tap turned into a hold: stand-ins first, then what QMK does for MT / LT.
@@ -318,10 +388,20 @@ export function tapHoldsCode(o: {
     out.push('    switch (keycode) {');
     for (const s of o.standIns) {
       if (s.hold.type === 'key') {
-        out.push(`        case ${s.name}: // tap ${s.tap}, hold ${s.hold.key}`, `            navi_send(record->tap.count ? ${s.tap} : ${s.hold.key}, record, record->event.pressed, 0);`, '            return false;');
+        out.push(
+          `        case ${s.name}: // tap ${s.tap}, hold ${s.hold.key}`,
+          `            navi_send(record->tap.count ? ${s.tap} : ${s.hold.key}, record, record->event.pressed, 0);`,
+          '            return false;',
+        );
         continue;
       }
-      out.push(`        case ${s.name}: // tap ${s.tap}`, '            if (record->tap.count) {', `                navi_send(${s.tap}, record, record->event.pressed, 0);`, '                return false;', '            }');
+      out.push(
+        `        case ${s.name}: // tap ${s.tap}`,
+        '            if (record->tap.count) {',
+        `                navi_send(${s.tap}, record, record->event.pressed, 0);`,
+        '                return false;',
+        '            }',
+      );
       if (s.hold.type === 'layer' && s.hold.mask) out.push(`            if (record->event.pressed) register_mods(${s.hold.mask}); else unregister_mods(${s.hold.mask});`);
       out.push('            return true; // QMK holds the modifiers / the layer');
     }
@@ -335,7 +415,7 @@ export function quickTapHook(name: string, plan: TapHoldPlan): string[] {
   return [
     `uint16_t ${name}(uint16_t keycode, keyrecord_t *record) {`,
     '    switch (keycode) {',
-    ...plan.quick.map((q) => `        case ${q.code}: return ${q.term};`),
+    ...plan.quick.flatMap((q) => caseLines(q.codes, `return ${q.term};`)),
     '        default: return QUICK_TAP_TERM;',
     '    }',
     '}',
@@ -348,12 +428,8 @@ const GLOBAL_FLAG = (flag: string) => [`#ifdef ${flag}`, '    return true;', '#e
 export function holdOnOtherKeyPressHook(name: string, plan: TapHoldPlan): string[] {
   const cases = plan.holdPress.flatMap((h): string[] => {
     const answer = h.flavor === undefined ? undefined : h.flavor === 'hold-preferred' ? 'true' : 'false';
-    if (!h.holdKeys.length) return answer === undefined ? [] : [`        case ${h.code}: return ${answer};`];
-    return [
-      `        case ${h.code}:`,
-      `            if (${h.holdKeys.map((k) => `navi_last_pressed == ${k}`).join(' || ')}) return true;`,
-      answer === undefined ? '            break;' : `            return ${answer};`,
-    ];
+    if (!holdsOn(h)) return answer === undefined ? [] : caseLines(h.codes, `return ${answer};`);
+    return [...caseLines(h.codes), `            if (${holdTest(h, 'navi_last_pressed')}) return true;`, answer === undefined ? '            break;' : `            return ${answer};`];
   });
   return [`bool ${name}(uint16_t keycode, keyrecord_t *record) {`, '    switch (keycode) {', ...cases, '        default: break;', '    }', ...GLOBAL_FLAG('HOLD_ON_OTHER_KEY_PRESS'), '}', ''];
 }
@@ -362,7 +438,7 @@ export function permissiveHoldHook(name: string, plan: TapHoldPlan): string[] {
   return [
     `bool ${name}(uint16_t keycode, keyrecord_t *record) {`,
     '    switch (keycode) {',
-    ...plan.permissive.map((p) => `        case ${p.code}: return ${p.value};`),
+    ...plan.permissive.flatMap((p) => caseLines(p.codes, `return ${p.value};`)),
     '        default: break;',
     '    }',
     ...GLOBAL_FLAG('PERMISSIVE_HOLD'),

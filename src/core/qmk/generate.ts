@@ -25,7 +25,7 @@ import { activeGeometry } from '../project/ops';
 import { checkKeyAliases } from '../project/aliases';
 import { checkTapHolds, effectiveTapHolds } from '../project/tapHolds';
 import { checkTapHoldActions, effectiveTapHoldActions, projectOwnCodeRefs, type OwnCodeFile } from '../project/tapHoldActions';
-import { comboEventCode, hasHoldKeys, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, naviSendCode, replayTracked, standInCheckCode, tapHoldsCode, type StandIn } from './tapHold';
+import { anyHoldsOn, caseLines, comboEventCode, hasHoldKeys, keyListsCode, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, naviSendCode, replayTracked, standInCheckCode, tapHoldsCode, type StandIn } from './tapHold';
 import { tapDanceCode } from './tapDance';
 import { layoutMacro, renderLayers, textLayout } from './layoutText';
 
@@ -220,7 +220,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   issues.push(...aliases.issues);
   issues.push(...checkTapHolds(spec, project));
   issues.push(...checkTapHoldActions(spec, project, projectOwnCodeRefs(spec, project, ownCode)));
-  const tapHold = planTapHolds(effectiveTapHolds(spec, project), kc);
+  const tapHold = planTapHolds(effectiveTapHolds(spec, project), kc, project.keyLists);
   const tracked = replayTracked(tapHold);
   const replay = tracked.length > 0;
   const tapHoldInCode = thActions.length > 0 || replay;
@@ -475,7 +475,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push(`uint16_t ${hookName('get_tapping_term')}(uint16_t keycode, keyrecord_t *record) {`);
     c.push('    switch (keycode) {');
     if (hasTd) tdTerms.forEach((t) => c.push(`        case TD(${t.name}): return ${t.tappingTerm};`));
-    tapHold.terms.forEach((x) => c.push(`        case ${x.code}: return ${x.term};`));
+    tapHold.terms.forEach((x) => c.push(...caseLines(x.codes, `return ${x.term};`)));
     c.push('        default: return TAPPING_TERM;');
     c.push('    }');
     c.push('}');
@@ -487,7 +487,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const holdPress = tapHold.holdPress.length > 0;
   const permissive = tapHold.permissive.length > 0;
   const preProcess = holdKeys || replay || comboRefs;
-  const interrupters = holdKeys && tracked.some((h) => h.holdKeys.length > 0);
+  const interrupters = holdKeys && anyHoldsOn(tracked);
+  c.push(...keyListsCode(tapHold.lists));
   if (preProcess) c.push(...preProcessHook(hookName('pre_process_record_user'), { lastPressed: holdKeys, replay, interrupters, comboLayer: comboRefs, comboEvents }));
   if (comboEvents) {
     const played = qmkComboList.map((q) => ({ result: kc(q.combo.result), keys: q.combo.keys, name: q.name }));
@@ -524,7 +525,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       hold: a.hold.type === 'key' ? { type: 'key', key: kc(a.hold.keycode) } : a.hold.type === 'layer' ? { type: 'layer', mask: a.hold.mods ? modMask(a.hold.mods) : null } : { type: 'mods', mask: modMask(a.hold.mods) },
     }));
     if (thActions.length && !tdC.sends) c.push(...naviSendCode({ flag: sendingFlag, guard: true }));
-    c.push(...tapHoldsCode({ standIns, tracked, interrupters: tracked.some((h) => h.holdKeys.length > 0), layerOff: layersOnTop ? 'navi_layer_off' : 'layer_off', sending: sendingFlag }));
+    c.push(...tapHoldsCode({ standIns, tracked, interrupters: anyHoldsOn(tracked), layerOff: layersOnTop ? 'navi_layer_off' : 'layer_off', sending: sendingFlag }));
   }
   // For the user's own C: which MT / LT values are NAVI's stand-ins (their base key isn't what they tap).
   const standInCheck = pipeline || thActions.length > 0;
@@ -735,6 +736,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (!pipeline && preProcess) generatedSymbols.add('pre_process_record_user');
   if (!pipeline && recordHook) generatedSymbols.add('process_record_user');
   if (holdKeys) generatedSymbols.add('navi_last_pressed');
+  if (tapHold.lists.length) for (const sym of ['navi_in_keys', 'NAVI_IN_KEYS', ...tapHold.lists.map((l) => l.name)]) generatedSymbols.add(sym);
   if (replay) for (const name of ['navi_down', 'navi_interrupted', 'navi_interrupter', 'navi_note_press', 'navi_watch_presses', 'navi_held_tap', 'navi_forces_hold', 'navi_hold']) generatedSymbols.add(name);
   if (tapHoldInCode) generatedSymbols.add('navi_tap_holds');
   if (standInCheck) generatedSymbols.add('navi_is_stand_in');

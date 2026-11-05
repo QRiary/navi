@@ -37,6 +37,19 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
   8: (d) => ({ ...d, schemaVersion: 9 }),
   // 9 → 10: per-layer combo reference layer (Layer.comboRef), optional: unset = layer 0, as before.
   9: (d) => ({ ...d, schemaVersion: 10 }),
+  // 10 → 11: a tap-hold setting holds several keycodes (keycode → keycodes); named key lists (keyLists).
+  10: (d) => ({
+    ...d,
+    schemaVersion: 11,
+    keyLists: Array.isArray(d.keyLists) ? d.keyLists : [],
+    tapHolds: Array.isArray(d.tapHolds)
+      ? d.tapHolds.map((s: unknown) => {
+          if (!s || typeof s !== 'object' || Array.isArray(s)) return s; // validate reports it
+          const { keycode, ...rest } = s as Data;
+          return 'keycodes' in rest ? rest : { ...rest, keycodes: [keycode] };
+        })
+      : d.tapHolds,
+  }),
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {

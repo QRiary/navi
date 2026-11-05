@@ -20,6 +20,7 @@ const SECTION_NAMES = (): Record<string, string> => ({
   customKeycodes: t('custom keycodes', 'свои keycodes'),
   keyAliases: t('key aliases', 'псевдонимы клавиш'),
   tapHolds: t('tap-hold settings', 'настройки тап-холд'),
+  keyLists: t('key lists', 'списки клавиш'),
   tapHoldActions: t('tap-hold keys with actions', 'тап-холд клавиши с действиями'),
   leaderSequences: t('leader sequences', 'последовательности лидера'),
   unicodeMap: t('unicode table', 'таблица юникода'),

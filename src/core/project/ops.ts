@@ -239,9 +239,10 @@ function remapAllLayerRefs(p: Project, keymapId: string, spec: KeycodeSpec, mapp
   const keyAliases = p.keyAliases.filter((a) => !refsDeleted(a.keycode)).map((a) => ({ ...a, keycode: fix(a.keycode) }));
   // Tap-hold settings follow their keycode the same way; hold keys pointing at a deleted layer are dropped.
   const tapHolds = p.tapHolds
-    .filter((s) => !refsDeleted(s.keycode))
-    .map((s) => ({ ...s, keycode: fix(s.keycode), ...(s.holdOnKeys ? { holdOnKeys: s.holdOnKeys.filter((k) => !refsDeleted(k)).map(fix) } : {}) }));
-  return touch({ ...p, keymaps, tapDances, combos, keyOverrides, keyAliases, tapHolds, tapHoldActions });
+    .map((s) => ({ ...s, keycodes: s.keycodes.filter((k) => !refsDeleted(k)).map(fix), ...(s.holdOnKeys ? { holdOnKeys: s.holdOnKeys.filter((k) => !refsDeleted(k)).map(fix) } : {}) }))
+    .filter((s) => s.keycodes.length > 0);
+  const keyLists = p.keyLists.map((l) => ({ ...l, keys: l.keys.filter((k) => !refsDeleted(k)).map(fix) }));
+  return touch({ ...p, keymaps, tapDances, combos, keyOverrides, keyAliases, tapHolds, keyLists, tapHoldActions });
 }
 
 export function addLayer(p: Project, keymapId: string, name: string, at?: number): Project {
