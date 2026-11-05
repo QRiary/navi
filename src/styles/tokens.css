@@ -37,8 +37,8 @@
   --card-min-width: 172px;
   --sidebar-width: 264px;
   --right-panel-width: 320px;
-  --gap: calc(10px * var(--space));
-  --pad: calc(22px * var(--space));
+  --gap: calc(12px * var(--space));
+  --pad: calc(24px * var(--space));
 
   /* Effects */
   --panel-blur: 0px;

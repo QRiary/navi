@@ -169,9 +169,12 @@ function OverridesTab({ project }: { project: Project }) {
       <p className="field-hint">{t('Modifiers + key → another key. Example: Shift + Backspace → Delete.', 'Модификаторы + клавиша → другая клавиша. Пример: Shift + Backspace → Delete.')}</p>
       <div className="panel-box rows">
         {project.keyOverrides.map((o) => (
-          <div key={o.id} className="row" style={{ ['--row-cols' as string]: 'minmax(100px,0.6fr) minmax(260px,1.4fr) minmax(130px,1fr) 20px minmax(130px,1fr) auto' }}>
+          <div key={o.id} className="row" style={{ ['--row-cols' as string]: 'minmax(96px,0.6fr) minmax(176px,1fr) 16px minmax(176px,1fr) auto', paddingBlock: 8 }}>
             <input className="input" value={o.name} onChange={(e) => patch(o.id, { name: e.target.value.replace(/[^A-Za-z0-9_]/g, '_') }, t('override name', 'имя подмены'), `koname:${o.id}`)} aria-label={t('Name', 'Имя')} />
-            <ModsInput mods={o.mods} onChange={(m) => (m & 0x0f ? patch(o.id, { mods: m }, t('override mods', 'модификаторы подмены')) : undefined)} />
+            {/* Modifiers on a second line under the keys: one line doesn't fit a normal window. */}
+            <div style={{ gridColumn: '2 / -1', gridRow: 2 }}>
+              <ModsInput mods={o.mods} onChange={(m) => (m & 0x0f ? patch(o.id, { mods: m }, t('override mods', 'модификаторы подмены')) : undefined)} />
+            </div>
             <KeycodeField value={o.trigger} label={t('Key', 'Клавиша')} onChange={(v) => patch(o.id, { trigger: v }, t('override key', 'клавиша подмены'))} />
             <span>→</span>
             <KeycodeField value={o.replacement} label={t('Replacement', 'Замена')} onChange={(v) => patch(o.id, { replacement: v }, t('override result', 'результат подмены'))} />
@@ -204,7 +207,7 @@ function CustomTab({ project }: { project: Project }) {
       </p>
       <div className="panel-box rows">
         {project.customKeycodes.map((c, i) => (
-          <div key={c.id} className="row" style={{ ['--row-cols' as string]: '90px minmax(120px,0.8fr) minmax(140px,1fr) 130px minmax(160px,1.2fr) auto' }}>
+          <div key={c.id} className="row" style={{ ['--row-cols' as string]: '72px minmax(96px,0.8fr) minmax(96px,1fr) 128px minmax(96px,1.2fr) auto' }}>
             <span className="kicker">0x{customKeycodeValue(spec, i).toString(16).toUpperCase()}</span>
             <input className="input" value={c.name} onChange={(e) => patch(c.id, { name: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_') }, t('custom keycode name', 'имя keycode'), `ckname:${c.id}`)} aria-label={t('Name', 'Имя')} />
             <input className="input" value={c.description} placeholder={t('description', 'описание')} onChange={(e) => patch(c.id, { description: e.target.value }, t('description', 'описание'), `ckdesc:${c.id}`)} />

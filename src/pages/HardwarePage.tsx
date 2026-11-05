@@ -262,7 +262,7 @@ function GeometryEditor() {
         }
       />
       {issues.length > 0 && (
-        <div style={{ padding: '6px var(--pad)', borderTop: 'var(--border)', maxHeight: 90, overflowY: 'auto' }}>
+        <div style={{ padding: '8px var(--pad)', borderTop: 'var(--border)', maxHeight: 90, overflowY: 'auto' }}>
           {issues.slice(0, 6).map((i, n) => (
             <div key={n} className={`issue issue--${i.level}`} style={{ marginBottom: 2 }}>
               <span className="issue-where">{i.level}</span>

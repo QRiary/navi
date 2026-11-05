@@ -49,7 +49,7 @@ export function KeycodeField({ value, onChange, label, fromKeyboard = true }: { 
     <span className="kc-field">
       <form
         className={`expr-input ${error ? 'is-error' : ''}`}
-        style={{ minWidth: 150 }}
+        style={{ minWidth: 96 }}
         onSubmit={(e) => {
           e.preventDefault();
           commit();
