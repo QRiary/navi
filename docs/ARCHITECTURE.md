@@ -35,6 +35,8 @@ build/           app icon (icon.svg is the source)
 | Keycode spec: merging versions like QMK does (`!delete!`, `!reset!`) | `src/core/keycodes/spec.ts` |
 | Value ⇄ QMK expression (`LT`, `MT`, `LM`, `OSM`, `TD`, `UC`…) | `src/core/keycodes/codec.ts` (the test round-trips all 65536 values) |
 | Key labels, catalog, “what the firmware needs” | `labels.ts`, `catalog.ts`, `requirements.ts` |
+| Readable key names for lists, chips, plans and tooltips (alias → tap-hold action → tap dance → own keycode → label + hold → raw), `{ text, qmk }` | `src/core/keycodes/friendly.ts`; shown with the code dim after it by `components/KeyName.tsx` |
+| Keycode field (QMK box + meaning + catalog popover + take the selected key) | `components/advanced/common.tsx` (`KeycodeField`), `components/keyboard/KeycodePopover.tsx` (`KeycodePicker` with `onPick`) |
 | Firmware features and their states (works / needs firmware / not supported / unknown) | `src/core/features/registry.ts`, `required.ts`, `advanced.ts` (tap dance / combo / override checks) |
 | Project model | `src/core/project/types.ts`; operations `ops.ts`, untrusted JSON `validate.ts`, `migrate.ts`, `diff.ts`, `factory.ts` |
 | Key aliases: a label shown on every key with that keycode, C name `NV_<LABEL>` (Cyrillic transliterated), checks; `#define`s go to `navi.h` (own pipeline) or `keymap.c`, every generated use of the keycode is written by its alias (first alias of a value wins); layer moves renumber them, a deleted layer drops its aliases | `src/core/project/aliases.ts`, Advanced → Aliases (`pages/AdvancedPage.tsx`) |
