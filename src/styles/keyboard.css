@@ -1435,6 +1435,6 @@
 }
 
 .route-layer:hover,
-.route-layer:focus-visible {
+:where([data-focus-ring]) .route-layer:focus-visible {
   text-decoration-thickness: 2px;
 }

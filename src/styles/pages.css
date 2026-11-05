@@ -433,7 +433,7 @@
   stroke: var(--text-label);
 }
 
-.kb-preview--interactive .kb-key[role='button']:focus-visible .kb-key-shape {
+:where([data-focus-ring]) .kb-preview--interactive .kb-key[role='button']:focus-visible .kb-key-shape {
   stroke: var(--text-primary);
   stroke-width: 2px;
 }
