@@ -83,16 +83,6 @@ export function matchesQuery(query: string, ...fields: (string | number | null |
   return words.every((w) => hay.includes(w));
 }
 
-/** Focuses the filter box of the tab on screen; false when the tab has none. */
-export function focusListFilter(): boolean {
-  const boxes = [...document.querySelectorAll<HTMLInputElement>('input[data-list-filter]')];
-  const box = boxes.find((b) => b.offsetParent !== null && !b.closest('[inert]'));
-  if (!box) return false;
-  box.focus();
-  box.select();
-  return true;
-}
-
 const FLASH_MS = 1600;
 
 /** How much of the top of `el`'s scroll area stays covered by sticky blocks once it is scrolled to `el`. */

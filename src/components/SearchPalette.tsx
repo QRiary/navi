@@ -12,7 +12,7 @@ import { buildSearchIndex, kindLabel, searchItems, type SearchItem } from '../li
 import { useLabelContext } from '../lib/projectContext';
 import { useEditorStore } from '../store/editorStore';
 import { useProjectStore, useSpec } from '../store/projectStore';
-import { t } from '../i18n';
+import { count, t } from '../i18n';
 
 /** Goes where a result points. */
 export function goToResult(item: SearchItem) {
@@ -86,18 +86,22 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       title={t('Search', 'Поиск')}
       onClose={onClose}
       className="modal--search"
+      closeButton={false}
       footer={
-        <span className="search-keys field-hint">
-          <span>
-            <kbd>↑</kbd> <kbd>↓</kbd> {t('choose', 'выбрать')}
+        <>
+          <span className="search-keys field-hint">
+            <span>
+              <kbd>↑</kbd> <kbd>↓</kbd> {t('choose', 'выбрать')}
+            </span>
+            <span>
+              <kbd>Enter</kbd> {t('go there', 'перейти')}
+            </span>
+            <span>
+              <kbd>Esc</kbd> {t('close', 'закрыть')}
+            </span>
           </span>
-          <span>
-            <kbd>Enter</kbd> {t('go there', 'перейти')}
-          </span>
-          <span>
-            <kbd>Esc</kbd> {t('close', 'закрыть')}
-          </span>
-        </span>
+          {!empty && results.length > 0 && <span className="search-count" aria-live="polite">{results.length >= 60 ? t('first 60 results', 'первые 60 результатов') : count(results.length, ['result', 'results'], ['результат', 'результата', 'результатов'])}</span>}
+        </>
       }
     >
       <label className="search-box search-palette-box">
@@ -119,8 +123,8 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
           autoComplete="off"
         />
       </label>
-      {empty && <p className="field-hint">{t('Pages of the app. Type to search keys, layers, combos, tap dances, macros, settings and QMK settings.', 'Страницы приложения. Начните печатать, чтобы искать клавиши, слои, комбо, tap dance, макросы, настройки и настройки QMK.')}</p>}
-      {!empty && results.length === 0 && <p className="field-hint">{t(`Nothing found for “${query.trim()}”.`, `По запросу «${query.trim()}» ничего не найдено.`)}</p>}
+      {empty && <p className="search-note">{t('Pages of the app. Type to search keys, layers, combos, tap dances, macros, settings and QMK settings.', 'Страницы приложения. Начните печатать, чтобы искать клавиши, слои, комбо, tap dance, макросы, настройки и настройки QMK.')}</p>}
+      {!empty && results.length === 0 && <p className="search-note search-note--empty">{t(`Nothing found for “${query.trim()}”.`, `По запросу «${query.trim()}» ничего не найдено.`)}</p>}
       {results.length > 0 && (
         <ul className="search-results" id={`${baseId}-list`} role="listbox" aria-label={t('Results', 'Результаты')} ref={listRef}>
           {results.map((r, i) => (
