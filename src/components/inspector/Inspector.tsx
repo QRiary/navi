@@ -1,7 +1,7 @@
 /**
  * RIGHT PANEL: properties of what you work with in the section.
  *  Keyboard — the selected key/encoder; Hardware — the selected geometry key;
- *  other sections — the project summary and the state of firmware features.
+ *  Firmware — the project summary and the state of firmware features. Other sections have no right panel (App.tsx).
  */
 import type { Route } from '../../lib/router';
 import { KeyInspector } from './KeyInspector';
