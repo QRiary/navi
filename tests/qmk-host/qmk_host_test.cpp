@@ -304,3 +304,30 @@ TEST_F(NaviHost, combo_result_every_tap_dance_types_its_first_step) {
 TEST_F(NaviHost, hold_preferred_mod_tap_rolled_into_a_tap_dance_combo_plays_the_shift_variant) {
     EXPECT_EQ(play({"+1", "+27", "+28", "-27", "-28", "-1"}), "LSFT 0x2D - LSFT LSFT+0x37 LSFT - LSFT -");
 }
+
+// C7: a combo whose result is a slots dance (TD 12: tap C(KC_C), hold KC_LSFT). A combo event sits at matrix 0,0,
+// where the real key 0 (LT(1, KC_SPC)) is: the dance must not take its position. QMK keeps a combo whose keys are all
+// down until COMBO_TERM runs out, and the dance's tapping term starts only then: a hold needs two waits.
+TEST_F(NaviHost, combo_slots_dance_tapped_taps_ctrl_c) {
+    EXPECT_EQ(play({"+9", "+29", "-9", "-29"}), "LCTL LCTL+C LCTL -");
+}
+
+TEST_F(NaviHost, combo_slots_dance_held_shifts_another_key) {
+    EXPECT_EQ(play({"+9", "+29", "wait", "wait", "+7", "-7", "-9", "-29"}), "LSFT LSFT+E LSFT -");
+}
+
+TEST_F(NaviHost, combo_slots_dance_held_while_the_key_at_0_0_is_tapped) {
+    EXPECT_EQ(play({"+9", "+29", "wait", "wait", "+0", "-0", "-9", "-29", "+32", "-32"}), "LSFT LSFT+0x2C LSFT - Q -");
+}
+
+TEST_F(NaviHost, combo_slots_dance_held_while_the_key_at_0_0_holds_its_layer) {
+    EXPECT_EQ(play({"+9", "+29", "wait", "wait", "+0", "wait", "-9", "-29", "-0", "+32", "-32"}), "LSFT - Q -");
+}
+
+TEST_F(NaviHost, combo_slots_dance_tapped_on_the_layer_of_the_key_at_0_0) {
+    EXPECT_EQ(play({"+0", "wait", "+9", "+29", "-9", "-29", "-0", "+32", "-32"}), "LCTL LCTL+C LCTL - Q -");
+}
+
+TEST_F(NaviHost, key_at_0_0_taps_normally_after_a_combo_slots_dance_hold) {
+    EXPECT_EQ(play({"+9", "+29", "wait", "wait", "-9", "-29", "+0", "-0"}), "LSFT - 0x2C -");
+}
