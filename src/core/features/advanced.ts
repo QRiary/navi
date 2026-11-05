@@ -100,6 +100,17 @@ export function comboRefOf(keymap: Keymap, layer: number): number {
   return typeof ref === 'number' && ref < keymap.layers.length ? ref : 0;
 }
 
+/**
+ * Combos tab layer filter: `'all'` = every combo, `'every'` = combos not limited to layers, a number = combos limited
+ * to layers that include it (unlimited ones work there too, but aren't listed: the filter finds layer-only combos).
+ */
+export type ComboLayerFilter = 'all' | 'every' | number;
+export function combosOnLayer(combos: readonly Combo[], filter: ComboLayerFilter): Combo[] {
+  if (filter === 'all') return [...combos];
+  if (filter === 'every') return combos.filter((c) => !c.layers?.length);
+  return combos.filter((c) => c.layers?.includes(filter));
+}
+
 /** Some layer reads combo keys from another layer than 0: no COMBO_ONLY_FROM_LAYER, combo_ref_from_layer instead. */
 export const comboRefsMixed = (keymap: Keymap) => keymap.layers.some((_, i) => comboRefOf(keymap, i) !== 0);
 

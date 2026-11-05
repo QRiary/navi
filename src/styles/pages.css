@@ -492,6 +492,11 @@
   flex: 1;
 }
 
+.combo-layer-filter {
+  width: auto;
+  max-width: 240px;
+}
+
 .combo-row {
   --row-cols: minmax(0, 1fr) minmax(0, auto);
   text-align: left;

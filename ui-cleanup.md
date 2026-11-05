@@ -239,6 +239,8 @@ its combos; "new combo" says to select keys but keys can't be selected there.
    the pick mode replaces it. Layer chips open behind "limit" so the sticky block stays short. A default name
    (CM_J_K_ESC) follows key/result edits until the user types one; old combo_N names follow too.
    Left over: Ctrl+F for the search box waits for Step 8; a filtered list can still show an open combo that isn't in it.
+6. ✅ Layer filter beside the search (owner's ask): all · not limited to layers · layer N (combos whose limit
+   includes N; unlimited ones aren't listed there), each with its count; key badges count only the filtered combos.
 
 ## Step 7: how to reach a layer (🟠 6/10)
 

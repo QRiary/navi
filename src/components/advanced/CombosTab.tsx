@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Trash2, X } from 'lucide-react';
 import { friendlyName } from '../../core/keycodes/friendly';
 import { keyLabel } from '../../core/keycodes/labels';
-import { checkCombos, comboAutoName, comboNamePart, comboRefOf, isOldDefaultComboName } from '../../core/features/advanced';
+import { checkCombos, comboAutoName, comboNamePart, comboRefOf, combosOnLayer, isOldDefaultComboName, type ComboLayerFilter } from '../../core/features/advanced';
 import { newId } from '../../core/layout/geometry';
 import { activeKeymap, setLayerComboRef } from '../../core/project/ops';
 import type { Combo, MatrixPos, Project } from '../../core/project/types';
@@ -44,10 +44,14 @@ export function CombosTab({ project, active: tabActive = true }: { project: Proj
   const [hovered, setHovered] = useState<string | null>(null);
   const [keyFilter, setKeyFilter] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [layerPick, setLayerFilter] = useState<ComboLayerFilter>('all');
   const [pick, setPick] = useState<Pick | null>(null);
 
   const km = activeKeymap(project);
   const cols = project.hardware.matrix.cols;
+  // A layer deleted since it was picked: back to all combos.
+  const layerFilter: ComboLayerFilter = typeof layerPick === 'number' && layerPick >= km.layers.length ? 'all' : layerPick;
+  const onLayer = combosOnLayer(project.combos, layerFilter);
   // Labels of combo keys: the layer combos read on layer 0.
   const labelLayer = comboRefOf(km, 0);
   const valueAt = ([r, c]: MatrixPos) => km.layers[labelLayer]?.keys[r * cols + c] ?? 0;
@@ -122,11 +126,11 @@ export function CombosTab({ project, active: tabActive = true }: { project: Proj
 
   const combo = project.combos.find((c) => c.id === current) ?? null;
   const usage = new Map<string, number>();
-  for (const c of project.combos) for (const k of new Set(c.keys.map(posKey))) usage.set(k, (usage.get(k) ?? 0) + 1);
+  for (const c of onLayer) for (const k of new Set(c.keys.map(posKey))) usage.set(k, (usage.get(k) ?? 0) + 1);
 
   const comboText = (c: Combo) => `${c.keys.map(keyName).join(' + ') || '—'} → ${c.result ? resultName(c.result).text : '—'}`;
   const q = query.trim().toLowerCase();
-  const shown = project.combos.filter((c) => {
+  const shown = onLayer.filter((c) => {
     if (keyFilter && !c.keys.some((k) => posKey(k) === keyFilter)) return false;
     if (!q) return true;
     const r = resultName(c.result);
@@ -273,6 +277,21 @@ export function CombosTab({ project, active: tabActive = true }: { project: Proj
                 aria-label={t('Search combos', 'Поиск комбо')}
               />
             </label>
+            <select
+              className="select combo-layer-filter"
+              value={String(layerFilter)}
+              onChange={(e) => setLayerFilter(e.target.value === 'all' || e.target.value === 'every' ? e.target.value : Number(e.target.value))}
+              aria-label={t('Show combos of a layer', 'Показать комбо слоя')}
+              title={t('A layer shows only the combos limited to it; the combos of every layer work there too.', 'Слой показывает только комбо, ограниченные им; комбо всех слоёв там тоже работают.')}
+            >
+              <option value="all">{t('all layers', 'все слои')} · {project.combos.length}</option>
+              <option value="every">{t('not limited to layers', 'не ограничены слоями')} · {combosOnLayer(project.combos, 'every').length}</option>
+              {km.layers.map((l, n) => (
+                <option key={l.id} value={n}>
+                  {t(`layer ${n}`, `слой ${n}`)} · {l.name} · {combosOnLayer(project.combos, n).length}
+                </option>
+              ))}
+            </select>
             <span className="kicker">{shown.length === project.combos.length ? project.combos.length : `${shown.length} / ${project.combos.length}`}</span>
             {addComboButton}
           </div>
@@ -305,7 +324,13 @@ export function CombosTab({ project, active: tabActive = true }: { project: Proj
             ))}
             {shown.length === 0 && (
               <p className="field-hint combo-none">
-                {keyFilter && !q ? t(`No combo uses ${filterName}.`, `Ни одно комбо не использует ${filterName}.`) : t('Nothing found.', 'Ничего не найдено.')}
+                {keyFilter && !q && layerFilter === 'all'
+                  ? t(`No combo uses ${filterName}.`, `Ни одно комбо не использует ${filterName}.`)
+                  : !keyFilter && !q && layerFilter === 'every'
+                    ? t('Every combo is limited to layers.', 'Все комбо ограничены слоями.')
+                    : !keyFilter && !q && typeof layerFilter === 'number'
+                      ? t(`No combo is limited to layer ${layerFilter}.`, `Ни одно комбо не ограничено слоем ${layerFilter}.`)
+                      : t('Nothing found.', 'Ничего не найдено.')}
               </p>
             )}
           </div>

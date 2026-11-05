@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { comboAutoName, comboNamePart, isOldDefaultComboName } from './advanced';
+import { comboAutoName, comboNamePart, combosOnLayer, isOldDefaultComboName, type ComboLayerFilter } from './advanced';
 
 describe('combo default names', () => {
   it('takes the readable name when it is plain ASCII, else the QMK expression without KC_', () => {
@@ -28,5 +28,23 @@ describe('combo default names', () => {
   it('knows the old combo_N defaults', () => {
     expect(isOldDefaultComboName('combo_12')).toBe(true);
     expect(isOldDefaultComboName('CM_HM_END')).toBe(false);
+  });
+});
+
+describe('combo layer filter', () => {
+  const combos = [
+    { id: 'a', name: 'A', keys: [], result: 0 },
+    { id: 'b', name: 'B', keys: [], result: 0, layers: [1, 2] },
+    { id: 'c', name: 'C', keys: [], result: 0, layers: [] },
+    { id: 'd', name: 'D', keys: [], result: 0, layers: [2] },
+  ];
+  const ids = (f: ComboLayerFilter) => combosOnLayer(combos, f).map((c) => c.id);
+
+  it('lists all, the unlimited ones, or the ones limited to a layer', () => {
+    expect(ids('all')).toEqual(['a', 'b', 'c', 'd']);
+    expect(ids('every')).toEqual(['a', 'c']);
+    expect(ids(2)).toEqual(['b', 'd']);
+    expect(ids(1)).toEqual(['b']);
+    expect(ids(0)).toEqual([]);
   });
 });
