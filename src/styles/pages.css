@@ -502,7 +502,8 @@
   text-align: left;
 }
 
-.combo-none {
+.combo-none,
+.combo-hidden {
   padding: 12px;
 }
 

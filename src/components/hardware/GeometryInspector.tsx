@@ -75,6 +75,14 @@ export function GeometryInspector() {
   const setEncoders = (encoders: EncoderGeom[], label: string) => apply((p) => updateGeometryMeta(p, geometry.id, { encoders }), label, label === 'delete' ? undefined : { coalesce: `enc:${label}` });
   const setControls = (controls: ControlGeom[], label: string) => apply((p) => updateGeometryMeta(p, geometry.id, { controls }), label, label === 'delete' ? undefined : { coalesce: `ctl:${label}` });
 
+  const addControl = (
+    <button
+      className="btn"
+      onClick={() => setControls([...geometry.controls, { id: newId('ctl'), kind: 'other', x: 0, y: -2, w: 1.5, h: 1.5, shape: 'circle', half: 'center', label: t('control', 'элемент') }], 'add')}
+    >
+      <Plus size={14} strokeWidth={1.5} /> {t('control', 'элемент')}
+    </button>
+  );
   const addEncoder = (
     <button
       className="btn"
@@ -269,6 +277,17 @@ export function GeometryInspector() {
 
       <div className="field">
         <span className="field-label">{t('other controls', 'другие органы управления')}</span>
+        {geometry.controls.length === 0 && (
+          <EmptyState
+            what={t(
+              'Trackpads, trackballs, displays and extra buttons: drawn on the keyboard picture and kept in the hardware description. They get no keycodes.',
+              'Трекпады, трекболы, экраны и дополнительные кнопки: рисуются на схеме клавиатуры и хранятся в описании железа. Keycode им не назначаются.',
+            )}
+            example={t('A trackball between the halves, labeled “ball”.', 'Трекбол между половинами с подписью «шар».')}
+          >
+            {addControl}
+          </EmptyState>
+        )}
         {geometry.controls.map((c) => (
           <div key={c.id} className="field" style={{ borderLeft: 'var(--border)', paddingLeft: 8 }}>
             <div className="field-row">
@@ -360,12 +379,7 @@ export function GeometryInspector() {
             {c.notes && <span className="field-hint">{c.notes}</span>}
           </div>
         ))}
-        <button
-          className="btn"
-          onClick={() => setControls([...geometry.controls, { id: newId('ctl'), kind: 'other', x: 0, y: -2, w: 1.5, h: 1.5, shape: 'circle', half: 'center', label: t('control', 'элемент') }], 'add')}
-        >
-          <Plus size={14} strokeWidth={1.5} /> {t('control', 'элемент')}
-        </button>
+        {geometry.controls.length > 0 && addControl}
       </div>
     </div>
   );

@@ -12,6 +12,7 @@ import { QMK_DOCS } from '../../lib/qmkDocs';
 import { href } from '../../lib/router';
 import { whyDisabled } from '../../lib/whyDisabled';
 import { Hint } from '../InfoTip';
+import { EmptyState } from '../EmptyState';
 import { useProjectStore } from '../../store/projectStore';
 import { autoJobs, useQmkStore } from '../../store/qmkStore';
 import { BuildLog } from './BuildLog';
@@ -116,7 +117,13 @@ export function BuildTab() {
               'Дополнительные переменные make (qmk compile -e КЛЮЧ=ЗНАЧЕНИЕ), например CONSOLE_ENABLE=yes. Только флаги и драйверы — переменные инструментов (CC, SHELL…) могли бы запускать программы.',
             )}
           </span>
-          <div className="chips">
+          {Object.keys(buildEnv).length === 0 && (
+            <EmptyState
+              what={t('No extra variables: the build uses only the keymap’s rules.mk.', 'Дополнительных переменных нет: сборка берёт только rules.mk раскладки.')}
+              example={t('CONSOLE_ENABLE=yes for one debug build, without changing rules.mk.', 'CONSOLE_ENABLE=yes для одной отладочной сборки, не меняя rules.mk.')}
+            />
+          )}
+          <div className="chips" style={Object.keys(buildEnv).length === 0 ? { display: 'none' } : undefined}>
             {Object.entries(buildEnv).map(([k, v]) => (
               <span key={k} className="chip">
                 {k}={v}{' '}

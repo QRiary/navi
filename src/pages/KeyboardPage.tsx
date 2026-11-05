@@ -11,6 +11,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { Maximize2, Minus, Plus } from 'lucide-react';
 import { KeyboardCanvas, type KeyView } from '../components/keyboard/KeyboardCanvas';
 import { KeycodePicker } from '../components/keyboard/KeycodePicker';
+import { SharedTabPanel, sharedPanelDomId, Tabs } from '../components/Tabs';
 import { friendlyName } from '../core/keycodes/friendly';
 import { keyLabel } from '../core/keycodes/labels';
 import { keycodeNeeds, needStatus } from '../core/keycodes/requirements';
@@ -37,29 +38,32 @@ export function LayerTabs() {
   const setHoverLayer = useEditorStore((s) => s.setHoverLayer);
   if (!active) return null;
   return (
-    <div className="layer-tabs" role="tablist" aria-label={t('Layers', 'Слои')}>
-      {active.keymap.layers.map((l, i) => (
-        <button
-          key={l.id}
-          role="tab"
-          aria-selected={i === layer}
-          className={`layer-tab ${i === layer ? 'is-active' : ''}`}
-          onClick={() => setLayer(i)}
-          // Pointing at a tab highlights the keys of the shown layer that lead to it.
-          onMouseEnter={() => setHoverLayer(i)}
-          onMouseLeave={() => setHoverLayer(null)}
-          onFocus={() => setHoverLayer(i)}
-          onBlur={() => setHoverLayer(null)}
-          title={`${t('Layer', 'Слой')} ${i}${i === active.keymap.defaultLayer ? t(' · base', ' · базовый') : ''}`}
-        >
-          <span className="layer-tab-num">{i}</span>
-          {l.color && <i className="layer-swatch" style={{ ['--layer-color' as string]: l.color }} />}
-          {l.name}
-        </button>
-      ))}
-    </div>
+    <Tabs
+      idBase={LAYER_TABS}
+      label={t('Layers', 'Слои')}
+      className="layer-tabs"
+      tabClassName="layer-tab"
+      panelId={sharedPanelDomId(LAYER_TABS)}
+      items={active.keymap.layers.map((l, i) => ({
+        id: String(i),
+        title: `${t('Layer', 'Слой')} ${i}${i === active.keymap.defaultLayer ? t(' · base', ' · базовый') : ''}`,
+        label: (
+          <>
+            <span className="layer-tab-num">{i}</span>
+            {l.color && <i className="layer-swatch" style={{ ['--layer-color' as string]: l.color }} />}
+            {l.name}
+          </>
+        ),
+      }))}
+      current={String(layer)}
+      onSelect={(id) => setLayer(Number(id))}
+      // Pointing at a tab highlights the keys of the shown layer that lead to it.
+      onHover={(id) => setHoverLayer(id === null ? null : Number(id))}
+    />
   );
 }
+
+const LAYER_TABS = 'keyboard-layers';
 
 export function KeyboardPage() {
   const active = useActive();
@@ -260,6 +264,8 @@ export function KeyboardPage() {
           ))}
         </select>
       </div>
+      {/* The layer tabs' panel; `display: contents` keeps the canvas a row of the editor grid. */}
+      <SharedTabPanel idBase={LAYER_TABS} current={String(layer)} style={{ display: 'contents' }}>
       <KeyboardCanvas
         geometry={active.geometry}
         keyView={keyView}
@@ -323,6 +329,7 @@ export function KeyboardPage() {
           </>
         }
       />
+      </SharedTabPanel>
       <div className="split-handle" role="separator" aria-orientation="horizontal" aria-label={t('Catalog height', 'Высота каталога')} onPointerDown={startResize} />
       <KeycodePicker currentKeycode={currentKeycode} />
     </div>

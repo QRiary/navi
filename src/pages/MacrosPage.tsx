@@ -21,6 +21,7 @@ import { useProjectStore, useSpec } from '../store/projectStore';
 import { getLanguage, t } from '../i18n';
 import { deletedToast } from '../lib/undoToast';
 import { ListFilter } from '../components/ListFilter';
+import { EmptyState } from '../components/EmptyState';
 import { findAttr, matchesQuery, useFindJump, useListFilter } from '../lib/find';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
@@ -194,6 +195,12 @@ export function MacrosPage() {
             <MacroSteps
               steps={macro.steps}
               keys="basic"
+              emptyHint={
+                <EmptyState
+                  what={t('A macro types its steps in order when you press its MC key: keys, text and pauses.', 'Макрос по нажатию своей клавиши MC выполняет шаги по порядку: клавиши, текст и паузы.')}
+                  example={t('Type “git status”, then Enter.', 'Набрать «git status», затем Enter.')}
+                />
+              }
               onChange={setSteps}
               coalesceKey={`mstep:${selected}`}
               actions={

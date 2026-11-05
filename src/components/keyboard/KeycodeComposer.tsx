@@ -3,7 +3,7 @@
  * The value is always built by the codec (core/keycodes/codec.ts) with the QMK formulas — QMK limits
  * (layers 0–15 for LT/LM, only basic keys for the tap part) are checked there too.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { decode, encode, LAYER_FN_RANGES, toQmk, tryParseQmk, type Decoded, type LayerFn } from '../../core/keycodes/codec';
 import type { KeycodeSpec } from '../../core/keycodes/spec';
 import { preferredName } from '../../core/keycodes/codec';
@@ -18,6 +18,7 @@ import { t } from '../../i18n';
 import { QMK_DOCS } from '../../lib/qmkDocs';
 import { Hint, InfoTip } from '../InfoTip';
 import { ErrorDetails, rawError } from '../ErrorDetails';
+import { SharedTabPanel, sharedPanelDomId, Tabs } from '../Tabs';
 
 type Kind = 'basic' | 'mods' | 'tap-hold' | 'layer' | 'layer-mod' | 'one-shot' | 'tap-dance' | 'unicode' | 'raw';
 
@@ -111,6 +112,12 @@ export function ModsInput({ mods, onChange }: { mods: number; onChange: (m: numb
           {t('right', 'правые')}
         </button>
       </div>
+      <InfoTip label={t('modifiers', 'модификаторы')}>
+        {t(
+          'Tick the modifiers sent with the key. GUI is the Windows key (Command on a Mac). Left or right says which side’s modifiers are sent; one key can’t mix sides (QMK keeps a single side bit for all of them).',
+          'Отметьте модификаторы, которые отправляются вместе с клавишей. GUI — клавиша Windows (Command на Mac). «Левые» или «правые» — с какой стороны отправляются модификаторы; смешать стороны в одной клавише нельзя (в QMK один бит стороны на все).',
+        )}
+      </InfoTip>
     </div>
   );
 }
@@ -187,6 +194,7 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
   const decoded = useMemo(() => decode(spec, value, { unicode: project.firmware.unicode }), [spec, value, project.firmware.unicode]);
   const [kind, setKind] = useState<Kind>(kindOf(decoded));
   const [error, setError] = useState<string | null>(null);
+  const tabsId = useId();
   const [raw, setRaw] = useState(toQmk(spec, value));
   const [errorDetail, setErrorDetail] = useState<{ for: string; text: string } | null>(null);
   /** An error sentence with the raw text behind “Details”. */
@@ -300,13 +308,20 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
           {t('compose', 'собрать')}
         </Hint>
       </span>
-      <div className="chips" role="tablist">
-        {(Object.keys(KIND_LABELS()) as Kind[]).map((k) => (
-          <button key={k} type="button" role="tab" aria-selected={kind === k} className={`chip ${kind === k ? 'is-on' : ''}`} onClick={() => switchKind(k)}>
-            {KIND_LABELS()[k]}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        idBase={tabsId}
+        label={t('Kind of key', 'Вид клавиши')}
+        className="chips"
+        tabClassName="chip"
+        activeClassName="is-on"
+        panelId={sharedPanelDomId(tabsId)}
+        items={Object.entries(KIND_LABELS()).map(([id, label]) => ({ id, label }))}
+        current={kind}
+        onSelect={(k) => switchKind(k as Kind)}
+        // Picking a kind rewrites the key, so arrows only move between kinds.
+        manual
+      />
+      <SharedTabPanel idBase={tabsId} current={kind} style={{ display: 'contents' /* its rows stay items of the field's column */ }}>
 
       {(kind === 'basic' || kind === 'mods') && (
         <div className="field-row">
@@ -411,6 +426,7 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
           <span className="expr-result">{t('Enter to apply', 'Enter — применить')}</span>
         </form>
       )}
+      </SharedTabPanel>
       {error && (
         <p className="field-hint" role="alert" style={{ color: 'var(--danger-color)' }}>
           {error}

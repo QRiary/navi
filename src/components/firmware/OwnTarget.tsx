@@ -14,7 +14,7 @@ import { href } from '../../lib/router';
 import { whyDisabled } from '../../lib/whyDisabled';
 import { issueLevelLabel } from '../../lib/issueLevel';
 import { Hint } from '../InfoTip';
-import { TabPanel, Tabs } from '../Tabs';
+import { SharedTabPanel, sharedPanelDomId, Tabs } from '../Tabs';
 import { useProjectStore } from '../../store/projectStore';
 import { useQmkStore } from '../../store/qmkStore';
 import { toast, toastError } from '../../store/toastStore';
@@ -103,6 +103,7 @@ export function OwnTarget() {
       </ul>
       <Tabs
         idBase="target-files"
+        panelId={sharedPanelDomId('target-files')}
         label={t('Target files', 'Файлы target')}
         current={file}
         onSelect={(id) => setFile(id as typeof file)}
@@ -127,7 +128,7 @@ export function OwnTarget() {
           };
         })}
       />
-      <TabPanel idBase="target-files" id={file} current={file}>
+      <SharedTabPanel idBase="target-files" current={file} className="tab-panel">
         {d ? (
           <div className="diff">
             {d.map((l, i) =>
@@ -148,7 +149,7 @@ export function OwnTarget() {
             {current.text}
           </pre>
         )}
-      </TabPanel>
+      </SharedTabPanel>
       <div className="field-row" style={{ marginTop: 8 }}>
         <button
           className="btn btn--primary"

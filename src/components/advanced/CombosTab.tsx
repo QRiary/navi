@@ -315,6 +315,12 @@ export function CombosTab({ project, active: tabActive = true }: { project: Proj
         </EmptyState>
       ) : (
         <div className="panel-box">
+          {/* The editor above keeps the open combo; say so when the filters hide its row, so the list doesn't look out of step. */}
+          {combo && !pick && !shown.some((c) => c.id === combo.id) && (
+            <p className="field-hint combo-hidden" role="status">
+              {t(`The open combo “${combo.name}” is hidden by the filters.`, `Открытое комбо «${combo.name}» скрыто фильтрами.`)}
+            </p>
+          )}
           <div className="rows" onMouseLeave={() => setHovered(null)}>
             {shown.map((c) => (
               <button

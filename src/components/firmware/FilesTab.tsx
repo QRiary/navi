@@ -18,7 +18,7 @@ import { toast, toastError } from '../../store/toastStore';
 import { getLanguage, t } from '../../i18n';
 import { CustomLines } from './CustomLines';
 import { Modal } from '../Modal';
-import { TabPanel, Tabs } from '../Tabs';
+import { SharedTabPanel, sharedPanelDomId, Tabs } from '../Tabs';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
@@ -224,6 +224,7 @@ export function FilesTab() {
       )}
       <Tabs
         idBase="keymap-files"
+        panelId={sharedPanelDomId('keymap-files')}
         label={t('Generated files', 'Сгенерированные файлы')}
         current={file}
         onSelect={setFile}
@@ -248,7 +249,7 @@ export function FilesTab() {
           };
         })}
       />
-      <TabPanel idBase="keymap-files" id={file} current={file}>
+      <SharedTabPanel idBase="keymap-files" current={file} className="tab-panel">
         {diff ? (
           <div className="diff" aria-label={t('Changes', 'Изменения')}>
             {diff.map((l, i) =>
@@ -269,7 +270,7 @@ export function FilesTab() {
             {current.text}
           </pre>
         )}
-      </TabPanel>
+      </SharedTabPanel>
       {customFile && <CustomLines file={customFile} generatedSymbols={generated.symbols} />}
       {otherIssues.length > 0 && (
         <ul className="issue-list" style={{ marginTop: 8 }}>

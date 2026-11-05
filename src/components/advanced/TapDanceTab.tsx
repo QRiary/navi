@@ -30,6 +30,18 @@ const SLOT_GRID = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minm
 type Variant = (typeof TAP_DANCE_VARIANTS)[number];
 
 const kindTitle = (k: TapDanceKind) => (k === 'slots' ? t('Slots', 'Слоты') : k === 'every-tap' ? t('Every tap', 'Каждое нажатие') : t('Own C', 'Свой C'));
+const variantTip = (v: Variant) =>
+  v === 'none'
+    ? t('Played when neither Shift nor Ctrl is held.', 'Играется, когда не зажат ни Shift, ни Ctrl.')
+    : v === 'ctrlShift'
+      ? t(
+          'Played while Ctrl and Shift are both held (either side, also one-shot), without sending them. Left as “same as no mods”: the Shift column plays if it has its own steps, else the Ctrl column, else the no-mods steps with Ctrl+Shift still held.',
+          'Играется, пока зажаты и Ctrl, и Shift (любой стороны, и one-shot), без них самих. Если оставить «как без модификаторов», играется столбец Shift, если у него свои шаги, иначе столбец Ctrl, иначе шаги без модификаторов, а Ctrl+Shift остаются зажатыми.',
+        )
+      : t(
+          `Played while ${variantTitle(v)} is held (either side, also one-shot), without sending it. Left as “same as no mods”: the no-mods steps play with ${variantTitle(v)} still held.`,
+          `Играется, пока зажат ${variantTitle(v)} (любой стороны, и one-shot), без него самого. Если оставить «как без модификаторов», играются шаги без модификаторов, а ${variantTitle(v)} остаётся зажатым.`,
+        );
 const variantTitle = (v: Variant) => (v === 'none' ? t('No mods', 'Без модификаторов') : v === 'shift' ? 'Shift' : v === 'ctrl' ? 'Ctrl' : 'Ctrl+Shift');
 const OWN_C_FIELDS: { key: keyof TapDanceOwnC; label: () => string; tip: () => string }[] = [
   { key: 'onEachTap', label: () => t('on each tap', 'на каждое нажатие'), tip: () => t('Runs on every tap of the dance.', 'Вызывается при каждом нажатии танца.') },
@@ -331,7 +343,9 @@ function EveryTapSteps({ td, onSteps }: { td: TapDance; onSteps: (steps: TapDanc
             {TAP_DANCE_VARIANTS.map((v) => (
               <div key={v} className="panel-box">
                 <div className="panel-box-head">
-                  <span className="kicker">{variantTitle(v)}</span>
+                  <span className="kicker">
+                    <Hint tip={variantTip(v)}>{variantTitle(v)}</Hint>
+                  </span>
                 </div>
                 <div className="panel-box-body field">
                   {v !== 'none' && st[v] === undefined ? (

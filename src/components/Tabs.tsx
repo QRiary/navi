@@ -1,7 +1,9 @@
 /**
  * One tab bar for the whole app (WAI-ARIA tabs pattern). Two kinds:
  * - route tabs (`href`): each tab is a link, so Back/Forward keep working; a page's main bar, sticky on top;
- * - state tabs (`onSelect`): buttons that switch something inside a page (generated files).
+ * - state tabs (`onSelect`): buttons that switch something inside a page (generated files, layers, composer kinds).
+ * Every tab's `aria-controls` points at an element that exists: its own `TabPanel` (`TabPanels` renders an empty
+ * hidden one for tabs not visited yet), or with `panelId` one element shared by all tabs (`SharedTabPanel`).
  * Roving tabindex: only the current tab is in the Tab order; ←/→, Home/End move and select at once.
  * `TabPanels` keeps every visited panel mounted (hidden when inactive), so local edits survive a tab switch.
  */
@@ -27,13 +29,25 @@ type TabsProps = {
   /** Page-level bar: stays on top of the scrolling page. */
   sticky?: boolean;
   style?: CSSProperties;
+  /** The bar's class instead of `tabs` (layer bars and chips keep their own look). */
+  className?: string;
+  /** Each tab's class instead of `tab`, and the current tab's extra class (default `is-active`). */
+  tabClassName?: string;
+  activeClassName?: string;
+  /** One element all tabs control (a shared panel, the page), instead of a panel per tab. */
+  panelId?: string;
+  /** Pointer or focus on a tab (`id`), and leaving it (`null`). */
+  onHover?: (id: string | null) => void;
+  /** Arrows only move focus; Enter/Space selects (for tabs whose selecting changes data, like the composer's kinds). */
+  manual?: boolean;
 } & ({ href: (id: string) => string; onSelect?: never } | { onSelect: (id: string) => void; href?: never });
 
 export const tabDomId = (idBase: string, id: string) => `${idBase}-tab-${id}`;
 export const panelDomId = (idBase: string, id: string) => `${idBase}-panel-${id}`;
+export const sharedPanelDomId = (idBase: string) => `${idBase}-panel`;
 
 export function Tabs(props: TabsProps) {
-  const { idBase, label, items, current, sticky, style } = props;
+  const { idBase, label, items, current, sticky, style, className, tabClassName = 'tab', activeClassName = 'is-active', panelId, onHover, manual } = props;
   const refs = useRef(new Map<string, HTMLElement>());
   const barRef = useRef<HTMLDivElement>(null);
 
@@ -60,12 +74,13 @@ export function Tabs(props: TabsProps) {
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.altKey || e.ctrlKey || e.metaKey) return;
-    const next = nextTabIndex(e.key, items.findIndex((i) => i.id === current), items.length);
+    const focused = items.findIndex((i) => refs.current.get(i.id) === document.activeElement);
+    const next = nextTabIndex(e.key, manual && focused >= 0 ? focused : items.findIndex((i) => i.id === current), items.length);
     if (next === null) return;
     e.preventDefault();
     const id = items[next].id;
     refs.current.get(id)?.focus();
-    if (id !== current) select(id);
+    if (!manual && id !== current) select(id);
   };
 
   const renderTab = (item: TabItem, describedBy?: string) => {
@@ -78,11 +93,17 @@ export function Tabs(props: TabsProps) {
       id: tabDomId(idBase, item.id),
       role: 'tab',
       'aria-selected': selected,
-      'aria-controls': panelDomId(idBase, item.id),
+      'aria-controls': panelId ?? panelDomId(idBase, item.id),
       'aria-describedby': describedBy,
       tabIndex: selected ? 0 : -1,
       title: item.title,
-      className: `tab ${selected ? 'is-active' : ''}`,
+      className: `${tabClassName} ${selected ? activeClassName : ''}`,
+      ...(onHover && {
+        onMouseEnter: () => onHover(item.id),
+        onMouseLeave: () => onHover(null),
+        onFocus: () => onHover(item.id),
+        onBlur: () => onHover(null),
+      }),
     } as const;
     return props.href ? (
       <a key={item.id} {...common} href={props.href(item.id)}>
@@ -105,7 +126,7 @@ export function Tabs(props: TabsProps) {
   const grouped = clusters.some((c) => c.group);
 
   return (
-    <div ref={sticky ? barRef : undefined} className={`tabs ${sticky ? 'tabs--sticky' : ''}`} role="tablist" aria-label={label} style={style} onKeyDown={onKeyDown}>
+    <div ref={sticky ? barRef : undefined} className={`${className ?? 'tabs'} ${sticky ? 'tabs--sticky' : ''}`} role="tablist" aria-label={label} style={style} onKeyDown={onKeyDown}>
       {grouped
         ? clusters.map((c, n) => {
             const captionId = c.group ? `${idBase}-group-${n}` : undefined;
@@ -136,22 +157,30 @@ export function TabPanel({ idBase, id, current, children, className, style }: { 
   );
 }
 
+/** The one panel all tabs of a bar control (`Tabs` with `panelId={sharedPanelDomId(idBase)}`), labeled by the current tab. */
+export function SharedTabPanel({ idBase, current, children, className, style }: { idBase: string; current: string; children: ReactNode; className?: string; style?: CSSProperties }) {
+  return (
+    <div id={sharedPanelDomId(idBase)} role="tabpanel" aria-labelledby={tabDomId(idBase, current)} className={className} style={style}>
+      {children}
+    </div>
+  );
+}
+
 /**
  * Panels of every tab visited so far (mounted on the first visit, kept while the page lives, hidden when
  * inactive). `render` gets `active` so a panel can pause listeners, timers and polling while hidden.
+ * A tab not visited yet gets an empty hidden panel, so its `aria-controls` still points at something.
  */
 export function TabPanels({ idBase, ids, current, render, className }: { idBase: string; ids: readonly string[]; current: string; render: (id: string, active: boolean) => ReactNode; className?: string }) {
   const visited = useRef(new Set<string>());
   visited.current.add(current);
   return (
     <>
-      {ids
-        .filter((id) => visited.current.has(id))
-        .map((id) => (
-          <TabPanel key={id} idBase={idBase} id={id} current={current} className={className}>
-            {render(id, id === current)}
-          </TabPanel>
-        ))}
+      {ids.map((id) => (
+        <TabPanel key={id} idBase={idBase} id={id} current={current} className={className}>
+          {visited.current.has(id) ? render(id, id === current) : null}
+        </TabPanel>
+      ))}
     </>
   );
 }
