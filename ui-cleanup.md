@@ -251,13 +251,20 @@ tap dances with layer slots, tap-hold actions, combos with layer results, encode
 already walks every layer reference for renumbering (`remapAllLayerRefs`, not exported; `remapLayerRef:141`).
 
 **Do**
-1. Core `layerRefs(project)` → `{layer, how (MO/LT/TG/TO/TT/OSL/DF/LM), source: key position | tap dance slot |
+1. ✅ Core `layerRefs(project)` → `{layer, how (MO/LT/TG/TO/TT/OSL/DF/LM), source: key position | tap dance slot |
    combo | tap-hold action | encoder | override}`; renumbering shares the same walker. Tests.
-2. "How to get here" panel for the current layer (Keyboard page right panel when no key is selected, and on the
+2. ✅ "How to get here" panel for the current layer (Keyboard page right panel when no key is selected, and on the
    Layers page): each route as a sentence ("hold Space on Sturdy", "combo Y + U on any layer", "double tap
    TDI_NUM"), click → that layer opens with the key highlighted.
-3. On the keyboard, hovering a layer tab highlights the keys that lead to it on the shown layer.
+3. ✅ On the keyboard, hovering a layer tab highlights the keys that lead to it on the shown layer.
 4. Check in after a few days of use.
+   Done as: a route's source is where it's pressed (a key on a layer, an encoder, a combo); a tap dance or tap-hold
+   action inside it is its `via` + `part` ("double tap TD_NUM"). Overrides are left out: QMK sends a replacement
+   with `register_code`, which can't switch a layer (leader and own keycodes, `tap_code16`, likewise). Renumbering
+   shares `layerTarget` (how a keycode points at a layer), not the whole walk: it rewrites 9 kinds of data, the walk
+   reads 3; a test moves and deletes layers and checks both agree. Same sentences merge into one line, each layer a
+   link ("hold Space on Sturdy, Qwerty"); an encoder link opens that encoder. The deck's layer buttons hover the
+   same way as the Keyboard page's tabs.
 
 ## Step 8: search (🔴 8/10)
 

@@ -1404,3 +1404,37 @@
 .issue-list {
   font-size: var(--fs-xs);
 }
+
+/* "How to get here": routes to a layer (components/layers/LayerRoutes.tsx). */
+.layer-routes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.layer-routes.is-compact {
+  font-size: var(--fs-xs);
+}
+
+.route-effect {
+  color: var(--text-secondary);
+}
+
+/* Text color for contrast on every palette; the accent only in the underline. */
+.route-layer {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-color);
+  text-underline-offset: 3px;
+}
+
+.route-layer:hover,
+.route-layer:focus-visible {
+  text-decoration-thickness: 2px;
+}
