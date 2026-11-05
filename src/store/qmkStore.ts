@@ -56,6 +56,8 @@ function qmkSettings() {
 }
 
 let subscribed = false;
+/** The own-code read in flight (loadOwnCode), keyed by keyboard + keymap. */
+let ownCodeRead: { key: string; promise: Promise<void> } | null = null;
 
 /** By default the build uses the number of CPU cores (up to 16): without -j QMK builds in one thread, many times slower. */
 export function autoJobs(): number {
@@ -143,16 +145,25 @@ export const useQmkStore = create<QmkState>()((set, get) => {
       }
     },
 
-    async loadOwnCode(keyboard, keymap) {
-      if (!navi) return;
-      if (!get().env && !get().detecting) await get().detect();
-      const home = get().home();
-      if (!home) return;
-      try {
-        set({ ownCode: { keyboard, keymap, files: await navi.qmk.readOwnCode(home, get().userspace(), keyboard, keymap) } });
-      } catch {
-        // Not read: stand-ins are then picked without it, and the Firmware page reads it again.
-      }
+    loadOwnCode(keyboard, keymap) {
+      // Called on every tap-hold key selected: a read already running for the same target is joined, not repeated.
+      const key = `${keyboard}\n${keymap}`;
+      if (ownCodeRead?.key === key) return ownCodeRead.promise;
+      const promise = (async () => {
+        if (!navi) return;
+        if (!get().env && !get().detecting) await get().detect();
+        const home = get().home();
+        if (!home) return;
+        try {
+          set({ ownCode: { keyboard, keymap, files: await navi.qmk.readOwnCode(home, get().userspace(), keyboard, keymap) } });
+        } catch {
+          // Not read: stand-ins are then picked without it, and the Firmware page reads it again.
+        }
+      })().finally(() => {
+        if (ownCodeRead?.promise === promise) ownCodeRead = null;
+      });
+      ownCodeRead = { key, promise };
+      return promise;
     },
 
     async loadTrust(keyboard, keymap) {

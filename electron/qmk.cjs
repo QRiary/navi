@@ -362,19 +362,21 @@ const OWN_CODE_MAX_FILES = 5000;
  * The user's own C in the folders the build uses (buildScanFolders): every C-like file, NAVI's keymap.c / navi.h at
  * the top of the keymap folder left out. Paths are relative to the keymap folder (users/<keymap>/… for the others).
  * Read-only and lenient: links, .git, big, binary or unreadable files are skipped (the build gate reports those).
+ * Async on purpose: it runs whenever a tap-hold key is selected, and a sync walk over \\wsl.localhost (~350 ms for a
+ * real userspace) blocked the main process, so the whole window (clicks, scrolling) froze while reads queued up.
  */
-function readOwnCode(home, userspace, kb, km) {
+async function readOwnCode(home, userspace, kb, km) {
   const folders = buildScanFolders(home, userspace, kb, km);
   const out = [];
   let count = 0;
-  folders.forEach((folder, i) => {
+  for (const [i, folder] of folders.entries()) {
     const prefix = i === 0 ? '' : `users/${km}/`;
     const stack = [folder];
     while (stack.length && count < OWN_CODE_MAX_FILES) {
       const cur = stack.pop();
       let st;
       try {
-        st = fs.lstatSync(cur);
+        st = await fs.promises.lstat(cur);
       } catch {
         continue;
       }
@@ -383,7 +385,7 @@ function readOwnCode(home, userspace, kb, km) {
       if (st.isDirectory()) {
         if (cur !== folder && path.basename(cur) === '.git') continue;
         try {
-          for (const name of fs.readdirSync(cur).sort().reverse()) stack.push(path.join(cur, name));
+          for (const name of (await fs.promises.readdir(cur)).sort().reverse()) stack.push(path.join(cur, name));
         } catch {
           /* unreadable folder: skipped */
         }
@@ -392,13 +394,13 @@ function readOwnCode(home, userspace, kb, km) {
       if (!st.isFile() || !OWN_CODE_EXT.test(cur) || st.size > MAX_SOURCE || (i === 0 && NAVI_WRITTEN.has(rel))) continue;
       count++;
       try {
-        const text = fs.readFileSync(cur, 'utf8');
+        const text = await fs.promises.readFile(cur, 'utf8');
         if (!text.includes('\0')) out.push({ path: prefix + rel, text });
       } catch {
         /* unreadable file: skipped */
       }
     }
-  });
+  }
   return out;
 }
 
