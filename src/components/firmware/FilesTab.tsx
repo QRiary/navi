@@ -31,13 +31,15 @@ export function useGenerated() {
   const project = useProjectStore((s) => s.project);
   const spec = useSpec();
   const info = useQmkStore((s) => s.sources?.info);
+  const ownCode = useQmkStore((s) => s.ownCode);
   return useMemo(() => {
     if (!project) return null;
     const via = viaInBuild(project);
     const encoderCount = info?.encoders ?? project.hardware.encoders.count ?? Math.max(0, ...activeKeymap(project).layers.map((l) => l.encoders.length));
     const maxBrightness = effectiveMaxBrightness(rgbTargetDefaults(info), project.firmware.buildConfig);
-    return generateKeymap({ project, keymap: activeKeymap(project), spec, via, encoderCount, maxBrightness });
-  }, [project, spec, info]);
+    const own = ownCode && ownCode.keyboard === project.firmware.keyboard && ownCode.keymap === project.firmware.keymap ? ownCode.files : null;
+    return generateKeymap({ project, keymap: activeKeymap(project), spec, via, encoderCount, maxBrightness, ownCode: own });
+  }, [project, spec, info, ownCode]);
 }
 
 export function FilesTab() {

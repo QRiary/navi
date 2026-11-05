@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('navi', {
     listKeyboards: invoke('navi:qmk:list-keyboards'),
     readKeyboard: invoke('navi:qmk:read-keyboard'),
     readKeymap: invoke('navi:qmk:read-keymap'),
+    readOwnCode: invoke('navi:qmk:read-own-code'),
     writeKeymap: invoke('navi:qmk:write-keymap'),
     writeKeyboard: invoke('navi:qmk:write-keyboard'),
     compile: invoke('navi:qmk:compile'),

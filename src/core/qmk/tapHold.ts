@@ -102,6 +102,22 @@ export interface StandIn {
 }
 
 /**
+ * navi_is_stand_in() for the user's own C: code that reads the base key of an MT / LT (a key log, a library that
+ * strips mod-taps to their tap key) asks it instead of guessing NAVI's codes, which can be real keys.
+ */
+export function standInCheckCode(names: string[]): string[] {
+  const out = [
+    '// Is this keycode a stand-in of a tap-hold key with actions (NAVI_TH_n)? Its base key is not what it taps: NAVI plays',
+    '// the real tap as a key event of its own. For your own code that reads the base key of MT / LT keycodes.',
+    'bool navi_is_stand_in(uint16_t keycode) {',
+  ];
+  if (!names.length) out.push('    (void)keycode;', '    return false;');
+  else out.push('    switch (keycode) {', ...names.map((n) => `        case ${n}:`), '            return true;', '        default:', '            return false;', '    }');
+  out.push('}', '');
+  return out;
+}
+
+/**
  * The tap-hold code in process_record: the replay fix and the stand-ins' slots. QMK decides tap or hold on the
  * stand-in MT / LT as usual; the tap (and a key hold) is played as its own record (navi_send), the stand-in base key
  * is never sent. Needs record->keycode to be honored: REPEAT_KEY_ENABLE (rules.mk).

@@ -4,13 +4,14 @@
  *
  * A key is stored as plain QMK MT() / LT() whenever that says the same thing (VIA, keymap.json and the codec need
  * QMK's 16-bit values). Anything else gets a TapHoldAction: the keys carry its stand-in keycode, an MT / LT with a
- * base key from STAND_IN_BASES (codes HID leaves unassigned, so no real key has them). QMK's tap-hold logic decides
+ * base key from STAND_IN_POOL (codes HID leaves unassigned, then rare real keys). QMK's tap-hold logic decides
  * on the stand-in like on any MT / LT (per-key settings in Advanced → Tap-hold apply to it too), and the generated
  * keymap.c plays the real actions (core/qmk/tapHold.ts).
  */
 import type { AdvancedIssue } from '../features/advanced';
 import { decode, encode, KeycodeError, toQmk } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
+import { cleanC } from '../qmk/customCode';
 import { activeKeymap } from './ops';
 import type { HoldAction, Project, TapHoldAction } from './types';
 
@@ -21,13 +22,29 @@ export const TAP_HOLD_ACTIONS_MAX = 256;
  * base makes the key a plain hold with no tapping at all. NAVI never lets QMK send them.
  */
 export const STAND_IN_BASES: readonly number[] = [0x02, 0x03, ...Array.from({ length: 10 }, (_, i) => 0xc3 + i)];
+const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
+/**
+ * Real keys taken as bases once a hold has used every code of STAND_IN_BASES, rarest first: 0x99–0xA4
+ * (KC_ALTERNATE_ERASE…KC_EXSEL), 0x74–0x7E (KC_EXECUTE…KC_FIND), KC_KP_COMMA, KC_KP_EQUAL_AS400, International and
+ * Language keys, F13–F24. Never letters, space or punctuation: QMK's Flow Tap reads the base as the tap key before
+ * NAVI's code runs (is_flow_tap_key). Nor digits, modifiers, the keyboard's own volume and locking keys (0x7F–0x84) or
+ * QMK's system / media / mouse codes (0xA5–0xDF): QMK's retro tapping sends the base itself (action.c), so a base must
+ * do little when sent.
+ */
+export const STAND_IN_OVERFLOW: readonly number[] = [...range(0x99, 0xa4), ...range(0x74, 0x7e), 0x85, 0x86, ...range(0x87, 0x98), ...range(0x68, 0x73)];
+/** Every base a stand-in may have. */
+export const STAND_IN_POOL: readonly number[] = [...STAND_IN_BASES, ...STAND_IN_OVERFLOW];
 /**
  * Stand-in modifiers for “hold = a key”: NAVI plays both slots, QMK only decides. Alt / GUI first: Speculative Hold
  * presses Shift / Ctrl mod-taps early by default.
  */
 const KEY_HOLD_STAND_IN_MODS = [0x18, 0x14, 0x1c, 0x08, 0x04, 0x0c, 0x1a, 0x16, 0x1e, 0x0a, 0x06, 0x0e];
 
+/** A code that is no key: it can't be a slot, and an MT / LT with it is never plain. */
 const isStandInBase = (base: number) => STAND_IN_BASES.includes(base);
+const isPoolBase = (base: number) => STAND_IN_POOL.includes(base);
+/** The base key of an MT / LT value. */
+export const standInBase = (keycode: number) => keycode & 0xff;
 
 /** Why a keycode can't be a slot of a tap-hold key (null = it can). Nested tap-hold keys and tap dances can't. */
 export function slotProblem(spec: KeycodeSpec, value: number, slot: 'tap' | 'hold'): { en: string; ru: string } | null {
@@ -87,10 +104,11 @@ export function pruneTapHoldActions(project: Project): Project {
   return kept.length === project.tapHoldActions.length ? project : { ...project, tapHoldActions: kept };
 }
 
+/** Stand-in keycodes for a hold, in the order they are taken: the codes that are no key (every mods value) before real keys. */
 function standInCandidates(spec: KeycodeSpec, hold: HoldAction): number[] {
-  if (hold.type === 'layer') return STAND_IN_BASES.map((base) => encode(spec, { kind: 'layer-tap', layer: hold.layer, base }));
+  if (hold.type === 'layer') return STAND_IN_POOL.map((base) => encode(spec, { kind: 'layer-tap', layer: hold.layer, base }));
   const mods = hold.type === 'mods' ? [hold.mods & 0x1f] : KEY_HOLD_STAND_IN_MODS;
-  return mods.flatMap((m) => STAND_IN_BASES.map((base) => encode(spec, { kind: 'mod-tap', mods: m, base })));
+  return [STAND_IN_BASES, STAND_IN_OVERFLOW].flatMap((bases) => mods.flatMap((m) => bases.map((base) => encode(spec, { kind: 'mod-tap', mods: m, base }))));
 }
 
 function holdProblem(spec: KeycodeSpec, hold: HoldAction): { en: string; ru: string } | null {
@@ -102,24 +120,58 @@ function holdProblem(spec: KeycodeSpec, hold: HoldAction): { en: string; ru: str
   return slotProblem(spec, hold.keycode, 'hold');
 }
 
+/** A free stand-in keycode for the hold: not used anywhere in the project, its base not named by the user's own code. */
+function pickStandIn(spec: KeycodeSpec, project: Project, hold: HoldAction, reserved: ReadonlySet<number>): number {
+  const taken = projectKeycodeRefs(project);
+  for (const a of project.tapHoldActions) taken.add(a.keycode);
+  const keycode = standInCandidates(spec, hold).find((v) => !taken.has(v) && !reserved.has(standInBase(v)));
+  if (keycode === undefined) throw new KeycodeError('No stand-in keycode left for this hold: too many different taps with it.');
+  return keycode;
+}
+
+/** Every reference to one keycode in the project → another (the keys of a stand-in that moves). */
+export function replaceKeycode(p: Project, from: number, to: number): Project {
+  const f = (v: number) => (v === from ? to : v);
+  return {
+    ...p,
+    keymaps: p.keymaps.map((k) => ({ ...k, layers: k.layers.map((l) => ({ ...l, keys: l.keys.map(f), encoders: l.encoders.map((e) => ({ ccw: f(e.ccw), cw: f(e.cw) })) })) })),
+    tapDances: p.tapDances.map((t) => ({ ...t, tap: f(t.tap), hold: f(t.hold), doubleTap: f(t.doubleTap), tapHold: f(t.tapHold) })),
+    combos: p.combos.map((c) => ({ ...c, result: f(c.result) })),
+    keyOverrides: p.keyOverrides.map((o) => ({ ...o, trigger: f(o.trigger), replacement: f(o.replacement) })),
+    customKeycodes: p.customKeycodes.map((c) => (c.action.type === 'tap' ? { ...c, action: { ...c.action, keycode: f(c.action.keycode) } } : c)),
+    leaderSequences: p.leaderSequences.map((s) => (s.action.type === 'tap' ? { ...s, action: { ...s.action, keycode: f(s.action.keycode) } } : s)),
+    keyAliases: p.keyAliases.map((a) => ({ ...a, keycode: f(a.keycode) })),
+    tapHolds: p.tapHolds.map((s) => ({ ...s, keycode: f(s.keycode), ...(s.holdOnKeys ? { holdOnKeys: s.holdOnKeys.map(f) } : {}) })),
+    tapHoldActions: p.tapHoldActions.map((a) => (a.keycode === from ? { ...a, keycode: to } : a)),
+  };
+}
+
+/** The action moved to a new free stand-in keycode, its keys with it. */
+function moveStandIn(spec: KeycodeSpec, project: Project, action: TapHoldAction, reserved: ReadonlySet<number>): { project: Project; keycode: number } {
+  const keycode = pickStandIn(spec, project, action.hold, reserved);
+  return { project: replaceKeycode(project, action.keycode, keycode), keycode };
+}
+
 /**
  * The keycode for a tap-hold key: plain MT / LT, the stand-in of an existing action with the same slots, or a new
  * stand-in (the action is added to the project). Errors as KeycodeError (a slot that can't be, no stand-in left).
+ * reserved: bases the user's own code names (ownCodeRefs), never taken. An existing stand-in on one moves off it when
+ * its key is set again, and so does a stand-in whose keycode is the plain MT / LT asked for (bases can be real keys).
  */
-export function ensureTapHold(spec: KeycodeSpec, input: Project, tap: number, hold: HoldAction): { project: Project; keycode: number } {
+export function ensureTapHold(spec: KeycodeSpec, input: Project, tap: number, hold: HoldAction, reserved: ReadonlySet<number> = new Set()): { project: Project; keycode: number } {
   // Actions left behind by keys overwritten elsewhere (paste, clear) go first, so they never fill the pool.
   const project = pruneTapHoldActions(input);
   const problem = slotProblem(spec, tap, 'tap') ?? holdProblem(spec, hold);
   if (problem) throw new KeycodeError(problem.en);
   const plain = plainTapHold(spec, tap, hold);
-  if (plain !== null) return { project, keycode: plain };
+  if (plain !== null) {
+    const clash = project.tapHoldActions.find((a) => a.keycode === plain);
+    return { project: clash ? moveStandIn(spec, project, clash, reserved).project : project, keycode: plain };
+  }
   const same = project.tapHoldActions.find((a) => a.tap === tap && sameHold(a.hold, hold));
-  if (same) return { project, keycode: same.keycode };
+  if (same) return reserved.has(standInBase(same.keycode)) ? moveStandIn(spec, project, same, reserved) : { project, keycode: same.keycode };
   if (project.tapHoldActions.length >= TAP_HOLD_ACTIONS_MAX) throw new KeycodeError(`At most ${TAP_HOLD_ACTIONS_MAX} tap-hold keys with actions.`);
-  const taken = projectKeycodeRefs(project);
-  for (const a of project.tapHoldActions) taken.add(a.keycode);
-  const keycode = standInCandidates(spec, hold).find((v) => !taken.has(v));
-  if (keycode === undefined) throw new KeycodeError('No stand-in keycode left for this hold: too many different taps with it.');
+  const keycode = pickStandIn(spec, project, hold, reserved);
   const id = `tha-${keycode.toString(16)}-${Date.now().toString(36)}`;
   return { project: { ...project, tapHoldActions: [...project.tapHoldActions, { id, keycode, tap, hold }] }, keycode };
 }
@@ -137,8 +189,8 @@ export function tapHoldSlots(spec: KeycodeSpec, project: Project, value: number)
 /** Does the stand-in keycode match the hold (MT with the hold's mods, LT with its layer, any MT for a key)? */
 function standInFits(spec: KeycodeSpec, a: TapHoldAction): boolean {
   const d = decode(spec, a.keycode);
-  if (d.kind === 'layer-tap') return a.hold.type === 'layer' && d.layer === a.hold.layer && isStandInBase(d.base);
-  if (d.kind === 'mod-tap') return (a.hold.type === 'key' || (a.hold.type === 'mods' && (a.hold.mods & 0x1f) === d.mods)) && isStandInBase(d.base);
+  if (d.kind === 'layer-tap') return a.hold.type === 'layer' && d.layer === a.hold.layer && isPoolBase(d.base);
+  if (d.kind === 'mod-tap') return (a.hold.type === 'key' || (a.hold.type === 'mods' && (a.hold.mods & 0x1f) === d.mods)) && isPoolBase(d.base);
   return false;
 }
 
@@ -156,7 +208,72 @@ export function effectiveTapHoldActions(spec: KeycodeSpec, project: Project): Ta
 /** Does an action need QMK's own key handling for a keycode (record.keycode, REPEAT_KEY_ENABLE)? Every action does. */
 export const needsKeyRecord = (actions: TapHoldAction[]) => actions.length > 0;
 
-export function checkTapHoldActions(spec: KeycodeSpec, project: Project): AdvancedIssue[] {
+/** A file of the user's own C (the keymap folder and users/<keymap>, NAVI's generated files left out). */
+export interface OwnCodeFile {
+  path: string;
+  text: string;
+}
+/** Where the user's own code names a stand-in base. */
+export interface OwnCodeRef {
+  file: string;
+  line: number;
+  name: string;
+}
+
+/** A line with this many numbers is a data table (sequence_transform's trie), not code that claims a key. */
+const DATA_LINE_NUMBERS = 8;
+/** A line that handles keycodes: a hex number there can be a key the code claims. */
+const KEYCODE_CONTEXT = /\bkeycode\b|\bKC_|\bQK_|\b[A-Z]{2,4}_T\s*\(|\b(LT|MT|LM)\s*\(|\bcase\b/;
+
+/**
+ * The stand-in bases (STAND_IN_POOL) the user's own code names, so NAVI never takes them: their names and aliases
+ * (KC_F13) anywhere outside comments, a hex number (0xC3, or a whole MT / LT value) only on a line that handles
+ * keycodes. Data tables are skipped. A rough read of the code on purpose: a missed name lets NAVI take that base,
+ * a false one only takes a base out of the pool.
+ */
+export function ownCodeRefs(spec: KeycodeSpec, files: readonly OwnCodeFile[]): Map<number, OwnCodeRef> {
+  const byName = new Map<string, number>();
+  for (const base of STAND_IN_POOL) {
+    const def = spec.byValue.get(base);
+    if (def) for (const name of [def.key, ...def.aliases]) byName.set(name, base);
+  }
+  const pool = new Set(STAND_IN_POOL);
+  const hexBase = (text: string): number | null => {
+    const v = parseInt(text, 16);
+    if (v <= 0xff) return pool.has(v) ? v : null;
+    if (v > 0xffff) return null;
+    const d = decode(spec, v);
+    return (d.kind === 'mod-tap' || d.kind === 'layer-tap') && pool.has(d.base) ? d.base : null;
+  };
+  const out = new Map<number, OwnCodeRef>();
+  for (const f of files) {
+    cleanC(f.text).text.split('\n').forEach((line, i) => {
+      if ((line.match(/\b(0[xX][0-9a-fA-F]+|\d+)\b/g) ?? []).length >= DATA_LINE_NUMBERS) return;
+      const add = (base: number, name: string) => {
+        if (!out.has(base)) out.set(base, { file: f.path, line: i + 1, name });
+      };
+      for (const m of line.matchAll(/\b[A-Z][A-Z0-9_]*\b/g)) {
+        const base = byName.get(m[0]);
+        if (base !== undefined) add(base, m[0]);
+      }
+      if (!KEYCODE_CONTEXT.test(line)) return;
+      for (const m of line.matchAll(/\b0[xX]([0-9a-fA-F]{1,4})\b/g)) {
+        const base = hexBase(m[1]);
+        if (base !== null) add(base, m[0]);
+      }
+    });
+  }
+  return out;
+}
+
+/** ownCodeRefs of the project's own lines (keymap.c, config.h) and the user's files on disk. */
+export function projectOwnCodeRefs(spec: KeycodeSpec, project: Project, disk: readonly OwnCodeFile[] | null | undefined): Map<number, OwnCodeRef> {
+  const custom = project.firmware.custom ?? {};
+  const lines = (['keymap.c', 'config.h'] as const).flatMap((name) => (custom[name] ? [{ path: `own lines of ${name}`, text: custom[name] }] : []));
+  return ownCodeRefs(spec, [...lines, ...(disk ?? [])]);
+}
+
+export function checkTapHoldActions(spec: KeycodeSpec, project: Project, ownRefs?: ReadonlyMap<number, OwnCodeRef>): AdvancedIssue[] {
   const out: AdvancedIssue[] = [];
   if (project.tapHoldActions.length > TAP_HOLD_ACTIONS_MAX) {
     out.push({ level: 'error', where: 'tap-hold keys', message: { en: `At most ${TAP_HOLD_ACTIONS_MAX} tap-hold keys with actions.`, ru: `Не больше ${TAP_HOLD_ACTIONS_MAX} тап-холд клавиш с действиями.` } });
@@ -182,6 +299,18 @@ export function checkTapHoldActions(spec: KeycodeSpec, project: Project): Advanc
     }
     if (onKeysOnly.has(a.keycode)) {
       err({ en: 'A tap-hold key with actions works only on keys of the keymap, not in tap dances, combos, overrides or leader / own keycode actions.', ru: 'Тап-холд клавиша с действиями работает только на клавишах раскладки, не в tap dance, комбо, подменах и действиях лидера / своих keycodes.' });
+    }
+    const own = ownRefs?.get(standInBase(a.keycode));
+    if (own && !problem) {
+      const code = toQmk(spec, a.keycode);
+      out.push({
+        level: 'warning',
+        where,
+        message: {
+          en: `Your own code names ${own.name} (${own.file}:${own.line}), and this key's hidden code ${code} is built on it. If your code means something else by it, set the key again in the key editor: NAVI moves it to a free code.`,
+          ru: `Ваш код называет ${own.name} (${own.file}:${own.line}), а на нём построен скрытый код этой клавиши ${code}. Если ваш код имеет в виду что-то другое, задайте клавишу заново в редакторе клавиш: NAVI перенесёт её на свободный код.`,
+        },
+      });
     }
   });
   return out;

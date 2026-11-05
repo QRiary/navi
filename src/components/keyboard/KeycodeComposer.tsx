@@ -11,6 +11,8 @@ import type { HoldAction, Project } from '../../core/project/types';
 import { ensureTapHold, plainTapHold, tapHoldSlots } from '../../core/project/tapHoldActions';
 import { KeycodeField } from '../advanced/common';
 import { activeKeymap } from '../../core/project/ops';
+import { reservedStandInBases } from '../../lib/keymapActions';
+import { useQmkStore } from '../../store/qmkStore';
 import { t } from '../../i18n';
 
 type Kind = 'basic' | 'mods' | 'tap-hold' | 'layer' | 'layer-mod' | 'one-shot' | 'tap-dance' | 'unicode' | 'raw';
@@ -194,14 +196,22 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
   const fn: LayerFn = decoded.kind === 'layer' ? decoded.fn : 'MO';
   const slots = tapHoldSlots(spec, project, value) ?? { tap: base, hold: { type: 'mods', mods } as HoldAction };
 
+  // The user's own C of the target: the stand-in bases it names are never taken (read again each time the tab opens).
+  const { keyboard, keymap: kmName } = project.firmware;
+  useEffect(() => {
+    if (kind === 'tap-hold' && onTapHold && keyboard) void useQmkStore.getState().loadOwnCode(keyboard, kmName);
+  }, [kind, onTapHold, keyboard, kmName]);
+
   const commitTapHold = (tap: number, hold: HoldAction) => {
     const plain = plainTapHold(spec, tap, hold);
+    // A plain MT / LT that is the keycode of a stand-in: the stand-in moves away first (ensureTapHold).
+    const clash = plain !== null && project.tapHoldActions.some((a) => a.keycode === plain);
     try {
-      if (plain === null) ensureTapHold(spec, project, tap, hold); // the slot errors
+      if (plain === null || clash) ensureTapHold(spec, project, tap, hold, reservedStandInBases(spec, project)); // the slot errors
     } catch (err) {
       return setError(err instanceof Error ? err.message : String(err));
     }
-    if (plain !== null) onChange(plain);
+    if (plain !== null && (!clash || !onTapHold)) onChange(plain);
     else if (onTapHold) onTapHold(tap, hold);
     else return setError(t('Here only what QMK’s MT / LT can say: a basic key tapped, modifiers or a layer 0–15 held.', 'Здесь только то, что умеют MT / LT в QMK: нажатие — обычная клавиша, удержание — модификаторы или слой 0–15.'));
     setError(null);

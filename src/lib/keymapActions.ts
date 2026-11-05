@@ -5,10 +5,11 @@
 import { keyCenter } from '../core/layout/geometry';
 import { KC_NO, KC_TRNS } from '../core/project/factory';
 import { activeGeometry, activeKeymap, posIndex, setEncoder, setKeycodeMap, setKeycodes, swapKeycodes } from '../core/project/ops';
-import type { HoldAction, KeyGeom, MatrixPos } from '../core/project/types';
-import { ensureTapHold, pruneTapHoldActions } from '../core/project/tapHoldActions';
+import type { HoldAction, KeyGeom, MatrixPos, Project } from '../core/project/types';
+import { ensureTapHold, projectOwnCodeRefs, pruneTapHoldActions } from '../core/project/tapHoldActions';
 import { toQmk } from '../core/keycodes/codec';
-import { loadSpec } from '../core/keycodes/spec';
+import { loadSpec, type KeycodeSpec } from '../core/keycodes/spec';
+import { useQmkStore } from '../store/qmkStore';
 import { t } from '../i18n';
 import { useEditorStore, type ClipboardEntry } from '../store/editorStore';
 import { useProjectStore } from '../store/projectStore';
@@ -48,6 +49,16 @@ export function assignToSelection(keycode: number): boolean {
 }
 
 /**
+ * Stand-in bases NAVI must not take: those the project's own lines and the user's own C of the target name (read by
+ * qmkStore.loadOwnCode; not read yet = only the own lines).
+ */
+export function reservedStandInBases(spec: KeycodeSpec, project: Project): ReadonlySet<number> {
+  const own = useQmkStore.getState().ownCode;
+  const disk = own && own.keyboard === project.firmware.keyboard && own.keymap === project.firmware.keymap ? own.files : null;
+  return new Set(projectOwnCodeRefs(spec, project, disk).keys());
+}
+
+/**
  * Assign a tap-hold key (any tap, any hold) to the selected keys: plain MT / LT when QMK can say it, else a stand-in
  * with its action (core/project/tapHoldActions.ts). Actions no key uses any more are dropped in the same step.
  */
@@ -60,14 +71,15 @@ export function assignTapHoldToSelection(tap: number, hold: HoldAction): boolean
     toast(t('Select a key on the keyboard first', 'Сначала выберите клавишу на схеме'));
     return false;
   }
+  const reserved = reservedStandInBases(spec, c.project);
   try {
-    ensureTapHold(spec, c.project, tap, hold); // the error, before an undo step is made
+    ensureTapHold(spec, c.project, tap, hold, reserved); // the error, before an undo step is made
   } catch (e) {
     toast(e instanceof Error ? e.message : String(e));
     return false;
   }
   useProjectStore.getState().apply((p) => {
-    const r = ensureTapHold(spec, p, tap, hold);
+    const r = ensureTapHold(spec, p, tap, hold, reserved);
     return pruneTapHoldActions(setKeycodes(r.project, c.keymap.id, c.layer, positions, r.keycode));
   }, `${positions.length}× tap-hold ${toQmk(spec, tap)}`);
   return true;

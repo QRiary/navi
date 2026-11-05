@@ -21,7 +21,7 @@ export interface CustomIssue {
 const msg = (en: string, ru: string) => ({ en, ru });
 
 /** Functions and arrays the generator may create: a second definition will not compile. */
-export const GENERATED_SYMBOLS = ['keymaps', 'encoder_map', 'tap_dance_actions', 'key_combos', 'key_overrides', 'process_record_user', 'get_tapping_term', 'get_quick_tap_term', 'get_hold_on_other_key_press', 'get_permissive_hold', 'pre_process_record_user', 'get_combo_term', 'combo_should_trigger', 'layer_state_set_user', 'navi_layers_on', 'navi_layer_off'] as const;
+export const GENERATED_SYMBOLS = ['keymaps', 'encoder_map', 'tap_dance_actions', 'key_combos', 'key_overrides', 'process_record_user', 'get_tapping_term', 'get_quick_tap_term', 'get_hold_on_other_key_press', 'get_permissive_hold', 'pre_process_record_user', 'get_combo_term', 'combo_should_trigger', 'layer_state_set_user', 'navi_layers_on', 'navi_layer_off', 'navi_is_stand_in'] as const;
 
 /**
  * “Own pipeline” mode: NAVI's hooks get a _navi suffix (the user's code defines the QMK hook and calls them).
@@ -41,7 +41,7 @@ export const NAVI_HOOKS = {
 } as const;
 
 /** What the user's own keymap.c lines must not define in “own pipeline” mode: NAVI's arrays and *_navi functions. */
-export const PIPELINE_SYMBOLS = ['keymaps', 'encoder_map', 'tap_dance_actions', 'key_combos', 'key_overrides', 'unicode_map', 'navi_layers_on', 'navi_layer_off', ...Object.values(NAVI_HOOKS)] as const;
+export const PIPELINE_SYMBOLS = ['keymaps', 'encoder_map', 'tap_dance_actions', 'key_combos', 'key_overrides', 'unicode_map', 'navi_layers_on', 'navi_layer_off', 'navi_is_stand_in', ...Object.values(NAVI_HOOKS)] as const;
 
 /** A user header included at the top of keymap.c in “own pipeline” mode: a relative path inside the keymap folder. */
 export const PIPELINE_MAX_HEADERS = 20;

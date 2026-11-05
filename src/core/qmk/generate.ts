@@ -24,8 +24,8 @@ import type { HoldAction, Keymap, MacroStep, Project } from '../project/types';
 import { activeGeometry } from '../project/ops';
 import { checkKeyAliases } from '../project/aliases';
 import { checkTapHolds, effectiveTapHolds } from '../project/tapHolds';
-import { checkTapHoldActions, effectiveTapHoldActions } from '../project/tapHoldActions';
-import { hasHoldKeys, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, replayTracked, tapHoldsCode, type StandIn } from './tapHold';
+import { checkTapHoldActions, effectiveTapHoldActions, projectOwnCodeRefs, type OwnCodeFile } from '../project/tapHoldActions';
+import { hasHoldKeys, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, replayTracked, standInCheckCode, tapHoldsCode, type StandIn } from './tapHold';
 import { layoutMacro, renderLayers, textLayout } from './layoutText';
 
 export interface GeneratedFile {
@@ -168,9 +168,11 @@ export interface GenerateOptions {
   encoderCount: number;
   /** Lighting brightness limit of the target (if known): the default brightness must not exceed it. */
   maxBrightness?: number | null;
+  /** The user's own C on disk (keymap folder, users/<keymap>): a stand-in on a base it names gets a warning. */
+  ownCode?: readonly OwnCodeFile[] | null;
 }
 
-export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBrightness }: GenerateOptions): GenerateResult {
+export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBrightness, ownCode }: GenerateOptions): GenerateResult {
   const { rows, cols } = project.hardware.matrix;
   const layerIds = layerIdentifiers(keymap);
   const tdSorted = [...project.tapDances].sort((a, b) => a.index - b.index);
@@ -201,7 +203,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const aliases = checkKeyAliases(project, layerIds);
   issues.push(...aliases.issues);
   issues.push(...checkTapHolds(spec, project));
-  issues.push(...checkTapHoldActions(spec, project));
+  issues.push(...checkTapHoldActions(spec, project, projectOwnCodeRefs(spec, project, ownCode)));
   const tapHold = planTapHolds(effectiveTapHolds(spec, project), kc);
   const tracked = replayTracked(tapHold);
   // “Own pipeline”: the hooks get a _navi suffix, enums and prototypes go to navi.h, build settings to navi_*.
@@ -523,6 +525,9 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     }));
     c.push(...tapHoldsCode({ standIns, tracked, interrupters: tracked.some((h) => h.holdKeys.length > 0), layerOff: layersOnTop ? 'navi_layer_off' : 'layer_off' }));
   }
+  // For the user's own C: which MT / LT values are NAVI's stand-ins (their base key isn't what they tap).
+  const standInCheck = pipeline || thActions.length > 0;
+  if (standInCheck) c.push(...standInCheckCode([...standInName.values()]));
   const recordHook = keysInCode || layersOnTop || tapHoldInCode;
   if (recordHook) {
     c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
@@ -606,6 +611,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     h.push('layer_state_t layer_state_set_navi(layer_state_t state);');
     h.push('layer_state_t navi_layers_on(void); // layers turned on, hidden ones included');
     h.push('void navi_layer_off(uint8_t layer); // also turns off a hidden layer');
+    h.push('bool navi_is_stand_in(uint16_t keycode); // a stand-in MT / LT of a tap-hold key with actions: its base key is not its tap');
     h.push('');
   }
 
@@ -709,6 +715,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (holdKeys) generatedSymbols.add('navi_last_pressed');
   if (replay) for (const name of ['navi_down', 'navi_interrupted', 'navi_interrupter', 'navi_watch_presses', 'navi_held_tap', 'navi_forces_hold', 'navi_hold']) generatedSymbols.add(name);
   if (tapHoldInCode) generatedSymbols.add('navi_tap_holds');
+  if (standInCheck) generatedSymbols.add('navi_is_stand_in');
   if (thActions.length) for (const name of ['navi_sending', 'navi_send', ...standInName.values()]) generatedSymbols.add(name);
   if (!pipeline && leaders.length) generatedSymbols.add('leader_end_user');
   if (!pipeline && layersOnTop) generatedSymbols.add('layer_state_set_user');

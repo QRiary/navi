@@ -2,7 +2,7 @@
 // the HID reports the computer would get. Positions are row 0 of the test matrix:
 //   0 LT(1, KC_SPC)   1 LSFT_T(KC_P) hold-preferred   2 KC_C (layer 2: KC_V)
 //   3 tap C(KC_Z) / hold layer 2 + Ctrl   4 tap S(KC_1) / hold Alt, hold-preferred   5 tap KC_A / hold C(KC_X)
-//   6 LCTL_T(KC_D) holds when KC_C is pressed   7 KC_E
+//   6 LCTL_T(KC_D) holds when KC_C is pressed   7 KC_E   8 tap C(KC_C) / hold Ctrl, a stand-in on KC_ALTERNATE_ERASE
 #include <string>
 #include <vector>
 
@@ -126,4 +126,13 @@ TEST_F(NaviHost, hold_key_rolled_behind_an_undecided_layer_tap_holds) {
 
 TEST_F(NaviHost, other_key_rolled_behind_an_undecided_layer_tap_still_taps) {
     EXPECT_EQ(play({"+0", "+6", "+7", "-6", "-7", "wait", "-0"}), "D D+E E -");
+}
+
+// A stand-in whose base is a real key (KC_ALTERNATE_ERASE, 0x99): the base is never sent
+TEST_F(NaviHost, stand_in_on_a_real_key_taps_its_tap) {
+    EXPECT_EQ(play({"+8", "-8"}), "LCTL LCTL+C LCTL -");
+}
+
+TEST_F(NaviHost, stand_in_on_a_real_key_holds_ctrl) {
+    EXPECT_EQ(play({"+8", "wait", "+7", "-7", "-8"}), "LCTL LCTL+E LCTL -");
 }

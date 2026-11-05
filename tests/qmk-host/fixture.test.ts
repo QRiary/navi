@@ -36,6 +36,11 @@ export function hostProject(): Project {
   putTh(5, 'KC_A', { type: 'key', keycode: q('C(KC_X)') });
   put(0, 6, q('LCTL_T(KC_D)'));
   put(0, 7, q('KC_E'));
+  // A stand-in on a real key: the 12 codes that are no key taken by the user's own code (ownCodeRefs).
+  const noKey = new Set([0x02, 0x03, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc]);
+  const r8 = ensureTapHold(spec, p, q('C(KC_C)'), { type: 'mods', mods: 0x01 }, noKey);
+  p = r8.project;
+  put(0, 8, r8.keycode);
   put(2, 2, q('KC_V'));
   p = pruneTapHoldActions(p);
   return {
