@@ -8,7 +8,7 @@
  *
  * The interface talks to this file only through preload.cjs (window.navi).
  */
-const { app, BrowserWindow, dialog, ipcMain, net, protocol, session, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, net, protocol, screen, session, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -18,6 +18,8 @@ const { registerQmkIpc } = require('./qmk.cjs');
 const { registerFlashIpc } = require('./flash.cjs');
 const { registerLinkIpc } = require('./links.cjs');
 const { cancelAll } = require('./runner.cjs');
+const { MIN_SIZE, loadWindowBounds, trackWindowState } = require('./windowState.cjs');
+const { attachZoomKeys, registerZoomIpc, titleBarHeight } = require('./zoom.cjs');
 
 app.setName('NAVI');
 // Own data folder (tests, portable copy): NAVI_USER_DATA=path
@@ -39,6 +41,7 @@ const dataDir = app.getPath('userData');
 const projectsDir = path.join(dataDir, 'projects');
 const firmwareDir = path.join(dataDir, 'firmware');
 const configPath = path.join(dataDir, 'user.config.jsonc');
+const windowStatePath = path.join(dataDir, 'window-state.json');
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
@@ -53,12 +56,17 @@ let win = null;
 const isOwnUrl = (url) => (DEV_URL ? String(url).startsWith(DEV_URL) : String(url).startsWith('app://navi'));
 
 function createWindow() {
+  const keepState = !TEST_WINDOW && !PROBE_MODE;
+  const bounds = TEST_WINDOW
+    ? { x: TEST_WINDOW[0], y: TEST_WINDOW[1], width: TEST_WINDOW[2], height: TEST_WINDOW[3] }
+    : loadWindowBounds(windowStatePath, screen);
   win = new BrowserWindow({
-    ...(TEST_WINDOW ? { x: TEST_WINDOW[0], y: TEST_WINDOW[1] } : {}),
-    width: TEST_WINDOW?.[2] ?? 1440,
-    height: TEST_WINDOW?.[3] ?? 900,
-    minWidth: 980,
-    minHeight: 640,
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    minWidth: MIN_SIZE.width,
+    minHeight: MIN_SIZE.height,
     show: false,
     title: 'NAVI',
     backgroundColor: '#050505',
@@ -75,7 +83,9 @@ function createWindow() {
     },
   });
 
-  if (!PROBE_MODE) win.once('ready-to-show', () => (TEST_WINDOW ? win?.showInactive() : win?.show()));
+  if (!PROBE_MODE) win.once('ready-to-show', () => (TEST_WINDOW ? win?.showInactive() : bounds.maximized ? win?.maximize() : win?.show()));
+  if (keepState) trackWindowState(win, windowStatePath);
+  attachZoomKeys(win);
 
   // Unsaved changes: the interface sets beforeunload — ask the user.
   // (The draft is on disk anyway, so edits are not lost even when closing.)
@@ -261,7 +271,7 @@ function registerIpc() {
     if (!win || !colors) return;
     const hex = /^#[0-9a-f]{6}$/i;
     if (hex.test(colors.color) && hex.test(colors.symbolColor)) {
-      win.setTitleBarOverlay({ color: colors.color, symbolColor: colors.symbolColor, height: 32 });
+      win.setTitleBarOverlay({ color: colors.color, symbolColor: colors.symbolColor, height: titleBarHeight() });
       win.setBackgroundColor(colors.color);
     }
   });
@@ -275,6 +285,7 @@ function registerIpc() {
 
   registerQmkIpc({ ipcMain, getWindow: () => win, dataDir, firmwareDir });
   registerFlashIpc({ ipcMain, getWindow: () => win, firmwareDir });
+  registerZoomIpc({ ipcMain, getWindow: () => win });
 }
 
 app.on('second-instance', () => {
