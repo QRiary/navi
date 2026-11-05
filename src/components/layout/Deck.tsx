@@ -112,7 +112,10 @@ function SaveCell() {
     <div className="deck-cell deck-cell--right">
       <div className={`save-state ${dirty ? 'save-state--dirty' : ''}`}>
         <strong>{dirty ? t('unsaved', 'не сохранено') : t('saved', 'сохранено')}</strong>
-        <span>{draftError ? t(`draft error: ${draftError}`, `ошибка черновика: ${draftError}`) : dirty ? t('draft is kept automatically', 'черновик хранится автоматически') : project.name}</span>
+        {(() => {
+          const note = draftError ? t(`draft error: ${draftError}`, `ошибка черновика: ${draftError}`) : dirty ? t('draft is kept automatically', 'черновик хранится автоматически') : project.name;
+          return <span title={note}>{note}</span>;
+        })()}
       </div>
       <button
         className="btn btn--primary"

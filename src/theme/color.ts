@@ -28,3 +28,16 @@ export function luminance(hex: string): number {
 export function readableTextOn(background: string): string {
   return luminance(background) > 0.35 ? '#0a0b0a' : '#f7f7f5';
 }
+
+/** WCAG contrast ratio of two #rrggbb colors (1…21). */
+export function contrastRatio(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** Mixes `top` over `bottom` with the given alpha (0…1), like a translucent fill. */
+export function mixHex(bottom: string, top: string, alpha: number): string {
+  const a = hexToRgb(bottom);
+  const b = hexToRgb(top);
+  return rgbToHex(a.r + (b.r - a.r) * alpha, a.g + (b.g - a.g) * alpha, a.b + (b.b - a.b) * alpha);
+}

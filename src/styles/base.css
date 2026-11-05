@@ -84,8 +84,14 @@ output {
 }
 
 code {
-  font-size: 0.92em;
+  font-size: max(0.92em, var(--fs-xs));
   color: var(--text-primary);
+}
+
+/* Chromium's own placeholder gray is under 4.5:1 on the dark cells */
+::placeholder {
+  color: var(--text-label);
+  opacity: 1;
 }
 
 kbd {
@@ -114,7 +120,7 @@ kbd {
 .cell-label,
 .kicker {
   font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   font-weight: 500;
   letter-spacing: var(--label-spacing);
   text-transform: uppercase;
