@@ -1,6 +1,5 @@
 /**
- * A tab's filter box: hides the rows that don't match. Ctrl+F focuses the box of the tab on screen (`data-list-filter`),
- * Esc empties it (a second Esc leaves it). Shows "shown / total" while filtering.
+ * A tab's filter box: hides the rows that don't match. Esc empties it (a second Esc leaves it). Shows "shown / total" while filtering.
  */
 import { Search } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -32,7 +31,6 @@ export function ListFilter({
         <input
           className="input"
           type="search"
-          data-list-filter=""
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => {
@@ -46,7 +44,7 @@ export function ListFilter({
           }}
           placeholder={placeholder}
           aria-label={label}
-          title={t('Filter (Ctrl+F)', 'Фильтр (Ctrl+F)')}
+          title={t('Filter', 'Фильтр')}
         />
       </label>
       {total !== undefined && (

@@ -527,34 +527,78 @@
   overflow: hidden;
 }
 
-/* Global search (Ctrl+K): a box near the top of the window, results under the field. */
+/* Global search (Ctrl+K / Ctrl+F): a command palette near the top of the window. The field is its head (the
+   dialog's title stays for screen readers only), results scroll under it, key hints and the count sit below. */
 .modal.modal--search {
   align-self: start;
-  width: min(680px, 100%);
-  margin-top: 8vh;
+  width: min(720px, 100%);
+  max-height: 76vh;
+  margin-top: 10vh;
+  overflow: hidden;
 }
 
-.search-palette-box {
+.modal--search .modal-head {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.modal--search .modal-body {
+  gap: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.search-box.search-palette-box {
+  flex: none;
+  gap: 12px;
   max-width: none;
-  height: 40px;
+  height: 56px;
+  padding: 0 20px;
+  border: 0;
+  border-bottom: var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.search-palette-box input {
+  font-size: var(--fs-lg);
+}
+
+.search-note {
+  margin: 0;
+  padding: 12px 20px 4px;
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+}
+
+.search-note--empty {
+  padding: 32px 20px;
+  text-align: center;
 }
 
 .search-results {
   display: flex;
   flex-direction: column;
-  max-height: min(56vh, 520px);
-  margin: 0 -8px;
-  padding: 0;
+  gap: 2px;
+  min-height: 0;
+  margin: 0;
+  padding: 8px;
   overflow-y: auto;
+  scroll-padding: 8px;
   list-style: none;
 }
 
 .search-result {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 40px;
-  padding: 4px 8px;
+  gap: 16px;
+  min-height: 48px;
+  padding: 8px 12px;
   border-radius: var(--panel-radius);
   cursor: pointer;
 }
@@ -568,13 +612,15 @@
   display: flex;
   flex: 1;
   flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 
 .search-result-title {
   overflow: hidden;
   color: var(--text-primary);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-md);
+  font-weight: 500;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -589,16 +635,46 @@
 
 .search-result-kind {
   flex: none;
+  min-width: 88px;
+  padding: 2px 8px;
+  border: var(--panel-border-width) solid transparent;
+  border-radius: var(--panel-radius);
   color: var(--text-label);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-2xs);
   letter-spacing: var(--label-spacing);
+  text-align: center;
   text-transform: uppercase;
+}
+
+.search-result.is-active .search-result-kind {
+  border-color: var(--accent-color);
+  color: var(--text-primary);
+}
+
+.modal--search .modal-foot {
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 20px;
 }
 
 .search-keys {
   display: flex;
   flex: 1;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin: 0;
+}
+
+.search-keys > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.search-count {
+  flex: none;
+  color: var(--text-label);
+  font-size: var(--fs-xs);
 }
 
 /* The top bar's search box opens the global search. */

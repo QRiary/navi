@@ -279,7 +279,6 @@ export function CombosTab({ project, active: tabActive = true }: { project: Proj
               <input
                 className="input"
                 type="search"
-                data-list-filter=""
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t('Search by name, key or result', 'Поиск по имени, клавише или результату')}

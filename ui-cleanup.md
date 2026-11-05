@@ -284,7 +284,7 @@ titles are defined twice (`Sidebar.tsx:9-21`, `TopBar.tsx:10-22`) and tab lists 
    Done as: `src/lib/sections.ts` holds sections and tabs; pages take their tab bars from it. Filter boxes on tap
    dance, tap-hold (one box for key lists and settings), combos (its search box), overrides, leader, custom
    keycodes, aliases, unicode, QMK settings, macros, layers, projects; Esc clears, a count shows shown / total.
-   Ctrl+F on a tab without one opens the global search. The search also finds encoders, key lists, overrides,
+   Ctrl+F opens the global search like Ctrl+K (owner's pick after trying it); filter boxes are clicked. The search also finds encoders, key lists, overrides,
    leader sequences, unicode entries and other projects, in both languages at once ("живая" finds Live write in
    English). A key result opens its layer with the key highlighted (as Step 7's links); others land on the row,
    scroll it below the sticky blocks and flash it.
