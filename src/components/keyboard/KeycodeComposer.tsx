@@ -4,7 +4,7 @@
  * (layers 0–15 for LT/LM, only basic keys for the tap part) are checked there too.
  */
 import { useEffect, useId, useMemo, useState } from 'react';
-import { decode, encode, LAYER_FN_RANGES, toQmk, tryParseQmk, type Decoded, type LayerFn } from '../../core/keycodes/codec';
+import { decode, encode, LAYER_FN_RANGES, type Decoded, type LayerFn } from '../../core/keycodes/codec';
 import type { KeycodeSpec } from '../../core/keycodes/spec';
 import { preferredName } from '../../core/keycodes/codec';
 import type { HoldAction, Project } from '../../core/project/types';
@@ -20,7 +20,8 @@ import { Hint, InfoTip } from '../InfoTip';
 import { ErrorDetails, rawError } from '../ErrorDetails';
 import { SharedTabPanel, sharedPanelDomId, Tabs } from '../Tabs';
 
-type Kind = 'basic' | 'mods' | 'tap-hold' | 'layer' | 'layer-mod' | 'one-shot' | 'tap-dance' | 'unicode' | 'raw';
+/** “key” takes any keycode (typed as a QMK expression or picked in the catalog): it was also the old “expression” kind. */
+type Kind = 'basic' | 'mods' | 'tap-hold' | 'layer' | 'layer-mod' | 'one-shot' | 'tap-dance' | 'unicode';
 
 const KIND_LABELS = (): Record<Kind, string> => ({
   basic: t('key', 'клавиша'),
@@ -31,14 +32,10 @@ const KIND_LABELS = (): Record<Kind, string> => ({
   'one-shot': t('one-shot', 'one-shot (до следующей клавиши)'),
   'tap-dance': t('tap dance', 'тап-дэнс'),
   unicode: t('unicode', 'юникод'),
-  raw: t('expression', 'выражение'),
 });
 
 function kindOf(d: Decoded): Kind {
   switch (d.kind) {
-    case 'basic':
-    case 'named':
-      return 'basic';
     case 'mods':
       return 'mods';
     case 'mod-tap':
@@ -57,7 +54,7 @@ function kindOf(d: Decoded): Kind {
     case 'unicode-map-pair':
       return 'unicode';
     default:
-      return 'raw';
+      return 'basic';
   }
 }
 
@@ -136,8 +133,22 @@ export function LayerSelect({ project, value, max, onChange }: { project: Projec
   );
 }
 
+const noModsError = () => t('Choose at least one modifier', 'Выберите хотя бы один модификатор');
+
 /** The two slots of a tap-hold key: tap = any keycode; hold = modifiers, a layer (+ modifiers) or any keycode. */
-function TapHoldSlots({ project, tap, hold, onChange }: { project: Project; tap: number; hold: HoldAction; onChange: (tap: number, hold: HoldAction) => void }) {
+function TapHoldSlots({
+  project,
+  tap,
+  hold,
+  onChange,
+  onError,
+}: {
+  project: Project;
+  tap: number;
+  hold: HoldAction;
+  onChange: (tap: number, hold: HoldAction) => void;
+  onError: (message: string) => void;
+}) {
   const holdMods = hold.type === 'key' ? 0 : hold.mods;
   const kinds: { type: HoldAction['type']; label: string; make: () => HoldAction }[] = [
     { type: 'mods', label: t('modifiers', 'модификаторы'), make: () => ({ type: 'mods', mods: (holdMods & 0x0f) === 0 ? 0x01 : holdMods }) },
@@ -160,7 +171,7 @@ function TapHoldSlots({ project, tap, hold, onChange }: { project: Project; tap:
           ))}
         </div>
       </div>
-      {hold.type === 'mods' && <ModsInput mods={hold.mods} onChange={(m) => onChange(tap, { type: 'mods', mods: m })} />}
+      {hold.type === 'mods' && <ModsInput mods={hold.mods} onChange={(m) => ((m & 0x0f) === 0 ? onError(noModsError()) : onChange(tap, { type: 'mods', mods: m }))} />}
       {hold.type === 'layer' && (
         <>
           <div className="field-row">
@@ -194,7 +205,6 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
   const [kind, setKind] = useState<Kind>(kindOf(decoded));
   const [error, setError] = useState<string | null>(null);
   const tabsId = useId();
-  const [raw, setRaw] = useState(toQmk(spec, value));
   const [errorDetail, setErrorDetail] = useState<{ for: string; text: string } | null>(null);
   /** An error sentence with the raw text behind “Details”. */
   const failWith = (message: string, err: unknown) => {
@@ -203,9 +213,8 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
   };
   useEffect(() => {
     setKind(kindOf(decoded));
-    setRaw(toQmk(spec, value));
     setError(null);
-  }, [decoded, spec, value]);
+  }, [decoded]);
 
   const base = 'base' in decoded ? decoded.base : decoded.kind === 'basic' ? decoded.value : 0x04;
   const mods = 'mods' in decoded ? decoded.mods : 0x01;
@@ -258,6 +267,7 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
   };
 
   const switchKind = (k: Kind) => {
+    if (k === kind) return; // the “key” tab also holds keys of no other kind (macros, own keycodes): re-picking it keeps them
     setKind(k);
     setError(null);
     switch (k) {
@@ -322,10 +332,25 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
       />
       <SharedTabPanel idBase={tabsId} current={kind} style={{ display: 'contents' /* its rows stay items of the field's column */ }}>
 
-      {(kind === 'basic' || kind === 'mods') && (
+      {kind === 'basic' && (
         <div className="field-row">
           <span className="field-hint">{t('key:', 'клавиша:')}</span>
-          <BasicKeySelect spec={spec} value={base} label={t('Key', 'Клавиша')} onChange={(b) => commit(kind === 'basic' ? { kind: 'basic', value: b } : { kind: 'mods', mods, base: b })} />
+          <KeycodeField fromKeyboard={false} value={value} label={t('Key: any keycode', 'Клавиша: любой keycode')} onChange={(v) => (onChange(v), setError(null))} />
+        </div>
+      )}
+      {kind === 'mods' && (
+        <div className="field-row">
+          <span className="field-hint">{t('key:', 'клавиша:')}</span>
+          <KeycodeField
+            fromKeyboard={false}
+            value={base}
+            label={t('Key sent with the modifiers', 'Клавиша, отправляемая с модификаторами')}
+            onChange={(b) =>
+              b > 0xff
+                ? setError(t('With modifiers QMK takes only a basic key: a letter, digit, symbol, F-key or the like.', 'С модификаторами QMK принимает только обычную клавишу: букву, цифру, символ, F-клавишу и т. п.'))
+                : commit({ kind: 'mods', mods, base: b })
+            }
+          />
         </div>
       )}
       {kind === 'one-shot' && (
@@ -339,20 +364,8 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
           </InfoTip>
         </div>
       )}
-      {(kind === 'mods' || kind === 'one-shot' || kind === 'layer-mod') && (
-        <>
-          <ModsInput
-            mods={mods}
-            onChange={(m) =>
-              (m & 0x0f) === 0
-                ? setError(t('Choose at least one modifier', 'Выберите хотя бы один модификатор'))
-                : commit(kind === 'mods' ? { kind: 'mods', mods: m, base } : kind === 'layer-mod' ? { kind: 'layer-mod', layer, mods: m } : { kind: 'one-shot-mod', mods: m })
-            }
-          />
-        </>
-      )}
-      {kind === 'tap-hold' && <TapHoldSlots project={project} tap={slots.tap} hold={slots.hold} onChange={commitTapHold} />}
       {kind === 'layer-mod' && (
+        // Layer first, then the modifiers: the same order as a tap-hold key holding a layer + modifiers.
         <div className="field-row">
           <span className="field-hint">{t('hold → layer:', 'удержание → слой:')}</span>
           <LayerSelect project={project} value={layer} max={15} onChange={(l) => commit({ kind: 'layer-mod', layer: l, mods })} />
@@ -364,6 +377,17 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
           </InfoTip>
         </div>
       )}
+      {(kind === 'mods' || kind === 'one-shot' || kind === 'layer-mod') && (
+        <ModsInput
+          mods={mods}
+          onChange={(m) =>
+            (m & 0x0f) === 0
+              ? setError(noModsError())
+              : commit(kind === 'mods' ? { kind: 'mods', mods: m, base } : kind === 'layer-mod' ? { kind: 'layer-mod', layer, mods: m } : { kind: 'one-shot-mod', mods: m })
+          }
+        />
+      )}
+      {kind === 'tap-hold' && <TapHoldSlots project={project} tap={slots.tap} hold={slots.hold} onChange={commitTapHold} onError={setError} />}
       {kind === 'layer' && (
         <>
           <div className="field-row">
@@ -384,46 +408,35 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
           </div>
         </>
       )}
-      {kind === 'tap-dance' && (
-        <select className="select" value={decoded.kind === 'tap-dance' ? decoded.index : ''} onChange={(e) => commit({ kind: 'tap-dance', index: Number(e.target.value) })} aria-label={t('Tap dance', 'Тап-дэнс')}>
-          {project.tapDances.map((td) => (
-            <option key={td.id} value={td.index}>
-              TD({td.name})
-            </option>
-          ))}
-        </select>
+      {kind === 'tap-dance' && project.tapDances.length > 0 && (
+        <div className="field-row">
+          <span className="field-hint">{t('tap dance:', 'тап-дэнс:')}</span>
+          <select className="select" value={decoded.kind === 'tap-dance' ? decoded.index : ''} onChange={(e) => commit({ kind: 'tap-dance', index: Number(e.target.value) })} aria-label={t('Tap dance', 'Тап-дэнс')}>
+            {project.tapDances.map((td) => (
+              <option key={td.id} value={td.index}>
+                TD({td.name})
+              </option>
+            ))}
+          </select>
+        </div>
       )}
       {kind === 'unicode' && (
         <div className="field-row">
+          <span className="field-hint">{t('character:', 'символ:')}</span>
           <input
             className="input"
             style={{ width: 70 }}
-            defaultValue={decoded.kind === 'unicode' ? String.fromCodePoint(decoded.codepoint) : ''}
-            maxLength={2}
+            // Shows the key's character; a typed one replaces it (the last character typed counts).
+            value={decoded.kind === 'unicode' ? String.fromCodePoint(decoded.codepoint) : ''}
             aria-label={t('Character', 'Символ')}
+            onFocus={(e) => e.target.select()}
             onChange={(e) => {
-              const cp = e.target.value.codePointAt(0);
+              const cp = [...e.target.value].pop()?.codePointAt(0);
               if (cp !== undefined) commit({ kind: 'unicode', codepoint: cp });
             }}
           />
           <span className="field-hint">{t('UC() supports U+0000…U+7FFF (UNICODE_ENABLE).', 'UC() — символы U+0000…U+7FFF (UNICODE_ENABLE).')}</span>
         </div>
-      )}
-      {kind === 'raw' && (
-        <form
-          className={`expr-input ${error ? 'is-error' : ''}`}
-          onSubmit={(e) => {
-            e.preventDefault();
-            const r = tryParseQmk(spec, raw, { unicode: project.firmware.unicode });
-            if ('value' in r) {
-              onChange(r.value);
-              setError(null);
-            } else setError(r.error);
-          }}
-        >
-          <input value={raw} onChange={(e) => setRaw(e.target.value)} spellCheck={false} aria-label={t('QMK expression', 'Выражение QMK')} />
-          <span className="expr-result">{t('Enter to apply', 'Enter — применить')}</span>
-        </form>
       )}
       </SharedTabPanel>
       {error && (
