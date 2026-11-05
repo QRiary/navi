@@ -19,8 +19,8 @@ import { useActive, useLabelContext } from '../lib/projectContext';
 import { href, navigate } from '../lib/router';
 import { useEditorStore } from '../store/editorStore';
 import { useProjectStore, useSpec } from '../store/projectStore';
-import { toast } from '../store/toastStore';
 import { t } from '../i18n';
+import { deletedToast } from '../lib/undoToast';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 const COLORS = ['', '#6ec6ff', '#7fe3a8', '#ffb000', '#ff5d6c', '#c792ea', '#e8e8e8'];
@@ -90,7 +90,7 @@ export function LayersPage() {
           {keymap.layers.map((l, i) => {
             const refs = reach.get(i) ?? [];
             return (
-              <div key={l.id} className="row" style={{ ['--row-cols' as string]: '34px minmax(0,1.1fr) minmax(0,1.6fr) auto', alignItems: 'start', paddingTop: 12, paddingBottom: 12 }}>
+              <div key={l.id} className="row" style={{ ['--row-cols' as string]: '34px minmax(0,1fr) minmax(0,2fr) auto', alignItems: 'start', paddingTop: 12, paddingBottom: 12 }}>
                 <span className="num" style={{ paddingTop: 6 /* grid-ok: lines the number up with the 30px inputs beside it */ }}>
                   L{i}
                 </span>
@@ -143,9 +143,9 @@ export function LayersPage() {
                     navigate({ section: 'keyboard' });
                   }}
                   title={t('Edit this layer', 'Редактировать слой')}
-                  style={{ display: 'block' }}
+                  style={{ display: 'block', width: '100%' }}
                 >
-                  <LayoutPreview geometry={geometry} label={([r, c]) => keyLabel(spec, l.keys[r * cols + c], labelCtx)} height={110} />
+                  <LayoutPreview geometry={geometry} label={([r, c]) => keyLabel(spec, l.keys[r * cols + c], labelCtx)} height="auto" maxHeight={300} />
                 </button>
                 <div className="row-actions" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
                   <div className="row-actions">
@@ -171,7 +171,7 @@ export function LayersPage() {
                         }
                         apply((p) => removeLayer(p, id, spec, i), t('delete layer', 'удаление слоя'));
                         setConfirmDelete(null);
-                        toast(t('Layer deleted — Ctrl+Z to undo', 'Слой удалён — Ctrl+Z отменит'));
+                        deletedToast(t('layer', 'слой'));
                       }}
                     >
                       <Trash2 {...ICON} />
@@ -221,7 +221,7 @@ export function LayersPage() {
                 {diff.length} {t('differ', 'отличий')}
               </span>
             </div>
-            <LayoutPreview geometry={geometry} label={([r, c]) => keyLabel(spec, keymap.layers[cmpB]?.keys[r * cols + c] ?? 0, labelCtx)} marked={diffSet} height={130} />
+            <LayoutPreview geometry={geometry} label={([r, c]) => keyLabel(spec, keymap.layers[cmpB]?.keys[r * cols + c] ?? 0, labelCtx)} marked={diffSet} height="auto" maxHeight={300} />
             <button
               className="btn"
               onClick={() => {

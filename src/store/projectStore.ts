@@ -20,7 +20,7 @@ import { newId } from '../core/layout/geometry';
 import { projectRepo } from '../platform/projectRepo';
 import { navi, type LinkedFileState, type Revision, type StoredSummary } from '../desktop/bridge';
 import { t } from '../i18n';
-import { toast } from './toastStore';
+import { toast, toastError } from './toastStore';
 
 const HISTORY_LIMIT = 200;
 const COALESCE_MS = 900;
@@ -218,7 +218,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
           try {
             await checkLink(await navi.links.state(id));
           } catch (err) {
-            toast(t(`Linked file: ${(err as Error).message}`, `Связанный файл: ${(err as Error).message}`), 'error');
+            toastError(t('Couldn’t check the linked file. Open Projects → current to relink it.', 'Не удалось проверить связанный файл. Перепривяжите его в «Проекты → текущий».'), err);
           }
         }
         return true;
@@ -403,7 +403,7 @@ export async function saveProject(): Promise<SaveResult | null> {
     else toast(t('Saved in NAVI. The linked file changed outside NAVI: choose which version to keep', 'Сохранено в NAVI. Связанный файл изменился вне NAVI: выберите, какую версию оставить'));
     return result;
   } catch (err) {
-    toast((err as Error).message, 'error');
+    toastError(t('Couldn’t save the project. Check the disk has space and try again.', 'Не удалось сохранить проект. Проверьте место на диске и повторите.'), err);
     return null;
   }
 }

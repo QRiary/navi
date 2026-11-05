@@ -12,6 +12,7 @@ import { href } from '../../lib/router';
 import { useProjectStore, useSpec } from '../../store/projectStore';
 import { ActionEditor, FeatureNote, IssueList } from './common';
 import { getLanguage, t } from '../../i18n';
+import { deletedToast } from '../../lib/undoToast';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
@@ -60,7 +61,7 @@ export function LeaderTab({ project }: { project: Project }) {
           'Press the Leader key (QK_LEAD), then type a short sequence — e.g. Leader, d, d → type your e-mail. Keys are plain keys as printed (US layout); type them separated by spaces: “d d”, “g h”, “f1 x”. The wait time is LEADER_TIMEOUT in ',
           'Нажмите клавишу-лидер (QK_LEAD), затем короткую последовательность — например, лидер, d, d → набрать e-mail. Клавиши — простые, как на клавише (раскладка US), через пробел: «d d», «g h», «f1 x». Время ожидания — LEADER_TIMEOUT в ',
         )}
-        <a href={href({ section: 'advanced', tab: 'behavior' })}>{t('Behavior', '«Поведении»')}</a>.
+        <a href={href({ section: 'advanced', tab: 'behavior' })}>{t('QMK settings', '«Настройках QMK»')}</a>.
       </p>
       <div className="panel-box rows">
         {project.leaderSequences.length > 0 && (
@@ -77,7 +78,7 @@ export function LeaderTab({ project }: { project: Project }) {
             <span className="num">{i + 1}</span>
             <SequenceInput seq={s} onChange={(keys) => patch(s.id, { keys }, t('leader keys', 'клавиши лидера'))} />
             <ActionEditor action={s.action} coalesceKey={`lead:${s.id}`} onChange={(action, coalesce) => patch(s.id, { action }, t('leader action', 'действие лидера'), coalesce)} />
-            <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => set(project.leaderSequences.filter((x) => x.id !== s.id), t('delete sequence', 'удаление последовательности'))}>
+            <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => { set(project.leaderSequences.filter((x) => x.id !== s.id), t('delete sequence', 'удаление последовательности')); deletedToast(t('leader sequence', 'последовательность leader')); }}>
               <Trash2 {...ICON} />
             </button>
           </div>

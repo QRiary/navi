@@ -229,7 +229,7 @@ function humanizeJsonError(message: string): string {
  * The key is a parameter name ("theme") or a path with a section ("layout.sidebarWidth"): if the parameter
  * is not in the text yet, it is added inside its section.
  */
-export function setConfigValue(text: string, key: string, value: string | boolean | number): string {
+export function setConfigValue(text: string, key: string, value: string | boolean | number | null): string {
   const parts = key.split('.');
   const name = parts.pop()!;
   const section = parts.pop();

@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { navi } from '../../desktop/bridge';
 import { flushDraft, isDirty, saveProject, useProjectStore } from '../../store/projectStore';
-import { toast } from '../../store/toastStore';
+import { toastError } from '../../store/toastStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { t } from '../../i18n';
 import { Modal } from '../Modal';
@@ -52,7 +52,7 @@ export function CloseDialog() {
       await flushDraft();
       answer('close');
     } catch (err) {
-      toast(t(`The draft could not be written: ${(err as Error).message}`, `Черновик не записался: ${(err as Error).message}`), 'error');
+      toastError(t('Couldn’t save the draft, so the project was not closed. Save it with Ctrl+S and try again.', 'Не удалось сохранить черновик, поэтому проект не закрыт. Сохраните его (Ctrl+S) и повторите.'), err);
       answer('stay');
     } finally {
       setBusy(null);

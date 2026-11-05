@@ -15,7 +15,7 @@ import { href, navigate } from '../lib/router';
 import { useDeviceStore } from '../store/deviceStore';
 import { useEditorStore } from '../store/editorStore';
 import { useProjectStore, useSpec } from '../store/projectStore';
-import { toast } from '../store/toastStore';
+import { toast, toastError } from '../store/toastStore';
 import { t } from '../i18n';
 import { BootloaderHelp } from '../components/device/BootloaderHelp';
 
@@ -196,7 +196,7 @@ export function DevicePage() {
             <section className="panel-box">
               <div className="panel-box-head">
                 <span className="cell-label">{t('what the firmware reports', 'что сообщает прошивка')}</span>
-                <button className="text-btn" onClick={() => void reread().catch((e: Error) => toast(e.message, 'error'))}>
+                <button className="text-btn" onClick={() => void reread().catch((e: Error) => toastError(t('Couldn’t read the keyboard’s settings. Check it is connected and try again.', 'Не удалось прочитать настройки клавиатуры. Проверьте подключение и повторите.'), e))}>
                   {t('read again', 'прочитать снова')}
                 </button>
               </div>

@@ -7,11 +7,13 @@ import { Download, FolderOpen, RotateCcw, Upload } from 'lucide-react';
 import { CodeEditor } from '../components/CodeEditor';
 import { InterfaceSizeControl } from '../components/InterfaceSizeControl';
 import { DEFAULT_CONFIG_TEXT, parseConfig } from '../config/configFile';
-import { THEME_PRESETS } from '../config/theme.config';
+import { ColorsSection, SelectRow, SliderRow } from '../components/SettingsControls';
+import { SETTINGS_ENUMS, THEME_PRESETS } from '../config/theme.config';
 import { listLanguages } from '../core/keycodes/spec';
 import { navi } from '../desktop/bridge';
 import { JSON_FILTERS, openTextFile, saveTextFile } from '../lib/files';
 import { href } from '../lib/router';
+import { TabPanels, Tabs } from '../components/Tabs';
 import { useSettingsStore } from '../store/settingsStore';
 import { toast } from '../store/toastStore';
 import { getLanguage, t } from '../i18n';
@@ -103,6 +105,16 @@ function ConfigTab() {
   );
 }
 
+const DENSITY_LABEL: Record<string, () => string> = {
+  compact: () => t('compact', 'компактная'),
+  comfortable: () => t('comfortable', 'обычная'),
+  spacious: () => t('spacious', 'просторная'),
+};
+const FONT_LABEL: Record<string, () => string> = {
+  mono: () => t('monospace', 'моноширинный'),
+  sans: () => t('sans-serif', 'без засечек'),
+};
+
 function QuickTab() {
   const settings = useSettingsStore((s) => s.settings);
   const setValue = useSettingsStore((s) => s.setValue);
@@ -114,7 +126,7 @@ function QuickTab() {
         {hint && <span className="field-hint"> — {hint}</span>}
       </span>
       <button className={`toggle ${value ? 'is-on' : ''}`} onClick={() => setValue(key, !value)} aria-pressed={value}>
-        {value ? 'on' : 'off'}
+        {value ? t('on', 'вкл') : t('off', 'выкл')}
       </button>
     </div>
   );
@@ -138,6 +150,7 @@ function QuickTab() {
           ))}
         </div>
       </section>
+      <ColorsSection />
       {navi && (
         <section className="section">
           <div className="section-head">
@@ -176,7 +189,7 @@ function QuickTab() {
           </div>
           {toggle('keyboard.showTransparentSource', settings.keyboard.showTransparentSource, t('Show what transparent keys fall through to', 'Показывать, что «просвечивает» через прозрачные клавиши'))}
           {toggle('keyboard.showMatrix', settings.keyboard.showMatrix, t('Show matrix positions', 'Показывать позиции матрицы'))}
-          {toggle('layout.inspector', settings.layout.inspector, t('Inspector panel', 'Панель инспектора'))}
+          {toggle('layout.inspector', settings.layout.inspector, t('Inspector panel', 'Панель инспектора'), t('right panel on Keyboard, Hardware and Firmware', 'правая панель на страницах «Клавиатура», «Железо» и «Прошивка»'))}
           {toggle('layout.statusLine', settings.layout.statusLine, t('Status line', 'Строка состояния'))}
         </div>
       </section>
@@ -198,9 +211,37 @@ function QuickTab() {
           {toggle('effects.animations', settings.effects.animations, t('Animations', 'Анимации'))}
           {toggle('effects.glitch', settings.effects.glitch, t('Glitch on headers', 'Сбой сигнала у заголовков'))}
           {toggle('effects.wires', settings.effects.wires, t('Wires in the background', 'Провода на фоне'))}
+          <SliderRow settingKey="effects.scanlines" value={settings.effects.scanlines} label={t('Scan lines', 'Развёртка')} step={0.01} percent />
+          <SliderRow settingKey="effects.noise" value={settings.effects.noise} label={t('Noise', 'Шум')} step={0.01} percent />
+          <SliderRow settingKey="effects.vignette" value={settings.effects.vignette} label={t('Light at the top', 'Свет сверху')} step={0.01} percent />
+          <SliderRow settingKey="effects.glow" value={settings.effects.glow} label={t('Glow of active elements', 'Свечение активных элементов')} step={0.01} percent />
+          <SliderRow settingKey="surfaces.opacity" value={settings.surfaces.opacity} label={t('Panel opacity', 'Прозрачность панелей')} step={0.01} percent />
+          <SliderRow settingKey="surfaces.blur" value={settings.surfaces.blur} label={t('Blur under panels', 'Размытие под панелями')} step={1} unit="px" />
+        </div>
+      </section>
+      <section className="section">
+        <div className="section-head">
+          <h2>{t('sizes and shape', 'размеры и форма')}</h2>
+        </div>
+        <div className="panel-box rows">
+          <SliderRow settingKey="keyboard.keySize" value={settings.keyboard.keySize} label={t('Key size on the drawing', 'Размер клавиши на рисунке')} step={1} unit="px" />
+          <SliderRow settingKey="shape.panelRadius" value={settings.shape.panelRadius} label={t('Panel corner radius', 'Скругление панелей')} step={1} unit="px" />
+          <SliderRow settingKey="shape.keyRadius" value={settings.shape.keyRadius} label={t('Key corner radius', 'Скругление клавиш')} step={1} unit="px" />
+          <SelectRow
+            settingKey="layout.density"
+            value={settings.layout.density}
+            label={t('Spacing', 'Плотность')}
+            options={SETTINGS_ENUMS['layout.density'].map((v) => ({ value: v, label: DENSITY_LABEL[v]() }))}
+          />
+          <SelectRow
+            settingKey="typography.font"
+            value={settings.typography.font}
+            label={t('Font', 'Шрифт')}
+            options={SETTINGS_ENUMS['typography.font'].map((v) => ({ value: v, label: FONT_LABEL[v]() }))}
+          />
         </div>
         <p className="field-hint" style={{ marginTop: 8 }}>
-          {t('Scanlines, noise, sizes, colors — in the config.', 'Развёртка, шум, размеры, цвета — в конфиге.')} <a href={href({ section: 'settings', tab: 'config' })}>config</a>
+          {t('Everything else:', 'Всё остальное:')} <a href={href({ section: 'settings', tab: 'config' })}>{t('the config file', 'файл конфига')}</a>
         </p>
       </section>
     </div>
@@ -214,7 +255,7 @@ export function SettingsPage({ tab }: { tab?: string }) {
   return (
     <div className="page settings-page">
       <div className="lang-switch">
-        <span className="cell-label">language</span>
+        <span className="cell-label">{t('language', 'язык')}</span>
         <button className={`btn ${language === 'en' ? 'btn--primary' : ''}`} onClick={() => setValue('language', 'en')}>
           english
         </button>
@@ -222,15 +263,18 @@ export function SettingsPage({ tab }: { tab?: string }) {
           русский
         </button>
       </div>
-      <div className="tabs" role="tablist">
-        <a className={`tab ${active === 'quick' ? 'is-active' : ''}`} href={href({ section: 'settings' })}>
-          {t('main', 'основное')}
-        </a>
-        <a className={`tab ${active === 'config' ? 'is-active' : ''}`} href={href({ section: 'settings', tab: 'config' })}>
-          config
-        </a>
-      </div>
-      {active === 'config' ? <ConfigTab /> : <QuickTab />}
+      <Tabs
+        idBase="settings"
+        label={t('Settings', 'Настройки')}
+        items={[
+          { id: 'quick', label: t('Main', 'Основное') },
+          { id: 'config', label: t('Config', 'Конфиг') },
+        ]}
+        current={active}
+        href={(id) => href(id === 'quick' ? { section: 'settings' } : { section: 'settings', tab: id })}
+        sticky
+      />
+      <TabPanels idBase="settings" ids={['quick', 'config']} current={active} render={(id) => (id === 'config' ? <ConfigTab /> : <QuickTab />)} />
     </div>
   );
 }

@@ -95,7 +95,7 @@ const DOCS: Record<string, { title: Text; hint?: Text; qmkDefault?: number | boo
 const ALLOWED_GROUPS = new Set(Object.keys(GROUPS));
 const SKIP = new Set(['DYNAMIC_KEYMAP_EEPROM_MAX_ADDR', 'SECURE_UNLOCK_SEQUENCE']);
 
-/** Parameters shown in Advanced → behavior. */
+/** Parameters shown in Advanced → QMK settings. */
 export function configParams(): ConfigParam[] {
   const out: ConfigParam[] = [];
   for (const [define, entry] of Object.entries(INFO_CONFIG)) {

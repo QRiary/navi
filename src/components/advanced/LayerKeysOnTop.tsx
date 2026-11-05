@@ -1,6 +1,6 @@
 /**
  * “Layer keys bring their layer to the top” (firmware.layerKeysOnTop): NAVI's own behavior, C code in keymap.c,
- * not a config.h define. One row, shown on Advanced → NAVI behavior and on the Layers page (same setting).
+ * not a config.h define. One row, shown on Advanced → NAVI additions and on the Layers page (same setting).
  */
 import type { Project } from '../../core/project/types';
 import { useProjectStore } from '../../store/projectStore';

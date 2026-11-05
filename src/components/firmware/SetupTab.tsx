@@ -12,7 +12,8 @@ import { BuildLog } from './BuildLog';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
-export function SetupTab() {
+/** `active`: the tab is shown (Firmware keeps visited tabs mounted). */
+export function SetupTab({ active = true }: { active?: boolean }) {
   const env = useQmkStore((s) => s.env);
   const detecting = useQmkStore((s) => s.detecting);
   const detect = useQmkStore((s) => s.detect);
@@ -28,9 +29,10 @@ export function SetupTab() {
   useEffect(() => {
     if (!env && navi) void detect();
   }, [env, detect]);
+  // Reread every time the tab is shown (it stays mounted while hidden; a build may have added a folder).
   useEffect(() => {
-    void loadTrustedFolders();
-  }, [loadTrustedFolders]);
+    if (active) void loadTrustedFolders();
+  }, [active, loadTrustedFolders]);
 
   if (!navi) {
     return (

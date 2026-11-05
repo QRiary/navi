@@ -10,6 +10,7 @@ import { useActive } from '../../lib/projectContext';
 import { useEditorStore } from '../../store/editorStore';
 import { useProjectStore } from '../../store/projectStore';
 import { t } from '../../i18n';
+import { deletedToast } from '../../lib/undoToast';
 
 function Num({ label, value, onChange, step = 0.25, min, max }: { label: string; value: number; onChange: (v: number) => void; step?: number; min?: number; max?: number }) {
   return (
@@ -53,8 +54,8 @@ export function GeometryInspector() {
   const ids = keys.map((k) => k.id);
   const patch = (fn: (k: KeyGeom) => Partial<KeyGeom>, label: string) => apply((p) => updateKeys(p, geometry.id, ids, fn), label, { coalesce: `geo:${label}:${ids.join(',')}` });
 
-  const setEncoders = (encoders: EncoderGeom[], label: string) => apply((p) => updateGeometryMeta(p, geometry.id, { encoders }), label, { coalesce: `enc:${label}` });
-  const setControls = (controls: ControlGeom[], label: string) => apply((p) => updateGeometryMeta(p, geometry.id, { controls }), label, { coalesce: `ctl:${label}` });
+  const setEncoders = (encoders: EncoderGeom[], label: string) => apply((p) => updateGeometryMeta(p, geometry.id, { encoders }), label, label === 'delete' ? undefined : { coalesce: `enc:${label}` });
+  const setControls = (controls: ControlGeom[], label: string) => apply((p) => updateGeometryMeta(p, geometry.id, { controls }), label, label === 'delete' ? undefined : { coalesce: `ctl:${label}` });
 
   return (
     <div className="inspector-body">
@@ -127,7 +128,7 @@ export function GeometryInspector() {
               <Num label="x" value={e.x} onChange={(v) => setEncoders(geometry.encoders.map((x) => (x.id === e.id ? { ...x, x: v, approximate: false } : x)), 'x')} />
               <Num label="y" value={e.y} onChange={(v) => setEncoders(geometry.encoders.map((x) => (x.id === e.id ? { ...x, y: v, approximate: false } : x)), 'y')} />
               <Num label="d" value={e.d} min={0.3} onChange={(v) => setEncoders(geometry.encoders.map((x) => (x.id === e.id ? { ...x, d: v } : x)), 'd')} />
-              <button className="icon-btn" aria-label={t('Delete encoder', 'Удалить энкодер')} onClick={() => setEncoders(geometry.encoders.filter((x) => x.id !== e.id), 'delete')}>
+              <button className="icon-btn" aria-label={t('Delete encoder', 'Удалить энкодер')} onClick={() => { setEncoders(geometry.encoders.filter((x) => x.id !== e.id), 'delete'); deletedToast(t('encoder', 'энкодер')); }}>
                 <Trash2 size={14} strokeWidth={1.5} />
               </button>
             </div>
@@ -159,7 +160,7 @@ export function GeometryInspector() {
                 <option value="other">{t('other', 'другое')}</option>
               </select>
               <input className="input" style={{ flex: 1 }} value={c.label} onChange={(e) => setControls(geometry.controls.map((x) => (x.id === c.id ? { ...x, label: e.target.value } : x)), 'label')} aria-label={t('Label', 'Подпись')} />
-              <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => setControls(geometry.controls.filter((x) => x.id !== c.id), 'delete')}>
+              <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => { setControls(geometry.controls.filter((x) => x.id !== c.id), 'delete'); deletedToast(t('control', 'элемент управления')); }}>
                 <Trash2 size={14} strokeWidth={1.5} />
               </button>
             </div>

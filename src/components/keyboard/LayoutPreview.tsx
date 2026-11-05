@@ -11,17 +11,20 @@ interface Props {
   label: (matrix: [number, number]) => KeyLabel | null;
   /** Positions to highlight (for example, differences). */
   marked?: Set<string>;
-  height?: number;
+  /** Fixed height in px; 'auto' = as wide as the column, height from the layout's proportions, up to `maxHeight`. */
+  height?: number | 'auto';
+  maxHeight?: number;
 }
 
 const S = 40;
 
-export function LayoutPreview({ geometry, label, marked, height = 150 }: Props) {
+export function LayoutPreview({ geometry, label, marked, height = 150, maxHeight = 320 }: Props) {
   const b = useMemo(() => geometryBounds(geometry), [geometry]);
   const pad = 0.2;
   const vb = `${(b.x - pad) * S} ${(b.y - pad) * S} ${(b.w + pad * 2) * S} ${(b.h + pad * 2) * S}`;
+  const size = height === 'auto' ? { width: '100%', height: 'auto', maxHeight } : { height, width: '100%' };
   return (
-    <svg className="kb-svg kb-preview" viewBox={vb} style={{ height, width: '100%' }} aria-hidden="true">
+    <svg className="kb-svg kb-preview" viewBox={vb} style={size} aria-hidden="true">
       {geometry.keys.map((k) => {
         const l = k.matrix ? label(k.matrix) : null;
         const isMarked = k.matrix && marked?.has(`${k.matrix[0]},${k.matrix[1]}`);

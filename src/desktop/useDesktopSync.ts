@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useSettingsStore } from '../store/settingsStore';
-import { toast } from '../store/toastStore';
+import { toast, toastError } from '../store/toastStore';
 import { navi } from './bridge';
 import { t } from '../i18n';
 import { resolvePalette } from '../theme/applyTheme';
@@ -19,7 +19,7 @@ export function useDesktopSync() {
       lastSynced = text;
       const issues = useSettingsStore.getState().applyConfig(text);
       const error = issues.find((i) => i.level === 'error');
-      if (error) toast(`user.config.jsonc${error.line ? t(`, line ${error.line}`, `, строка ${error.line}`) : ''}: ${error.message}`, 'error');
+      if (error) toastError(t('user.config.jsonc has an error, so the changes were not applied. Fix the file and save it again.', 'В user.config.jsonc ошибка, поэтому изменения не применены. Исправьте файл и сохраните снова.'), `${error.line ? `line ${error.line}: ` : ''}${error.message}`);
       else if (source === 'change') toast(t('Config updated from file', 'Конфиг обновлён из файла'));
     };
 

@@ -10,9 +10,10 @@ import { diffLines, diffStats } from '../../core/qmk/textDiff';
 import { activeGeometry, patchProject } from '../../core/project/ops';
 import { navi } from '../../desktop/bridge';
 import { href } from '../../lib/router';
+import { TabPanel, Tabs } from '../Tabs';
 import { useProjectStore } from '../../store/projectStore';
 import { useQmkStore } from '../../store/qmkStore';
-import { toast } from '../../store/toastStore';
+import { toast, toastError } from '../../store/toastStore';
 import { getLanguage, t } from '../../i18n';
 
 export function OwnTarget() {
@@ -59,7 +60,7 @@ export function OwnTarget() {
       await loadKeyboards();
       await loadSources(target, project.firmware.keymap);
     } catch (err) {
-      toast((err as Error).message, 'error');
+      toastError(t('Couldn’t write the target files. Check the QMK folder is writable and try again.', 'Не удалось записать файлы target. Проверьте, что в папку QMK можно писать, и повторите.'), err);
     } finally {
       setBusy(false);
     }
@@ -79,20 +80,28 @@ export function OwnTarget() {
           </li>
         ))}
       </ul>
-      <div className="tabs" role="tablist">
-        {gen.files.map((f) => {
+      <Tabs
+        idBase="target-files"
+        label={t('Target files', 'Файлы target')}
+        current={file}
+        onSelect={(id) => setFile(id as typeof file)}
+        items={gen.files.map((f) => {
           const prev = existing?.[f.name] ?? null;
           const st = prev === null ? t('new', 'новый') : prev === f.text ? t('same', 'без изм.') : (() => {
             const s = diffStats(diffLines(prev, f.text));
             return `+${s.added} −${s.removed}`;
           })();
-          return (
-            <button key={f.name} className={`tab ${file === f.name ? 'is-active' : ''}`} onClick={() => setFile(f.name)}>
-              {f.name} <span className="kicker">{st}</span>
-            </button>
-          );
+          return {
+            id: f.name,
+            label: (
+              <>
+                {f.name} <span className="kicker">{st}</span>
+              </>
+            ),
+          };
         })}
-      </div>
+      />
+      <TabPanel idBase="target-files" id={file} current={file}>
       {d ? (
         <div className="diff">
           {d.map((l, i) =>
@@ -113,6 +122,7 @@ export function OwnTarget() {
           {current.text}
         </pre>
       )}
+      </TabPanel>
       <div className="field-row" style={{ marginTop: 8 }}>
         <button className="btn btn--primary" disabled={!navi || !env?.homeValid || errors.length > 0 || busy} onClick={() => void write()}>
           <FilePlus2 size={14} strokeWidth={1.5} /> {busy ? t('writing…', 'запись…') : t('write target to qmk_firmware', 'записать target в qmk_firmware')}

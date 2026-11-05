@@ -12,10 +12,11 @@ import { navi } from '../../desktop/bridge';
 import { saveTextFile } from '../../lib/files';
 import { useProjectStore, useSpec } from '../../store/projectStore';
 import { useQmkStore } from '../../store/qmkStore';
-import { toast } from '../../store/toastStore';
+import { toast, toastError } from '../../store/toastStore';
 import { getLanguage, t } from '../../i18n';
 import { CustomLines } from './CustomLines';
 import { Modal } from '../Modal';
+import { TabPanel, Tabs } from '../Tabs';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
@@ -86,7 +87,7 @@ export function FilesTab() {
       toast(res.backup ? t(`Written. Backup: ${res.backup}`, `Записано. Резервная копия: ${res.backup}`) : t('Written (new keymap folder)', 'Записано (новая папка keymap)'));
       await loadSources(project.firmware.keyboard, project.firmware.keymap);
     } catch (err) {
-      toast((err as Error).message, 'error');
+      toastError(t('Couldn’t write the keymap files. Nothing was changed; check the QMK folder is writable and try again.', 'Не удалось записать файлы раскладки. Ничего не изменено; проверьте, что в папку QMK можно писать, и повторите.'), err);
     } finally {
       setWriting(false);
       setConfirm(false);
@@ -156,20 +157,28 @@ export function FilesTab() {
           </span>
         </div>
       )}
-      <div className="tabs" role="tablist">
-        {generated.files.map((f) => {
+      <Tabs
+        idBase="keymap-files"
+        label={t('Generated files', 'Сгенерированные файлы')}
+        current={file}
+        onSelect={setFile}
+        items={generated.files.map((f) => {
           const disk = keymapSources?.files.find((x) => x.name === f.name)?.text ?? null;
           const st = disk === null ? t('new', 'новый') : disk === f.text ? t('same', 'без изм.') : (() => {
             const d = diffStats(diffLines(disk, f.text));
             return `+${d.added} −${d.removed}`;
           })();
-          return (
-            <button key={f.name} className={`tab ${file === f.name ? 'is-active' : ''}`} onClick={() => setFile(f.name)}>
-              <FileCode2 size={12} strokeWidth={1.5} /> {f.name} <span className="kicker">{st}</span>
-            </button>
-          );
+          return {
+            id: f.name,
+            label: (
+              <>
+                <FileCode2 size={12} strokeWidth={1.5} /> {f.name} <span className="kicker">{st}</span>
+              </>
+            ),
+          };
         })}
-      </div>
+      />
+      <TabPanel idBase="keymap-files" id={file} current={file}>
       {diff ? (
         <div className="diff" aria-label={t('Changes', 'Изменения')}>
           {diff.map((l, i) =>
@@ -190,6 +199,7 @@ export function FilesTab() {
           {current.text}
         </pre>
       )}
+      </TabPanel>
       {customFile && <CustomLines file={customFile} generatedSymbols={generated.symbols} />}
       {otherIssues.length > 0 && (
         <ul className="issue-list" style={{ marginTop: 8 }}>

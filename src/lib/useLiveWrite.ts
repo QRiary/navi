@@ -5,7 +5,7 @@ import { planWrite } from '../core/via/sync';
 import { useDeviceStore } from '../store/deviceStore';
 import { useProjectStore } from '../store/projectStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { toast } from '../store/toastStore';
+import { toast, toastError } from '../store/toastStore';
 import { hardwareFacts } from './hardwareFacts';
 import { t } from '../i18n';
 
@@ -41,7 +41,7 @@ export function useLiveWrite() {
           const res = await device.write(plan);
           if (!res.verified) toast(t('Live write: verification failed', 'Живая запись: проверка не совпала'), 'error');
         } catch (err) {
-          toast(t(`Live write failed: ${(err as Error).message}`, `Живая запись не удалась: ${(err as Error).message}`), 'error');
+          toastError(t('Live write to the keyboard failed. Check it is connected; edits stay in the project.', 'Живая запись в клавиатуру не удалась. Проверьте подключение; правки остаются в проекте.'), err);
         } finally {
           running = false;
         }

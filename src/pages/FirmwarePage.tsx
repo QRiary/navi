@@ -9,36 +9,46 @@ import { FilesTab } from '../components/firmware/FilesTab';
 import { FlashTab } from '../components/firmware/FlashTab';
 import { SetupTab } from '../components/firmware/SetupTab';
 import { TargetTab } from '../components/firmware/TargetTab';
+import { TabPanels, Tabs } from '../components/Tabs';
 import { href } from '../lib/router';
 import { t } from '../i18n';
 
-const TABS = () =>
-  [
-    ['setup', t('1 · environment', '1 · окружение')],
-    ['target', t('2 · keyboard', '2 · клавиатура')],
-    ['features', t('3 · features', '3 · функции')],
-    ['files', t('4 · keymap files', '4 · файлы keymap')],
-    ['build', t('5 · build', '5 · сборка')],
-    ['flash', t('6 · flash', '6 · прошить')],
-  ] as const;
+const TABS = () => [
+  { id: 'setup', label: t('1 · Environment', '1 · Окружение') },
+  { id: 'target', label: t('2 · Keyboard', '2 · Клавиатура') },
+  { id: 'features', label: t('3 · Features', '3 · Функции') },
+  { id: 'files', label: t('4 · Keymap files', '4 · Файлы keymap') },
+  { id: 'build', label: t('5 · Build', '5 · Сборка') },
+  { id: 'flash', label: t('6 · Flash', '6 · Прошить') },
+];
 
 export function FirmwarePage({ tab }: { tab?: string }) {
-  const current = TABS().some(([id]) => id === tab) ? tab! : 'setup';
+  const tabs = TABS();
+  const current = tabs.some((i) => i.id === tab) ? tab! : 'setup';
   return (
     <div className="page">
-      <div className="tabs" role="tablist">
-        {TABS().map(([id, title]) => (
-          <a key={id} className={`tab ${current === id ? 'is-active' : ''}`} href={href({ section: 'firmware', tab: id })}>
-            {title}
-          </a>
-        ))}
-      </div>
-      {current === 'setup' && <SetupTab />}
-      {current === 'target' && <TargetTab />}
-      {current === 'features' && <FeaturesTab />}
-      {current === 'files' && <FilesTab />}
-      {current === 'build' && <BuildTab />}
-      {current === 'flash' && <FlashTab />}
+      <Tabs idBase="firmware" label={t('Firmware steps', 'Шаги прошивки')} items={tabs} current={current} href={(id) => href({ section: 'firmware', tab: id })} sticky />
+      <TabPanels
+        idBase="firmware"
+        ids={tabs.map((i) => i.id)}
+        current={current}
+        render={(id, active) => {
+          switch (id) {
+            case 'setup':
+              return <SetupTab active={active} />;
+            case 'target':
+              return <TargetTab />;
+            case 'features':
+              return <FeaturesTab />;
+            case 'files':
+              return <FilesTab />;
+            case 'build':
+              return <BuildTab />;
+            case 'flash':
+              return <FlashTab active={active} />;
+          }
+        }}
+      />
     </div>
   );
 }

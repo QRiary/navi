@@ -6,7 +6,7 @@ import { useMemo } from 'react';
 import { Modal } from '../Modal';
 import { diffProjects } from '../../core/project/diff';
 import { useProjectStore } from '../../store/projectStore';
-import { toast } from '../../store/toastStore';
+import { toast, toastError } from '../../store/toastStore';
 import { t } from '../../i18n';
 import { DiffView } from './DiffView';
 
@@ -25,7 +25,7 @@ export function LinkConflictDialog() {
       .then(() => {
         if (choice === 'file') toast(t('Loaded the linked file (your previous version is in “versions”)', 'Загружен связанный файл (ваша прошлая версия — в «версиях»)'));
       })
-      .catch((err: Error) => toast(err.message, 'error'));
+      .catch((err: Error) => toastError(t('Couldn’t resolve the linked file conflict. Try again or pick the other version.', 'Не удалось решить конфликт со связанным файлом. Повторите или выберите другую версию.'), err));
 
   const onSave = conflict.kind === 'save';
   return (

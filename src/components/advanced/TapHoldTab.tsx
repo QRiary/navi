@@ -24,6 +24,7 @@ import {
 } from '../../core/project/tapHolds';
 import type { KeyList, Project, TapHoldSetting } from '../../core/project/types';
 import { t } from '../../i18n';
+import { deletedToast } from '../../lib/undoToast';
 import { useProjectStore, useSpec } from '../../store/projectStore';
 import { IssueList, KeyChips, type KeyChip } from './common';
 
@@ -99,14 +100,15 @@ export function TapHoldTab({ project }: { project: Project }) {
     if (keyListUsage(project, id) > 0 && confirmDelete !== id) return setConfirmDelete(id);
     setConfirmDelete(null);
     apply((p) => removeKeyList(p, id), t('delete key list', 'удаление списка клавиш'));
+    deletedToast(t('key list', 'список клавиш'));
   };
 
   return (
     <div className="page">
       <p className="field-hint">
         {t(
-          'Settings belong to keycodes, not to one key: every key with the same mod-tap (LSFT_T(KC_F)) or layer-tap (LT(1, KC_SPC)) keycode shares them, and one setting can list several keycodes. Empty = the global setting from Behavior (config.h).',
-          'Настройки относятся к keycode, а не к одной клавише: их делят все клавиши с тем же mod-tap (LSFT_T(KC_F)) или layer-tap (LT(1, KC_SPC)), и одна настройка может перечислять несколько keycode. Пусто — общая настройка из «Поведение (config.h)».',
+          'Settings belong to keycodes, not to one key: every key with the same mod-tap (LSFT_T(KC_F)) or layer-tap (LT(1, KC_SPC)) keycode shares them, and one setting can list several keycodes. Empty = the global setting from QMK settings (config.h).',
+          'Настройки относятся к keycode, а не к одной клавише: их делят все клавиши с тем же mod-tap (LSFT_T(KC_F)) или layer-tap (LT(1, KC_SPC)), и одна настройка может перечислять несколько keycode. Пусто — общая настройка из «Настройки QMK» (config.h).',
         )}
       </p>
 
@@ -301,12 +303,13 @@ export function TapHoldTab({ project }: { project: Project }) {
                     <button
                       className="icon-btn"
                       aria-label={t('Delete', 'Удалить')}
-                      onClick={() =>
+                      onClick={() => {
                         set(
                           project.tapHolds.filter((x) => x.id !== s.id),
                           t('delete tap-hold setting', 'удаление настройки тап-холд'),
-                        )
-                      }
+                        );
+                        deletedToast(t('tap-hold setting', 'настройка тап-холд'));
+                      }}
                     >
                       <Trash2 {...ICON} />
                     </button>
