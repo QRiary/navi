@@ -24,6 +24,7 @@ import { TapDanceTab } from '../components/advanced/TapDanceTab';
 import { LeaderTab } from '../components/advanced/LeaderTab';
 import { UnicodeTab } from '../components/advanced/UnicodeTab';
 import { LayerKeysOnTopRow } from '../components/advanced/LayerKeysOnTop';
+import { AutoRepeatRows } from '../components/advanced/AutoRepeat';
 import { ModsInput } from '../components/keyboard/KeycodeComposer';
 import { getLanguage, t } from '../i18n';
 import { openDocs, QMK_DOCS } from '../lib/qmkDocs';
@@ -192,7 +193,7 @@ function CustomTab({ project }: { project: Project }) {
       {shownCustom.length > 0 && (
         <div className="panel-box rows">
           {shownCustom.map(({ c, i }) => (
-            <div key={c.id} {...findAttr('custom:' + c.id)} className="row" style={{ ['--row-cols' as string]: '72px minmax(96px,0.8fr) minmax(96px,1fr) 128px minmax(96px,1.2fr) auto' }}>
+            <div key={c.id} {...findAttr('custom:' + c.id)} className="row" style={{ ['--row-cols' as string]: '72px minmax(96px,0.8fr) minmax(96px,1fr) 128px minmax(96px,1.2fr) auto auto' }}>
               <span className="kicker">0x{customKeycodeValue(spec, i).toString(16).toUpperCase()}</span>
               <input
                 className="input"
@@ -207,6 +208,14 @@ function CustomTab({ project }: { project: Project }) {
                 onChange={(e) => patch(c.id, { description: e.target.value }, t('description', 'описание'), `ckdesc:${c.id}`)}
               />
               <ActionEditor action={c.action} coalesceKey={`ck:${c.id}`} onChange={(action, coalesce) => patch(c.id, { action }, t('custom action', 'действие keycode'), coalesce)} />
+              <label className="checkbox" {...whyDisabled(c.action.type === 'none' && t('Pick an action first', 'Сначала выберите действие'))}>
+                <input
+                  type="checkbox"
+                  checked={c.repeat === true}
+                  onChange={(e) => c.action.type !== 'none' && patch(c.id, { repeat: e.target.checked ? true : undefined }, t('custom keycode repeat', 'повтор keycode'))}
+                />
+                {t('repeat while held', 'повтор при удержании')}
+              </label>
               <button
                 className="icon-btn"
                 aria-label={t('Delete', 'Удалить')}
@@ -366,6 +375,14 @@ function NaviBehaviorTab({ project }: { project: Project }) {
         </div>
         <div className="panel-box rows">
           <LayerKeysOnTopRow project={project} />
+        </div>
+      </section>
+      <section className="section">
+        <div className="section-head">
+          <h2>{t('Auto repeat', 'Автоповтор')}</h2>
+        </div>
+        <div className="panel-box rows">
+          <AutoRepeatRows project={project} />
         </div>
       </section>
     </div>

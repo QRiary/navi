@@ -90,7 +90,7 @@ describe('auto repeat: generated C', () => {
     const pressOnly = hook.indexOf('if (!record->event.pressed) return true;');
     expect(repeat).toBeGreaterThan(0);
     expect(pressOnly).toBeGreaterThan(repeat);
-    expect(hook.slice(0, repeat)).toMatch(/case QK_MACRO_0:\n\s+case REP:\n\s+navi_repeat\(keycode, record\);\n\s+return false;/);
+    expect(hook.slice(0, pressOnly)).toMatch(/case QK_MACRO_0:\n\s+case REP:\n\s+navi_repeat\(keycode, record\);\n\s+return false;/);
     // the plain ones keep their press case; the ticked ones have no second one
     const press = hook.slice(pressOnly);
     expect(press).toContain('case QK_MACRO_1:');

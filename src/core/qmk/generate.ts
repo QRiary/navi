@@ -15,6 +15,7 @@ import type { KeycodeSpec } from '../keycodes/spec';
 import { FEATURE_BY_ID, type FeatureId } from '../features/registry';
 import { checkCombos, comboRefOf, comboRefsMixed, qmkCombos, checkKeyOverrides, checkLeaderSequences, checkTapDances, checkUnicodeMap, leaderFunction, type AdvancedIssue } from '../features/advanced';
 import { configParams, configValueType } from './configParams';
+import { autoRepeatCode, REPEAT_SYMBOLS, type RepeatCase } from './autoRepeat';
 import { layerOnTopCallback, layerOnTopState, layerOnTopStubs } from './layerOnTop';
 import { checkCustom, customBlock, CUSTOM_FILES, GENERATED_SYMBOLS, hasCustomCode, NAVI_HOOKS, PIPELINE_MAX_HEADERS, PIPELINE_SYMBOLS, safeHeaderName, unsafeDefineValue, validCIdentifier, type CustomFile } from './customCode';
 import { requiredFeatures } from '../features/required';
@@ -517,7 +518,29 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push(...layerOnTopState());
     c.push(...layerOnTopCallback(hookName('layer_state_set_user')));
   }
-  const keysInCode = sendStringCustoms.length > 0 || macroHandledInCode;
+  // Keys ticked “repeat while held”: one switch on press and release; the rest keep the press-only switch.
+  const repeatMacros = macros.filter((m) => m.repeat === true);
+  const repeatCustoms = sendStringCustoms.filter((ck) => ck.repeat === true);
+  const repeating = repeatMacros.length > 0 || repeatCustoms.length > 0;
+  const pressCustoms = sendStringCustoms.filter((ck) => ck.repeat !== true);
+  const pressMacros = macroHandledInCode ? macros.filter((m) => m.repeat !== true) : [];
+  if (repeating) {
+    const { delay, rate } = project.firmware.autoRepeat;
+    const cases: RepeatCase[] = [
+      ...repeatMacros.map((m) => ({
+        label: `QK_MACRO_${m.index}`,
+        comment: commentText(m.name),
+        body: via ? [`dynamic_keymap_macro_send(${m.index});`] : macroStatements(m.steps),
+      })),
+      ...repeatCustoms.map((ck) => ({
+        label: ck.name,
+        body: [ck.action.type === 'send-string' ? `SEND_STRING(${cString(ck.action.text)});` : ck.action.type === 'tap' ? `tap_code16(${kc(ck.action.keycode)});` : ''],
+      })),
+    ];
+    c.push(...autoRepeatCode({ delay, rate, cases }));
+  }
+  const keysInCode = pressCustoms.length > 0 || pressMacros.length > 0;
+  const keysHandled = keysInCode || repeating;
   if (tapHoldInCode) {
     const standIns: StandIn[] = thActions.map((a) => ({
       name: standInName.get(a.keycode)!,
@@ -530,7 +553,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   // For the user's own C: which MT / LT values are NAVI's stand-ins (their base key isn't what they tap).
   const standInCheck = pipeline || thActions.length > 0;
   if (standInCheck) c.push(...standInCheckCode([...standInName.values()]));
-  const recordHook = keysInCode || layersOnTop || tapHoldInCode || tdC.keys;
+  const recordHook = keysHandled || layersOnTop || tapHoldInCode || tdC.keys;
   if (recordHook) {
     c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
     if (layersOnTop) c.push('    navi_layer_keys(keycode, record); // layer keys bring their layer to the top');
@@ -544,16 +567,22 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     }
     if (tapHoldInCode) c.push('    if (!navi_tap_holds(keycode, record)) return false; // tap-hold keys: actions and the replay fix');
   }
+  if (repeating) {
+    c.push('    switch (keycode) {');
+    for (const m of repeatMacros) c.push(`        case QK_MACRO_${m.index}:`);
+    for (const ck of repeatCustoms) c.push(`        case ${ck.name}:`);
+    c.push('            navi_repeat(keycode, record);', '            return false;', '    }');
+  }
   if (keysInCode) {
     c.push('    if (!record->event.pressed) return true;');
     c.push('    switch (keycode) {');
-    sendStringCustoms.forEach((ck) => {
+    pressCustoms.forEach((ck) => {
       if (ck.action.type === 'send-string') c.push(`        case ${ck.name}: SEND_STRING(${cString(ck.action.text)}); return false;`);
       else if (ck.action.type === 'tap') c.push(`        case ${ck.name}: tap_code16(${kc(ck.action.keycode)}); return false;`);
     });
-    if (macroHandledInCode) {
+    if (pressMacros.length > 0) {
       c.push('        // Macros MC_n compiled into the firmware (no VIA in this build).');
-      macros.forEach((m) => {
+      pressMacros.forEach((m) => {
         c.push(`        case QK_MACRO_${m.index}: // ${commentText(m.name)}`);
         for (const st of macroStatements(m.steps)) c.push(`            ${st}`);
         c.push('            return false;');
@@ -644,6 +673,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   // Explicitly: in pure QMK VIA is off, even if the target turns it on.
   rules.VIA_ENABLE = via ? 'yes' : 'no';
   if (hasTd) rules.TAP_DANCE_ENABLE = 'yes';
+  if (repeating) rules.DEFERRED_EXEC_ENABLE = 'yes';
   if (hasCombos) rules.COMBO_ENABLE = 'yes';
   if (hasOverrides) rules.KEY_OVERRIDE_ENABLE = 'yes';
   if (hasEncoders) rules.ENCODER_MAP_ENABLE = 'yes';
@@ -738,6 +768,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (holdKeys) generatedSymbols.add('navi_last_pressed');
   if (tapHold.lists.length) for (const sym of ['navi_in_keys', 'NAVI_IN_KEYS', ...tapHold.lists.map((l) => l.name)]) generatedSymbols.add(sym);
   if (replay) for (const name of ['navi_down', 'navi_interrupted', 'navi_interrupter', 'navi_note_press', 'navi_watch_presses', 'navi_held_tap', 'navi_forces_hold', 'navi_hold']) generatedSymbols.add(name);
+  if (repeating) for (const name of REPEAT_SYMBOLS) generatedSymbols.add(name);
   if (tapHoldInCode) generatedSymbols.add('navi_tap_holds');
   if (standInCheck) generatedSymbols.add('navi_is_stand_in');
   if (thActions.length) for (const name of ['navi_send', ...standInName.values()]) generatedSymbols.add(name);
@@ -786,8 +817,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
         hook: 'process_record_user',
         call: 'if (!process_record_navi(keycode, record)) return false;',
         why: {
-          en: [keysInCode && 'custom keycodes and macros', tdC.keys && 'tap dances play their keys at the dance key position', tapHoldInCode && 'tap-hold keys (call it first: it plays their actions)', layersOnTop && 'layer keys bring their layer to the top: it must see layer key releases'].filter(Boolean).join('; '),
-          ru: [keysInCode && 'свои keycodes и макросы', tdC.keys && 'tap dance играют свои клавиши на месте клавиши TD', tapHoldInCode && 'тап-холд клавиши (вызывайте её первой: она играет их действия)', layersOnTop && 'клавиши слоёв поднимают свой слой наверх: она должна видеть отпускание клавиш слоёв'].filter(Boolean).join('; '),
+          en: [keysHandled && 'custom keycodes and macros', tdC.keys && 'tap dances play their keys at the dance key position', tapHoldInCode && 'tap-hold keys (call it first: it plays their actions)', layersOnTop && 'layer keys bring their layer to the top: it must see layer key releases'].filter(Boolean).join('; '),
+          ru: [keysHandled && 'свои keycodes и макросы', tdC.keys && 'tap dance играют свои клавиши на месте клавиши TD', tapHoldInCode && 'тап-холд клавиши (вызывайте её первой: она играет их действия)', layersOnTop && 'клавиши слоёв поднимают свой слой наверх: она должна видеть отпускание клавиш слоёв'].filter(Boolean).join('; '),
         },
       },
       { hook: 'get_tapping_term', call: 'return get_tapping_term_navi(keycode, record);', why: { en: 'TAPPING_TERM_PER_KEY is on — without it the build fails', ru: 'включён TAPPING_TERM_PER_KEY — без неё сборка не пройдёт' } },
