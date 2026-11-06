@@ -177,6 +177,28 @@ async function backupCurrentUf2(drive, firmwareDir, onProgress = () => {}) {
   }
 }
 
+/**
+ * Add a copy of the board's flash saved by another tool (`picotool save -a`, for the RP2040 / RP2350 boot ROM that
+ * shows no CURRENT.UF2) to the archive as the backup of the board on this drive. Nothing is written to the board.
+ * The file must be a UF2 of the drive's chip family; a UF2 with no family in its blocks is taken as is, like
+ * CURRENT.UF2.
+ */
+function importBackupUf2(drive, file, firmwareDir) {
+  if (path.extname(file).toLowerCase() !== '.uf2') throw new Error('a saved copy must be a .uf2 file');
+  if (fs.statSync(file).size > BACKUP_MAX) throw new Error('the file is larger than a board’s flash');
+  const desc = describeFirmware(file);
+  if (desc.format !== 'uf2') throw new Error('the file is not a UF2 firmware');
+  const expected = UF2_FAMILIES[drive.boardId];
+  if (expected && desc.uf2Family !== null && !expected.includes(desc.uf2Family >>> 0)) throw new Error('the file is for another chip family than this board');
+  const scan = scanUf2(file);
+  if (!scan || scan.blocks === 0) throw new Error('the file is not a valid UF2 firmware');
+  const stamp = new Date().toISOString().slice(0, 10);
+  const base = path.basename(file, path.extname(file)).replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 40);
+  const name = `backup-${stamp}-${(drive.boardId || 'board').replace(/[^A-Za-z0-9_-]/g, '_')}-${base}.uf2`;
+  const flash = { start: scan.start, end: scan.end, bytes: scan.bytes, blocks: scan.blocks };
+  return archiveFirmware(firmwareDir, file, { source: 'backup', boardId: drive.boardId, model: drive.model, flash, originalPath: file }, { name, maxBytes: BACKUP_MAX });
+}
+
 function waitForDriveGone(root, timeoutMs) {
   return new Promise((resolve) => {
     const started = Date.now();
@@ -204,6 +226,16 @@ function registerFlashIpc({ ipcMain, getWindow, firmwareDir }) {
     const drive = listUf2Drives().find((d) => d.root === driveRoot);
     if (!drive) throw new Error('the bootloader drive is not connected');
     return backupCurrentUf2(drive, firmwareDir, (done, total) => send('navi:flash:progress', { done, total }));
+  });
+
+  /** “Add a saved copy…”: a .uf2 the user picks in a main-process dialog becomes the backup of the board on this drive. */
+  ipcMain.handle('navi:flash:import-backup', async (_e, driveRoot) => {
+    const drive = listUf2Drives().find((d) => d.root === driveRoot);
+    if (!drive) throw new Error('the bootloader drive is not connected');
+    const { dialog } = require('electron');
+    const res = await dialog.showOpenDialog(getWindow(), { properties: ['openFile'], filters: [{ name: 'UF2 firmware', extensions: ['uf2'] }] });
+    if (res.canceled || !res.filePaths[0]) return null;
+    return importBackupUf2(drive, res.filePaths[0], firmwareDir);
   });
 
   /** Copy a .uf2 to the bootloader drive. Returns whether the drive disappeared (the board rebooted). */
@@ -259,4 +291,4 @@ function registerFlashIpc({ ipcMain, getWindow, firmwareDir }) {
   ipcMain.handle('navi:flash:cancel', (_e, job) => cancel(job));
 }
 
-module.exports = { registerFlashIpc, BOOTLOADERS, UF2_FAMILIES, checkUf2, listUf2Drives, backupCurrentUf2 };
+module.exports = { registerFlashIpc, BOOTLOADERS, UF2_FAMILIES, checkUf2, listUf2Drives, backupCurrentUf2, importBackupUf2 };

@@ -17,8 +17,8 @@ export function BootloaderRebootRow({ project }: { project: Project }) {
         {title}{' '}
         <InfoTip label={title}>
           {t(
-            '“Build + flash” then needs no key press: NAVI sends the keyboard a message and it restarts into its bootloader. Any program on this PC can then do the same. Works after the next flash; until then press QK_BOOT once.',
-            '«Собрать и прошить» тогда не требует нажатия клавиши: NAVI отправляет клавиатуре сообщение, и она перезагружается в загрузчик. Так же сможет сделать любая программа на этом компьютере. Работает после следующей прошивки; до этого один раз нажмите QK_BOOT.',
+            '“Build + flash” then needs no key press: NAVI sends the keyboard a message and it restarts into its bootloader. Any program on this PC can then do the same, and then write its own firmware into the keyboard without you pressing anything; QMK itself leaves this out of VIA for that reason. Leave it off unless you flash often. Works after the next flash; until then press QK_BOOT once.',
+            '«Собрать и прошить» тогда не требует нажатия клавиши: NAVI отправляет клавиатуре сообщение, и она перезагружается в загрузчик. Так же сможет любая программа на этом компьютере — и затем записать в клавиатуру свою прошивку без нажатия чего-либо; поэтому сам QMK не делает этого в VIA. Не включайте, если прошиваете нечасто. Работает после следующей прошивки; до этого один раз нажмите QK_BOOT.',
           )}
         </InfoTip>
       </span>
