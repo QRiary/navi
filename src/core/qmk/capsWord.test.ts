@@ -175,10 +175,14 @@ describe('caps word rules: project file and layer changes', () => {
     const back = parseProjectText(serializeProject(p));
     expect('project' in back && back.project?.firmware.capsWordRules).toEqual(qriaryLike);
     const raw = JSON.parse(serializeProject(p));
-    raw.firmware.capsWordRules.push({ id: 'bad', keys: 'nope', shift: 1 }, { id: 'badlayer', keys: [4], shift: true, layers: [99] });
+    raw.firmware.capsWordRules.push(
+      { id: 'bad', keys: 'nope', shift: 1 },
+      { id: 'somelayers', keys: [4], shift: true, layers: [1, 99] },
+      { id: 'nolayer', keys: [5], shift: true, layers: [99] }, // must not become an every-layer rule
+    );
     const { project: loaded, issues } = validateProject(raw);
-    expect(loaded!.firmware.capsWordRules).toHaveLength(qriaryLike.length + 1);
-    expect(loaded!.firmware.capsWordRules!.at(-1)!.layers ?? []).not.toContain(99);
+    expect(loaded!.firmware.capsWordRules!.map((r) => r.id)).toEqual([...qriaryLike.map((r) => r.id), 'somelayers']);
+    expect(loaded!.firmware.capsWordRules!.at(-1)!.layers).toEqual([1]);
     expect(issues.some((i) => i.path.startsWith('firmware.capsWordRules') && i.level === 'warning')).toBe(true);
   });
 

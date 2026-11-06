@@ -516,7 +516,8 @@ function readCapsWordRules(r: Reader, v: unknown, listIds: ReadonlySet<string>, 
         return false;
       });
       if (layers.length) rule.layers = layers;
-      else if (ro.layers.length) r.warn(`${p}.layers`, 'no valid layer left: the rule now counts on every layer');
+      // A layer rule must never turn into an every-layer one (same as deleting its layers in ops.ts).
+      else if (ro.layers.length) return r.warn(`${p}.layers`, 'no valid layer left — the rule is dropped');
     }
     out.push(rule);
   });
