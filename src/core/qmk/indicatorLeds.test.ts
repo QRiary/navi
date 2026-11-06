@@ -87,7 +87,8 @@ describe('indicator LEDs: generated C', () => {
     const where = r.issues.map((i) => i.where);
     expect(where).toEqual(expect.arrayContaining(['own pipeline: housekeeping_task_user()', 'own pipeline: keyboard_post_init_user()', 'own pipeline: process_record_user()']));
     const none = file(gen(project([], { pipeline: true })), 'keymap.c');
-    expect(none).toContain('void housekeeping_task_navi(void) {}\nvoid navi_leds_update(void) {}\nvoid navi_leds_mark_toggled(uint8_t layer) {');
+    expect(none).toContain('void housekeeping_task_navi(void) {}');
+    expect(none).toContain('void navi_leds_update(void) {}\nvoid navi_leds_mark_toggled(uint8_t layer) {');
   });
 
   it('the user’s own SPLIT_TRANSACTION_IDS_USER: NAVI does not define it, and asks for its id when the list lacks it', () => {

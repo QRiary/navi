@@ -41,7 +41,10 @@ const hex = (n: number) => `0x${n.toString(16).toUpperCase().padStart(2, '0')}`;
  * The C above process_record_*: state, the LED functions, the toggle-key watcher. `layersOn`: the expression for the
  * layers turned on (hidden ones too with layers-on-top). Empty when no LED has a valid pin.
  */
-export function indicatorLedCode(o: { leds: readonly IndicatorLed[]; layersOn: string; housekeeping: string }): string[] {
+/** The LEDs' line in the housekeeping_task_* function (generate.ts writes one, shared with the task switcher key). */
+export const LED_HOUSEKEEPING_LINE = '    navi_leds_refresh(true);';
+
+export function indicatorLedCode(o: { leds: readonly IndicatorLed[]; layersOn: string }): string[] {
   const leds = writtenLeds(o.leds);
   if (!leds.length) return [];
   // Bit n of every mask is the n-th written LED (the C's own numbering), navi_led_user gets the list index.
@@ -217,7 +220,6 @@ export function indicatorLedCode(o: { leds: readonly IndicatorLed[]; layersOn: s
       '',
     );
   }
-  out.push(`void ${o.housekeeping}(void) {`, '    navi_leds_refresh(true);', '}', '');
   return out;
 }
 

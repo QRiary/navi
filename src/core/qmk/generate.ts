@@ -30,7 +30,9 @@ import { requiredFeatures } from '../features/required';
 import { RGB_MATRIX_EFFECTS } from '../lighting/effects';
 import { effectiveMaxBrightness, rgbTargetDefaults } from '../lighting/buildDefaults';
 import type { CustomAction, CustomKeycodeAction, HeldMods, HoldAction, Keymap, Macro, MacroStep, Project } from '../project/types';
-import { activeGeometry } from '../project/ops';
+import { activeGeometry, mapProjectKeycodes } from '../project/ops';
+import { isTaskSwitcher, TASK_SWITCHER_NAME } from '../keycodes/taskSwitcher';
+import { TASK_SWITCHER_RECORD_LINE, TASK_SWITCHER_SYMBOLS, taskSwitcherCode, taskSwitcherDecl, taskSwitcherHousekeeping } from './taskSwitcher';
 import { checkKeyAliases } from '../project/aliases';
 import { checkTapHolds, effectiveTapHolds } from '../project/tapHolds';
 import { checkTapHoldActions, effectiveTapHoldActions, projectOwnCodeRefs, type OwnCodeFile } from '../project/tapHoldActions';
@@ -40,7 +42,7 @@ import { checkSecrets, secretsCode } from './secretText';
 import { isTextStep, textArg } from '../project/textSteps';
 import { layoutMacro, renderLayers, textLayout } from './layoutText';
 import { FIRMWARE_TESTS_FILE, firmwareTestsFile } from './firmwareTests';
-import { indicatorLedCode, indicatorLedConfig, indicatorLedRecordLine, LED_SPLIT_IDS, LED_SYMBOLS, userSplitIds, writtenLeds } from './indicatorLeds';
+import { indicatorLedCode, indicatorLedConfig, indicatorLedRecordLine, LED_HOUSEKEEPING_LINE, LED_SPLIT_IDS, LED_SYMBOLS, userSplitIds, writtenLeds } from './indicatorLeds';
 import { checkIndicatorLeds } from '../project/indicatorLeds';
 
 export interface GeneratedFile {
@@ -200,13 +202,26 @@ export interface GenerateOptions {
   ownCode?: readonly OwnCodeFile[] | null;
 }
 
+/** Is the task switcher key anywhere in the project (keys, encoders, combos, tap dances, tap-hold slots…)? */
+export function usesTaskSwitcher(spec: KeycodeSpec, project: Project): boolean {
+  let used = false;
+  mapProjectKeycodes(project, (v) => {
+    if (isTaskSwitcher(spec, v)) used = true;
+    return v;
+  });
+  return used;
+}
+
 export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBrightness, ownCode }: GenerateOptions): GenerateResult {
   const { rows, cols } = project.hardware.matrix;
   const layerIds = layerIdentifiers(keymap);
   const tdSorted = [...project.tapDances].sort((a, b) => a.index - b.index);
   const customs = project.customKeycodes;
   const customStart = spec.rangeByDefine.get('QK_USER')?.start ?? 0x7e40;
-  const customName = (v: number) => (v >= customStart && v < customStart + customs.length ? customs[v - customStart].name : languageKeyName(spec, project, v));
+  const customName = (v: number) =>
+    v >= customStart && v < customStart + customs.length ? customs[v - customStart].name : isTaskSwitcher(spec, v) ? TASK_SWITCHER_NAME : languageKeyName(spec, project, v);
+  // The task switcher key (taskSwitcher.ts): its C only when the project uses it somewhere.
+  const switcher = usesTaskSwitcher(spec, project);
   // Languages: their state, keys and text route (null: no languages, the output is as before).
   const lang = planLanguages(project);
   // Held modifiers while text is typed (heldMods.ts): helpers are emitted (at liftAt) only when something uses them.
@@ -374,6 +389,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     h.push('//   void process_combo_event(uint16_t index, bool pressed) { process_combo_event_navi(index, pressed); }');
     h.push('//   void leader_end_user(void) { leader_end_navi(); }');
     h.push('//   layer_state_t layer_state_set_user(layer_state_t state) { return layer_state_set_navi(state); }');
+    h.push('//   void housekeeping_task_user(void) { housekeeping_task_navi(); }');
     h.push('// With “layer keys bring their layer to the top” on, process_record_navi must also see layer key releases');
     h.push('// (call it before anything in process_record_user can return false).');
     h.push('// Your own keycodes start at NAVI_SAFE_RANGE: enum my_keycodes { MY_KEY = NAVI_SAFE_RANGE, ... };');
@@ -407,6 +423,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     decl.push('');
   }
   if (lang) decl.push(...languageDecl(spec, project, commentText));
+  if (switcher) decl.push(...taskSwitcherDecl(spec));
   if (unicodeTable.length) {
     decl.push('// Unicode map: UM(i) / UP(i, j) refer to these entries by index.');
     decl.push(`enum ${pipeline ? 'navi_unicode_names' : 'unicode_names'} {`);
@@ -642,16 +659,17 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   // For the user's own C: which MT / LT values are NAVI's stand-ins (their base key isn't what they tap).
   const standInCheck = pipeline || thActions.length > 0;
   if (standInCheck) c.push(...standInCheckCode([...standInName.values()]));
+  if (switcher) c.push(...taskSwitcherCode({ layersOnTop }));
   const osCancel = oneShotCancelActive(project);
   if (osCancel) c.push(...oneShotCancelState());
   // Indicator LEDs: worked out on every housekeeping pass; toggle keys seen in process_record.
   const ledsOn = writtenLeds(project.firmware.indicatorLeds).length > 0;
-  if (ledsOn) c.push(...indicatorLedCode({ leds: project.firmware.indicatorLeds, layersOn: layersOnTop || pipeline ? 'navi_layers_on()' : 'layer_state', housekeeping: hookName('housekeeping_task_user') }));
+  if (ledsOn) c.push(...indicatorLedCode({ leds: project.firmware.indicatorLeds, layersOn: layersOnTop || pipeline ? 'navi_layers_on()' : 'layer_state' }));
   const ledRecord = indicatorLedRecordLine(project.firmware.indicatorLeds);
   // keyboard_post_init: what runs once at power-on (languages, LEDs).
   const postInit = [...(lang?.layers ? ['    layer_state_set(layer_state); // the first language’s layer on at power-on'] : []), ...(ledsOn ? ['    navi_leds_init(); // indicator LED pins (and the split link)'] : [])];
   if (postInit.length) c.push(`void ${hookName('keyboard_post_init_user')}(void) {`, ...postInit, '}', '');
-  const recordHook = keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang || viaLift || osCancel || ledRecord.length > 0;
+  const recordHook = keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang || viaLift || osCancel || ledRecord.length > 0 || switcher;
   if (recordHook) {
     c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
     c.push(...ledRecord);
@@ -666,6 +684,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       );
     }
     if (tapHoldInCode) c.push('    if (!navi_tap_holds(keycode, record)) return false; // tap-hold keys: actions and the replay fix');
+    if (switcher) c.push(TASK_SWITCHER_RECORD_LINE);
     if (lang) c.push(...languageRecordLines(lang));
     if (osCancel) c.push(...oneShotCancelLines());
   }
@@ -712,6 +731,9 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push('}');
     c.push('');
   }
+  // housekeeping_task: one function shared by the indicator LEDs and the task switcher key.
+  const housekeeping = [...(ledsOn ? [LED_HOUSEKEEPING_LINE] : []), ...(switcher ? taskSwitcherHousekeeping() : [])];
+  if (housekeeping.length) c.push(`void ${hookName('housekeeping_task_user')}(void) {`, ...housekeeping, '}', '');
 
   if (liftUsed) c.splice(liftAt, 0, ...LIFT_HELPERS_C);
 
@@ -725,7 +747,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     process_record_user: recordHook,
     layer_state_set_user: layersOnTop || !!lang?.layers,
     keyboard_post_init_user: postInit.length > 0,
-    housekeeping_task_user: ledsOn,
+    housekeeping_task_user: ledsOn || switcher,
     get_tapping_term: tappingTerms,
     get_quick_tap_term: quickTap,
     get_hold_on_other_key_press: holdPress,
@@ -755,11 +777,13 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       { hook: 'leader_end_user', guard: 'LEADER_ENABLE', lines: ['void leader_end_navi(void) {}'] },
       { hook: 'layer_state_set_user', lines: layerOnTopStubs(!hookUsed.layer_state_set_user) },
       { hook: 'keyboard_post_init_user', lines: ['void keyboard_post_init_navi(void) {}'] },
-      { hook: 'housekeeping_task_user', lines: ['void housekeeping_task_navi(void) {}', 'void navi_leds_update(void) {}', 'void navi_leds_mark_toggled(uint8_t layer) {', '    (void)layer;', '}'] },
+      { hook: 'housekeeping_task_user', lines: ['void housekeeping_task_navi(void) {}'] },
       { hook: 'caps_word_press_user', lines: capsWordCode({ rules: CAPS_WORD_QMK_DEFAULT, keyLists: [], kc, layerIds, fn: 'caps_word_press_navi' }).slice(1, -1) },
     ];
     // Languages may write the layer callback without “layer keys on top”: navi_layers_on / navi_layer_off still stubs.
     const stubs = allStubs.filter((s) => (s.hook === 'layer_state_set_user' ? !layersOnTop : !hookUsed[s.hook]));
+    // The indicator LED functions for the user's C, while the project has no LEDs.
+    if (!ledsOn) stubs.push({ hook: 'housekeeping_task_user', lines: ['void navi_leds_update(void) {}', 'void navi_leds_mark_toggled(uint8_t layer) {', '    (void)layer;', '}'] });
     if (stubs.length) {
       c.push('// ── NAVI hooks the project does not use yet (they exist so your calls to them always compile) ──');
       for (const s of stubs) {
@@ -787,8 +811,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     h.push('#endif');
     h.push('layer_state_t layer_state_set_navi(layer_state_t state);');
     h.push('void keyboard_post_init_navi(void);');
-    h.push('bool caps_word_press_navi(uint16_t keycode);');
     h.push('void housekeeping_task_navi(void);');
+    h.push('bool caps_word_press_navi(uint16_t keycode);');
     h.push('// Indicator LEDs (Lighting → indicator LEDs): define navi_led_user to light the LEDs set to “your code says so”;');
     h.push('// call navi_leds_update() after that state changed, navi_leds_mark_toggled(layer) for a layer you turn on yourself.');
     h.push('bool navi_led_user(uint8_t led);');
@@ -959,6 +983,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (!pipeline && ledsOn) generatedSymbols.add('housekeeping_task_user');
   if (pipeline || ledsOn) for (const name of LED_SYMBOLS) generatedSymbols.add(name);
   if (!pipeline && capsRules) generatedSymbols.add('caps_word_press_user');
+  if (!pipeline && switcher) generatedSymbols.add('housekeeping_task_user');
+  if (switcher) for (const name of TASK_SWITCHER_SYMBOLS) generatedSymbols.add(name);
   if (lang) {
     for (const name of [...LANGUAGE_SYMBOLS, 'navi_lang', 'navi_language_key']) generatedSymbols.add(name);
     if (lang.layers) generatedSymbols.add('navi_language_layer');
@@ -1049,7 +1075,14 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
           ru: [lang?.layers && 'слой первого языка включается при включении клавиатуры', ledsOn && 'настраиваются пины светодиодов-индикаторов'].filter(Boolean).join('; '),
         },
       },
-      { hook: 'housekeeping_task_user', call: 'housekeeping_task_navi();', why: { en: 'indicator LEDs follow their states — without it the build still passes, but the LEDs never change', ru: 'светодиоды-индикаторы следуют своим состояниям — без неё сборка пройдёт, но светодиоды не будут меняться' } },
+      {
+        hook: 'housekeeping_task_user',
+        call: 'housekeeping_task_navi();',
+        why: {
+          en: [ledsOn && 'indicator LEDs follow their states (without it the build still passes, but the LEDs never change)', switcher && 'the task switcher key picks the window when its layer key is let go'].filter(Boolean).join('; '),
+          ru: [ledsOn && 'светодиоды-индикаторы следуют своим состояниям (без неё сборка пройдёт, но светодиоды не будут меняться)', switcher && 'клавиша переключателя окон выбирает окно, когда отпущена клавиша её слоя'].filter(Boolean).join('; '),
+        },
+      },
       { hook: 'caps_word_press_user', call: 'return caps_word_press_navi(keycode);', why: { en: 'Caps Word key rules', ru: 'правила клавиш Caps Word' } },
     ];
     // Said only while no file of the user's own C calls it (ownCode null = not read: warn).
