@@ -16,6 +16,7 @@ import { QMK_DOCS } from '../../lib/qmkDocs';
 import { whyDisabled } from '../../lib/whyDisabled';
 import { issueLevelLabel } from '../../lib/issueLevel';
 import { deletedToast } from '../../lib/undoToast';
+import { pinInput } from '../../lib/inputRewrite';
 import { EmptyState } from '../EmptyState';
 import { Hint } from '../InfoTip';
 
@@ -52,7 +53,7 @@ function PinList({ label, value, onChange, hint, tip }: { label: string; value: 
         value={text ?? value.join(', ')}
         placeholder={hint}
         spellCheck={false}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => setText(pinInput(e.target))}
         onBlur={() => {
           if (text !== null) onChange(split(text));
           setText(null);
@@ -86,7 +87,7 @@ function EncoderList({ value, onChange }: { value: EncoderPins[]; onChange: (v: 
             style={{ width: 90 }}
             value={e.a}
             placeholder="A"
-            onChange={(ev) => onChange(value.map((x, j) => (j === i ? { ...x, a: ev.target.value.trim() } : x)))}
+            onChange={(ev) => onChange(value.map((x, j) => (j === i ? { ...x, a: pinInput(ev.target).trim() } : x)))}
             aria-label={`E${i} A`}
           />
           <input
@@ -94,7 +95,7 @@ function EncoderList({ value, onChange }: { value: EncoderPins[]; onChange: (v: 
             style={{ width: 90 }}
             value={e.b}
             placeholder="B"
-            onChange={(ev) => onChange(value.map((x, j) => (j === i ? { ...x, b: ev.target.value.trim() } : x)))}
+            onChange={(ev) => onChange(value.map((x, j) => (j === i ? { ...x, b: pinInput(ev.target).trim() } : x)))}
             aria-label={`E${i} B`}
           />
           <button className="text-btn" onClick={() => onChange(value.filter((_, j) => j !== i))}>
@@ -254,7 +255,7 @@ export function PinsTab({ project }: { project: Project }) {
                       {t('link pin (serial)', 'пин связи половин (serial)')}
                     </Hint>
                   </span>
-                  <input className="input" value={pins.serialPin ?? ''} placeholder="GP1" onChange={(e) => patch({ serialPin: e.target.value.trim() || undefined }, 'serial')} />
+                  <input className="input" value={pins.serialPin ?? ''} placeholder="GP1" onChange={(e) => patch({ serialPin: pinInput(e.target).trim() || undefined }, 'serial')} />
                 </label>
                 <label className="field">
                   <span className="field-label">
@@ -287,7 +288,7 @@ export function PinsTab({ project }: { project: Project }) {
                       style={{ width: 100 }}
                       value={pins.handedness.pin}
                       placeholder="GP29"
-                      onChange={(e) => patch({ handedness: { kind: 'pin', pin: e.target.value.trim(), lowIsLeft: pins.handedness.kind === 'pin' ? pins.handedness.lowIsLeft : true } }, 'handpin')}
+                      onChange={(e) => patch({ handedness: { kind: 'pin', pin: pinInput(e.target).trim(), lowIsLeft: pins.handedness.kind === 'pin' ? pins.handedness.lowIsLeft : true } }, 'handpin')}
                     />
                     <label className="checkbox">
                       <input
