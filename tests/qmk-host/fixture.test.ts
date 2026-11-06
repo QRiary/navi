@@ -253,6 +253,32 @@ export function languageHostProject(): Project {
   };
 }
 
+/**
+ * The options suite (options/options_test.cpp names the positions): hold spots of a tap-hold key and the one-shot
+ * cancel. A plain pure-QMK project, no tap dances or combos.
+ */
+export function optionsHostProject(): Project {
+  let p = createBlankProject('qmk host options', 4, 10, false);
+  const id = activeKeymap(p).id;
+  const put = (layer: number, n: number, v: number) => (p = setKeycodes(p, id, layer, [[Math.floor(n / 10), n % 10]], v));
+  put(0, 0, q('LT(1, KC_SPC)'));
+  put(0, 1, q('LGUI_T(KC_Q)'));
+  put(0, 2, q('KC_C'));
+  put(0, 3, q('MO(1)'));
+  put(0, 4, q('OSM(MOD_LSFT)'));
+  put(0, 5, q('KC_E'));
+  put(0, 6, q('KC_X'));
+  put(0, 13, q('KC_N'));
+  put(0, 39, q('KC_S'));
+  put(1, 5, q('KC_A'));
+  return {
+    ...p,
+    firmware: { ...p.firmware, oneShotCancel: true },
+    // Spots: 5 (E; layer 1: A), 13 (N) and 39 (S, the last row)
+    tapHolds: [{ id: 'th-q', keycodes: [q('LGUI_T(KC_Q)')], holdOnSpots: [{ row: 0, col: 5 }, { row: 1, col: 3 }, { row: 3, col: 9 }] }],
+  };
+}
+
 const write = (dir: string, p: Project) => {
   const res = generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: false, encoderCount: 0 });
   const errors = res.issues.filter((i) => i.level === 'error');
@@ -264,4 +290,5 @@ const write = (dir: string, p: Project) => {
 it.skipIf(!out)('writes the generated keymap files for the QMK host tests', () => {
   write(out!, hostProject());
   write(join(out!, 'languages'), languageHostProject());
+  write(join(out!, 'options'), optionsHostProject());
 });

@@ -20,6 +20,7 @@ import { capsWordCode } from './capsWord';
 import { CAPS_WORD_QMK_DEFAULT } from '../project/capsWord';
 import { BOOTLOADER_HELPER_C, bootloaderHookC, bootloaderPipelineHookC } from './bootloaderReboot';
 import { LIFT_HELPERS_C, LIFT_SYMBOLS, liftedBlock, liftedLine, liftOf, liftSetting } from './heldMods';
+import { oneShotCancelActive, oneShotCancelIssues, oneShotCancelLines, oneShotCancelState } from './oneShotCancel';
 import { layerOnTopCallback, layerOnTopState, layerOnTopStubs } from './layerOnTop';
 import { languageDecl, languageEarlyCode, languageKeyName, languagePrototypes, languageRecordLines, languageSwitchCode, languageSymbolCode, languageViaMacroLines, LANGUAGE_SYMBOLS, planLanguages, routedMacroStatements, ROUTE_UNICODE_MODE } from './languages';
 import { checkLanguages, languageCName } from '../project/languages';
@@ -32,7 +33,7 @@ import { activeGeometry } from '../project/ops';
 import { checkKeyAliases } from '../project/aliases';
 import { checkTapHolds, effectiveTapHolds } from '../project/tapHolds';
 import { checkTapHoldActions, effectiveTapHoldActions, projectOwnCodeRefs, type OwnCodeFile } from '../project/tapHoldActions';
-import { anyHoldsOn, caseLines, comboEventCode, hasHoldKeys, keyListsCode, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, naviSendCode, replayTracked, standInCheckCode, tapHoldsCode, type StandIn } from './tapHold';
+import { anyHoldsOn, caseLines, comboEventCode, hasHoldKeys, hasSpots, spotsCode, keyListsCode, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, naviSendCode, replayTracked, standInCheckCode, tapHoldsCode, type StandIn } from './tapHold';
 import { tapDanceCode } from './tapDance';
 import { layoutMacro, renderLayers, textLayout } from './layoutText';
 import { FIRMWARE_TESTS_FILE, firmwareTestsFile } from './firmwareTests';
@@ -259,6 +260,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   issues.push(...checkTapHolds(spec, project));
   issues.push(...checkTapHoldActions(spec, project, projectOwnCodeRefs(spec, project, ownCode)));
   issues.push(...checkLanguages(project, keymap));
+  issues.push(...oneShotCancelIssues(project));
   issues.push(...tdC.issues);
   const langNames = new Map(project.languages.map((l) => [l.id, `NAVI_LANG_${languageCName(l)}`]));
   const tapHold = planTapHolds(effectiveTapHolds(spec, project), kc, project.keyLists, (id) => langNames.get(id));
@@ -538,10 +540,11 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const preProcess = holdKeys || replay || comboRefs || hasTd;
   const interrupters = holdKeys && anyHoldsOn(tracked);
   c.push(...keyListsCode(tapHold.lists));
-  if (preProcess) c.push(...preProcessHook(hookName('pre_process_record_user'), { lastPressed: holdKeys, replay, interrupters, comboLayer: comboRefs, comboEvents, tapDance: hasTd }));
+  c.push(...spotsCode(tapHold.spotArrays));
+  if (preProcess) c.push(...preProcessHook(hookName('pre_process_record_user'), { lastPressed: holdKeys, spots: hasSpots(tapHold), replay, interrupters, comboLayer: comboRefs, comboEvents, tapDance: hasTd }));
   if (comboEvents) {
     const played = qmkComboList.map((q) => ({ result: kc(q.combo.result), keys: q.combo.keys, name: q.name }));
-    c.push(...comboEventCode(hookName('process_combo_event'), played, { lastPressed: holdKeys, interrupters }));
+    c.push(...comboEventCode(hookName('process_combo_event'), played, { lastPressed: holdKeys, interrupters, spots: hasSpots(tapHold) }));
   }
   if (quickTap) c.push(...quickTapHook(hookName('get_quick_tap_term'), tapHold));
   if (holdPress) c.push(...holdOnOtherKeyPressHook(hookName('get_hold_on_other_key_press'), tapHold));
@@ -608,7 +611,9 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   // For the user's own C: which MT / LT values are NAVI's stand-ins (their base key isn't what they tap).
   const standInCheck = pipeline || thActions.length > 0;
   if (standInCheck) c.push(...standInCheckCode([...standInName.values()]));
-  const recordHook = keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang || viaLift;
+  const osCancel = oneShotCancelActive(project);
+  const recordHook = keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang || viaLift || osCancel;
+  if (osCancel) c.push(...oneShotCancelState());
   if (recordHook) {
     c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
     if (layersOnTop) c.push('    navi_layer_keys(keycode, record); // layer keys bring their layer to the top');
@@ -623,6 +628,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     }
     if (tapHoldInCode) c.push('    if (!navi_tap_holds(keycode, record)) return false; // tap-hold keys: actions and the replay fix');
     if (lang) c.push(...languageRecordLines(lang));
+    if (osCancel) c.push(...oneShotCancelLines());
   }
   if (repeatKeys) {
     c.push('    switch (keycode) {');
@@ -863,6 +869,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (!pipeline && preProcess) generatedSymbols.add('pre_process_record_user');
   if (!pipeline && recordHook) generatedSymbols.add('process_record_user');
   if (holdKeys) generatedSymbols.add('navi_last_pressed');
+  if (hasSpots(tapHold)) for (const sym of ['navi_last_at', 'navi_at_in', 'NAVI_AT_IN', ...tapHold.spotArrays.map((a) => a.name)]) generatedSymbols.add(sym);
+  if (osCancel) generatedSymbols.add('navi_osm_cancelled');
   if (tapHold.lists.length) for (const sym of ['navi_in_keys', 'NAVI_IN_KEYS', ...tapHold.lists.map((l) => l.name)]) generatedSymbols.add(sym);
   if (replay) for (const name of ['navi_down', 'navi_interrupted', 'navi_interrupter', 'navi_note_press', 'navi_watch_presses', 'navi_held_tap', 'navi_forces_hold', 'navi_hold']) generatedSymbols.add(name);
   if (repeating) for (const name of REPEAT_SYMBOLS) generatedSymbols.add(name);
@@ -928,8 +936,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
         hook: 'process_record_user',
         call: 'if (!process_record_navi(keycode, record)) return false;',
         why: {
-          en: [keysHandled && 'custom keycodes and macros', tdC.keys && 'tap dances play their keys at the dance key position', tapHoldInCode && 'tap-hold keys (call it first: it plays their actions)', layersOnTop && 'layer keys bring their layer to the top: it must see layer key releases'].filter(Boolean).join('; '),
-          ru: [keysHandled && 'свои keycodes и макросы', tdC.keys && 'tap dance играют свои клавиши на месте клавиши TD', tapHoldInCode && 'тап-холд клавиши (вызывайте её первой: она играет их действия)', layersOnTop && 'клавиши слоёв поднимают свой слой наверх: она должна видеть отпускание клавиш слоёв'].filter(Boolean).join('; '),
+          en: [keysHandled && 'custom keycodes and macros', tdC.keys && 'tap dances play their keys at the dance key position', tapHoldInCode && 'tap-hold keys (call it first: it plays their actions)', layersOnTop && 'layer keys bring their layer to the top: it must see layer key releases', osCancel && 'a second tap of a one-shot mod key cancels it'].filter(Boolean).join('; '),
+          ru: [keysHandled && 'свои keycodes и макросы', tdC.keys && 'tap dance играют свои клавиши на месте клавиши TD', tapHoldInCode && 'тап-холд клавиши (вызывайте её первой: она играет их действия)', layersOnTop && 'клавиши слоёв поднимают свой слой наверх: она должна видеть отпускание клавиш слоёв', osCancel && 'второе нажатие one-shot модификатора отменяет его'].filter(Boolean).join('; '),
         },
       },
       { hook: 'get_tapping_term', call: 'return get_tapping_term_navi(keycode, record);', why: { en: 'TAPPING_TERM_PER_KEY is on — without it the build fails', ru: 'включён TAPPING_TERM_PER_KEY — без неё сборка не пройдёт' } },

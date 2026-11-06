@@ -122,6 +122,22 @@ function split(): Project {
   };
 }
 
+/** The split sample with hold spots on the right half (rows 5…9) and the one-shot cancel: both reach navi_tests.txt. */
+function splitWithOptions(): Project {
+  const p = withKeys(split(), [
+    [0, 0, 2, 'LSFT_T(KC_W)'],
+    [0, 0, 3, 'OSM(MOD_LSFT)'],
+    [0, 0, 4, 'KC_E'],
+    [0, 5, 2, 'KC_O'],
+    [0, 5, 3, 'KC_I'],
+  ]);
+  return {
+    ...p,
+    tapHolds: [{ id: 'th-w', keycodes: [q('LSFT_T(KC_W)')], holdOnSpots: [{ row: 5, col: 1 }, { row: 5, col: 2 }, { row: 5, col: 3 }] }],
+    firmware: { ...p.firmware, oneShotCancel: true },
+  };
+}
+
 it.skipIf(!out)('writes the sample keymap folders for the firmware test runner', () => {
   write(join(out!, 'plain'), plain(), PLAIN_TESTS);
   const own = (extra: string[]) => ({ 'rules.mk': PIPELINE_RULES, 'config.h': PIPELINE_CONFIG, 'own.c': ownC(extra) });
@@ -130,7 +146,7 @@ it.skipIf(!out)('writes the sample keymap folders for the firmware test runner',
   write(join(out!, 'split'), split(), ['r0c1 r5c1 => qp']);
   // NAVI's own navi_tests.txt (firmware.tests on): the generator's expectations must hold on the firmware it wrote.
   writeGenerated(join(out!, 'generated-plain'), plain());
-  writeGenerated(join(out!, 'generated-split'), split());
+  writeGenerated(join(out!, 'generated-split'), splitWithOptions());
 });
 
 function writeGenerated(dir: string, p: Project) {

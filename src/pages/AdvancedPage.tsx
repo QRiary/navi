@@ -26,6 +26,7 @@ import { UnicodeTab } from '../components/advanced/UnicodeTab';
 import { LanguagesTab } from '../components/advanced/LanguagesTab';
 import { LayerKeysOnTopRow } from '../components/advanced/LayerKeysOnTop';
 import { HeldModsSelect, LiftHeldModsRow } from '../components/advanced/HeldModsControls';
+import { OneShotCancelRow } from '../components/advanced/OneShotCancel';
 import { AutoRepeatRows } from '../components/advanced/AutoRepeat';
 import { CapsWordRules } from '../components/advanced/CapsWordRules';
 import { ModsInput } from '../components/keyboard/KeycodeComposer';
@@ -391,6 +392,14 @@ function NaviBehaviorTab({ project }: { project: Project }) {
         </div>
         <div className="panel-box rows">
           <LayerKeysOnTopRow project={project} />
+        </div>
+      </section>
+      <section className="section">
+        <div className="section-head">
+          <h2>{t('One-shot keys', 'One-shot клавиши')}</h2>
+        </div>
+        <div className="panel-box rows">
+          <OneShotCancelRow project={project} />
         </div>
       </section>
       <section className="section">

@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 18;
+export const PROJECT_SCHEMA_VERSION = 19;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -353,6 +353,14 @@ export interface TapHoldSetting {
   holdOnLists?: string[];
   /** Hold keys that count only while one language is active (since format 13). */
   holdOnByLanguage?: LanguageHoldKeys[];
+  /** Pressing a key at one of these spots (matrix row / col, whatever it types) makes it a hold at once (since format 19). */
+  holdOnSpots?: KeySpot[];
+}
+
+/** A physical key position: the firmware matrix row and column, as the keymap stores keys. */
+export interface KeySpot {
+  row: number;
+  col: number;
 }
 
 /** Hold keys of a tap-hold setting that count only in one language. */
@@ -455,6 +463,11 @@ export interface FirmwareConfig {
    * send-string key can say otherwise (`heldMods`).
    */
   liftHeldMods: boolean;
+  /**
+   * A second tap of a one-shot mod (OSM) key cancels the one-shot instead of holding it again (since format 19).
+   * NAVI's own C code in process_record; not written when ONESHOT_TAP_TOGGLE is set (QMK's lock needs the second tap).
+   */
+  oneShotCancel: boolean;
   /**
    * Let NAVI restart the keyboard into its bootloader (Raw HID packet, then reset_keyboard()), so “build + flash”
    * needs no key press. NAVI's own C code in keymap.c, not a define.

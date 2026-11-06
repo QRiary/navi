@@ -10,7 +10,7 @@ import { newId } from '../layout/geometry';
 import { allowedMakeVar, checkCustom, CUSTOM_FILES, CUSTOM_MAX, MAKE_VALUE_RE, PIPELINE_MAX_HEADERS, safeHeaderName, unsafeDefineValue, validCIdentifier } from '../qmk/customCode';
 import { ALIAS_LABEL_MAX, KEY_ALIASES_MAX } from './aliases';
 import { CAPS_WORD_KEYS_MAX, CAPS_WORD_RULES_MAX } from './capsWord';
-import { HOLD_ON_KEYS_MAX, KEY_LIST_KEYS_MAX, KEY_LIST_NAME_MAX, KEY_LISTS_MAX, TAP_HOLD_FLAVORS, TAP_HOLD_KEYCODES_MAX, TAP_HOLD_MAX, TAP_HOLD_TERM_MAX, TAP_HOLD_TERM_MIN } from './tapHolds';
+import { HOLD_ON_KEYS_MAX, HOLD_ON_SPOTS_MAX, KEY_LIST_KEYS_MAX, KEY_LIST_NAME_MAX, KEY_LISTS_MAX, TAP_HOLD_FLAVORS, TAP_HOLD_KEYCODES_MAX, TAP_HOLD_MAX, TAP_HOLD_TERM_MAX, TAP_HOLD_TERM_MIN } from './tapHolds';
 import { TAP_HOLD_ACTIONS_MAX } from './tapHoldActions';
 import { AUTO_REPEAT_DEFAULT, AUTO_REPEAT_LIMITS, TEXT_ROUTE_DEFAULT } from './factory';
 import { LANGUAGE_CODE_RE, LANGUAGE_NAME_MAX, LANGUAGES_MAX } from './languages';
@@ -27,6 +27,7 @@ import {
   type TapHoldSetting,
   type KeyList,
   type Language,
+  type KeySpot,
   type LanguageHoldKeys,
   TEXT_ROUTES,
   type HoldAction,
@@ -606,6 +607,7 @@ function readFirmware(r: Reader, v: unknown): FirmwareConfig {
     pipeline,
     layerKeysOnTop: r.bool(o.layerKeysOnTop ?? false, 'firmware.layerKeysOnTop', false),
     liftHeldMods: r.bool(o.liftHeldMods ?? true, 'firmware.liftHeldMods', true),
+    oneShotCancel: r.bool(o.oneShotCancel ?? false, 'firmware.oneShotCancel', false),
     bootloaderReboot: r.bool(o.bootloaderReboot ?? false, 'firmware.bootloaderReboot', false),
     tests: r.bool(o.tests ?? false, 'firmware.tests', false),
     runTests: r.bool(o.runTests ?? false, 'firmware.runTests', false),
@@ -784,6 +786,19 @@ export function validateProject(input: unknown): { project: Project | null; issu
         return [{ language: go.language, keys, ...(lists.length ? { lists } : {}) }];
       });
       if (groups.length) out.holdOnByLanguage = groups;
+    }
+    if (to.holdOnSpots !== undefined && to.holdOnSpots !== null) {
+      const seenSpots = new Set<number>();
+      const spots = r.arr(to.holdOnSpots, `${p}.holdOnSpots`, HOLD_ON_SPOTS_MAX).flatMap((x, j): KeySpot[] => {
+        const sp = `${p}.holdOnSpots[${j}]`;
+        const so = r.obj(x, sp);
+        const spot = { row: r.num(so.row, `${sp}.row`, 0, 255, 0), col: r.num(so.col, `${sp}.col`, 0, 255, 0) };
+        const id = (spot.row << 8) | spot.col;
+        if (seenSpots.has(id)) return [];
+        seenSpots.add(id);
+        return [spot];
+      });
+      if (spots.length) out.holdOnSpots = spots;
     }
     return out;
   });

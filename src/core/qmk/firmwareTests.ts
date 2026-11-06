@@ -16,6 +16,7 @@ import { languageKeyOf } from '../project/languages';
 import { layerRefs, type LayerRef } from '../project/layerRefs';
 import { activeKeymap } from '../project/ops';
 import { effectiveTapHolds } from '../project/tapHolds';
+import { oneShotCancelActive } from './oneShotCancel';
 import { tapHoldActionLookup, type OwnCodeFile } from '../project/tapHoldActions';
 import { cleanC } from './customCode';
 import { tapDanceKind } from '../project/tapDances';
@@ -579,6 +580,8 @@ export function firmwareTestsFile(project: Project, spec: KeycodeSpec, ownCode?:
         if (follow) {
           const p = follow.press;
           withRoute(route, [s, follow.spot], [{ t: 'weak+', mods: b.oneShot }, ...p.down, { t: 'weak-', mods: b.oneShot }, ...p.up]);
+          // A second tap lets the one-shot go: the next key is typed plain.
+          if (oneShotCancelActive(project)) withRoute(route, [s, s, follow.spot], tapOps(p));
         }
         continue;
       }
@@ -643,6 +646,9 @@ export function firmwareTestsFile(project: Project, spec: KeycodeSpec, ownCode?:
 
   // Caps Word: the caps word key, then a key, then a letter it shifts.
   capsWordTests(c, routes, spots, behaviorOf, out);
+
+  // Hold spots: a tap-hold key held, then a key at one of its spots pressed before the term ends → the hold.
+  holdSpotTests(c, settings, routes, spots, behaviorOf, out, withRoute);
 
   const header = [
     `# navi_tests.txt: written by NAVI from "${lineText(project.name).replace(/"/g, "'")}". Don't edit: NAVI rewrites it.`,
@@ -871,6 +877,43 @@ function overrideTests(c: Ctx, o: Project['keyOverrides'][number], routes: Map<n
 
 /** Report mods `bits` are the override's (either side) mods exactly. */
 const sameMods = (bits: number, need: number) => ((bits | (bits >> 4)) & 0x0f) === need && (bits & 0x0f ? !(bits & 0xf0) : true);
+
+/**
+ * Hold spots (TapHoldSetting.holdOnSpots): the tap-hold key is pressed, a key at one of its spots is tapped well inside
+ * the tapping term, and the tap-hold key is released. The press at the spot makes it a hold at once (whatever the
+ * flavor says), so the plain key comes out with the hold's modifiers. Keys whose hold is a layer are left to the
+ * hold-past-the-term test (the spot's key would be looked up on another layer).
+ */
+function holdSpotTests(c: Ctx, settings: ReturnType<typeof effectiveTapHolds>, routes: Map<number, Route>, spots: MatrixPos[], behaviorOf: (v: number) => Behavior, out: Section, withRoute: WithRoute): void {
+  for (const s of settings) {
+    if (!s.holdOnSpots?.length) continue;
+    for (const keycode of s.keycodes) {
+      const b = behaviorOf(keycode);
+      if (!b.hold || isWhy(b.hold) || b.holdLayer !== undefined || b.term < 30) continue;
+      const at = findSpot(c, routes, spots, (v) => v === keycode);
+      if (!at) continue;
+      const th = spotName(at.pos);
+      const cands: { name: string; ops: Op[] }[] = [];
+      for (const sp of s.holdOnSpots) {
+        const pos: MatrixPos = [sp.row, sp.col];
+        const name = spotName(pos);
+        if (name === th || at.route.held.includes(name) || !spots.some((q) => q[0] === sp.row && q[1] === sp.col)) continue;
+        const { value } = keyAt(c, at.route.state, pos);
+        if (!(value >= KC_A && value <= 0x1d)) continue;
+        const f = behaviorOf(value);
+        if (isWhy(f.tap) || f.hold) continue;
+        const ops = [...b.hold.down, ...f.tap.down, ...f.tap.up, ...b.hold.up];
+        if (c.routed && ops.some((o) => o.t === 'down' && printable(o.code))) continue;
+        cands.push({ name, ops });
+      }
+      // The first, the middle and the last spot that qualify (a whole half would be dozens of lines).
+      const picked = [...new Set([0, Math.floor((cands.length - 1) / 2), cands.length - 1])].filter((i) => i >= 0 && i < cands.length).map((i) => cands[i]);
+      if (picked.length) out.tests.push(`# Hold spots of ${c.kc(keycode)}: held, then a key at one of its spots pressed before the term ends; ${at.route.label}`);
+      for (const p of picked) withRoute(at.route, [`+${th}`, p.name, `-${th}`], p.ops);
+      if (!cands.length) out.notChecked.push(`hold spots of ${c.kc(keycode)}: no plain letter at one of its spots on the layer of the key`);
+    }
+  }
+}
 
 function capsWordTests(c: Ctx, routes: Map<number, Route>, spots: MatrixPos[], behaviorOf: (v: number) => Behavior, out: Section): void {
   const cwValue = c.spec.byName.get('QK_CAPS_WORD_TOGGLE')?.value;

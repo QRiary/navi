@@ -92,6 +92,12 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
     if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 18 }; // validate reports it
     return { ...d, schemaVersion: 18, firmware: { ...(f as Data), liftHeldMods: true } };
   },
+  // 18 → 19: firmware.oneShotCancel (off for older files); TapHoldSetting.holdOnSpots is optional.
+  18: (d) => {
+    const f = d.firmware;
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 19 }; // validate reports it
+    return { ...d, schemaVersion: 19, firmware: { ...(f as Data), oneShotCancel: false } };
+  },
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {

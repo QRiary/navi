@@ -121,6 +121,7 @@ export function createProject({ name, hardware, geometry, layers = 4, encoderCou
       buildConfig: {},
       layerKeysOnTop: LAYER_KEYS_ON_TOP_DEFAULT,
       liftHeldMods: LIFT_HELD_MODS_DEFAULT,
+      oneShotCancel: false,
       bootloaderReboot: BOOTLOADER_REBOOT_DEFAULT,
       tests: FIRMWARE_TESTS_DEFAULT,
       runTests: false,

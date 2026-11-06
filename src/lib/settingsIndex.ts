@@ -44,6 +44,14 @@ export const PROJECT_SETTING_ITEMS: readonly SettingItem[] = [
     route: { section: 'advanced', tab: 'navi' },
   },
   {
+    key: 'firmware.oneShotCancel',
+    label: () => t('A second tap cancels a one-shot modifier', 'Второе нажатие отменяет one-shot модификатор'),
+    hint: () => t('Tap a one-shot Shift (OSM) twice and the Shift is gone', 'Нажмите one-shot Shift (OSM) дважды — Shift отпускается'),
+    keywords: 'one-shot oneshot osm shift modifier cancel tap twice одноразовый модификатор отмена',
+    section: () => `${t('Advanced', 'Дополнительно')} › ${t('NAVI additions', 'Дополнения NAVI')}`,
+    route: { section: 'advanced', tab: 'navi' },
+  },
+  {
     key: 'firmware.bootloaderReboot',
     label: () => t('Let NAVI restart the keyboard into its bootloader', 'Разрешить NAVI перезагружать клавиатуру в загрузчик'),
     keywords: 'bootloader reboot загрузчик перезагрузка',
