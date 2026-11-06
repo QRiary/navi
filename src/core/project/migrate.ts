@@ -67,6 +67,12 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
   },
   // 13 → 14: Caps Word key rules (firmware.capsWordRules) are optional: unset keeps QMK's own list.
   13: (d) => ({ ...d, schemaVersion: 14 }),
+  // 14 → 15: NAVI may restart the keyboard into its bootloader (firmware.bootloaderReboot), off for older files.
+  14: (d) => {
+    const f = d.firmware;
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 15 }; // validate reports it
+    return { ...d, schemaVersion: 15, firmware: { ...(f as Data), bootloaderReboot: false } };
+  },
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {

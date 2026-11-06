@@ -163,8 +163,8 @@ describe('caps word rules: project file and layer changes', () => {
     const raw = JSON.parse(serializeProject(project()));
     raw.schemaVersion = 13;
     delete raw.firmware.capsWordRules;
-    expect(PROJECT_SCHEMA_VERSION).toBe(14);
-    expect(migrateProject(raw)).toMatchObject({ from: 13, data: { schemaVersion: 14 } });
+    expect(PROJECT_SCHEMA_VERSION).toBeGreaterThanOrEqual(14);
+    expect(migrateProject(raw)).toMatchObject({ from: 13, data: { schemaVersion: PROJECT_SCHEMA_VERSION } });
     const { project: loaded, issues } = validateProject(raw);
     expect(issues.filter((i) => i.level === 'error')).toEqual([]);
     expect(loaded!.firmware.capsWordRules).toBeUndefined();
