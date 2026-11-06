@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 10;
+export const PROJECT_SCHEMA_VERSION = 11;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -326,13 +326,23 @@ export interface KeyAlias {
  */
 export interface TapHoldSetting {
   id: string;
-  keycode: number;
+  /** The mod-tap / layer-tap keycodes sharing this setting (since format 11; one `keycode` before). */
+  keycodes: number[];
   /** tap-preferred: neither flag; balanced: PERMISSIVE_HOLD; hold-preferred: HOLD_ON_OTHER_KEY_PRESS. */
   flavor?: 'tap-preferred' | 'balanced' | 'hold-preferred';
   tappingTerm?: number;
   quickTapTerm?: number;
   /** Pressing one of these keys while the tap-hold key is undecided makes it a hold at once. */
   holdOnKeys?: number[];
+  /** Key lists (KeyList.id) whose keys also make it a hold at once (since format 11). */
+  holdOnLists?: string[];
+}
+
+/** A named list of keycodes that tap-hold settings point to instead of repeating the keys (since format 11). */
+export interface KeyList {
+  id: string;
+  name: string;
+  keys: number[];
 }
 
 /**
@@ -438,6 +448,8 @@ export interface Project {
   keyAliases: KeyAlias[];
   /** Per-keycode tap-hold settings (since format 7). */
   tapHolds: TapHoldSetting[];
+  /** Named key lists the tap-hold settings' hold keys point to (since format 11). */
+  keyLists: KeyList[];
   /** Tap-hold keys with any action in each slot, by their stand-in keycode (since format 8). */
   tapHoldActions: TapHoldAction[];
   /** Sequences after the leader key (QK_LEAD) — leader_end_user in keymap.c. */

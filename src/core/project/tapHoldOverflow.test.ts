@@ -66,12 +66,12 @@ describe('stand-ins past the 12 codes that are no key', () => {
   it('a stand-in on a named base moves when its key is set again, every key and setting with it', () => {
     let { p, keycodes } = putAll(createDilemmaProject(), ['C(KC_Z)', 'C(KC_Z)'], ctrl);
     expect(keycodes.map(baseOf)).toEqual([0x02, 0x02]);
-    p = { ...p, tapHolds: [{ id: 's', keycode: keycodes[0], flavor: 'hold-preferred' }] };
+    p = { ...p, tapHolds: [{ id: 's', keycodes: [keycodes[0]], flavor: 'hold-preferred' }] };
     const r = ensureTapHold(spec, p, q('C(KC_Z)'), ctrl, new Set([0x02]));
     expect(baseOf(r.keycode)).toBe(0x03);
     expect(activeKeymap(r.project).layers[0].keys.filter((v) => v === r.keycode)).toHaveLength(2);
     expect(activeKeymap(r.project).layers[0].keys).not.toContain(keycodes[0]);
-    expect(r.project.tapHolds[0].keycode).toBe(r.keycode);
+    expect(r.project.tapHolds[0].keycodes).toEqual([r.keycode]);
     expect(r.project.tapHoldActions).toHaveLength(1);
   });
 

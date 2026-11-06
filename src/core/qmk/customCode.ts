@@ -289,7 +289,9 @@ function checkKeymapC(text: string, generated: ReadonlySet<string>): CustomIssue
   });
   // In “own pipeline” mode the QMK hooks are the user's (they call the *_navi ones); NAVI's names are not.
   const pipeline = generated.has(NAVI_HOOKS.process_record_user);
-  for (const name of definedSymbols(text, pipeline ? PIPELINE_SYMBOLS : GENERATED_SYMBOLS)) {
+  // Key list arrays are named after the lists, so they can't be in the fixed lists above.
+  const keyLists = [...generated].filter((n) => n === 'navi_in_keys' || n.startsWith('navi_keys_'));
+  for (const name of definedSymbols(text, [...(pipeline ? PIPELINE_SYMBOLS : GENERATED_SYMBOLS), ...keyLists])) {
     if (generated.has(name)) {
       issues.push({
         line: 0,

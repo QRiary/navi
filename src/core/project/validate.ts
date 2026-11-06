@@ -9,7 +9,7 @@ import { listSpecVersions } from '../keycodes/spec';
 import { newId } from '../layout/geometry';
 import { allowedMakeVar, checkCustom, CUSTOM_FILES, CUSTOM_MAX, MAKE_VALUE_RE, PIPELINE_MAX_HEADERS, safeHeaderName, unsafeDefineValue, validCIdentifier } from '../qmk/customCode';
 import { ALIAS_LABEL_MAX, KEY_ALIASES_MAX } from './aliases';
-import { HOLD_ON_KEYS_MAX, TAP_HOLD_FLAVORS, TAP_HOLD_MAX, TAP_HOLD_TERM_MAX, TAP_HOLD_TERM_MIN } from './tapHolds';
+import { HOLD_ON_KEYS_MAX, KEY_LIST_KEYS_MAX, KEY_LIST_NAME_MAX, KEY_LISTS_MAX, TAP_HOLD_FLAVORS, TAP_HOLD_KEYCODES_MAX, TAP_HOLD_MAX, TAP_HOLD_TERM_MAX, TAP_HOLD_TERM_MIN } from './tapHolds';
 import { TAP_HOLD_ACTIONS_MAX } from './tapHoldActions';
 import { migrateProject } from './migrate';
 import {
@@ -21,6 +21,7 @@ import {
   type CustomKeycode,
   type KeyAlias,
   type TapHoldSetting,
+  type KeyList,
   type HoldAction,
   type TapHoldAction,
   type LeaderSequence,
@@ -656,16 +657,31 @@ export function validateProject(input: unknown): { project: Project | null; issu
     return { id: r.id(ao.id, `${p}.id`, 'ka'), label: r.str(ao.label, `${p}.label`, '', ALIAS_LABEL_MAX), keycode: r.keycode(ao.keycode, `${p}.keycode`) };
   });
   const optNum = (v: unknown, path: string, min: number, max: number) => (v === undefined || v === null ? undefined : r.num(v, path, min, max, min));
+  const keyLists: KeyList[] = r.arr(o.keyLists ?? [], 'keyLists', KEY_LISTS_MAX).map((x, i) => {
+    const p = `keyLists[${i}]`;
+    const lo = r.obj(x, p);
+    return { id: r.id(lo.id, `${p}.id`, 'kl'), name: r.str(lo.name, `${p}.name`, '', KEY_LIST_NAME_MAX), keys: r.arr(lo.keys ?? [], `${p}.keys`, KEY_LIST_KEYS_MAX).map((k, j) => r.keycode(k, `${p}.keys[${j}]`)) };
+  });
+  const listIds = new Set(keyLists.map((l) => l.id));
   const tapHolds: TapHoldSetting[] = r.arr(o.tapHolds ?? [], 'tapHolds', TAP_HOLD_MAX).map((x, i) => {
     const p = `tapHolds[${i}]`;
     const to = r.obj(x, p);
-    const out: TapHoldSetting = { id: r.id(to.id, `${p}.id`, 'th'), keycode: r.keycode(to.keycode, `${p}.keycode`) };
+    const keycodes = r.arr(to.keycodes ?? [], `${p}.keycodes`, TAP_HOLD_KEYCODES_MAX).map((k, j) => r.keycode(k, `${p}.keycodes[${j}]`));
+    const out: TapHoldSetting = { id: r.id(to.id, `${p}.id`, 'th'), keycodes };
     if (to.flavor !== undefined && to.flavor !== null) out.flavor = r.oneOf(to.flavor, `${p}.flavor`, TAP_HOLD_FLAVORS, 'tap-preferred');
     const term = optNum(to.tappingTerm, `${p}.tappingTerm`, TAP_HOLD_TERM_MIN, TAP_HOLD_TERM_MAX);
     if (term !== undefined) out.tappingTerm = term;
     const quick = optNum(to.quickTapTerm, `${p}.quickTapTerm`, 0, TAP_HOLD_TERM_MAX);
     if (quick !== undefined) out.quickTapTerm = quick;
     if (to.holdOnKeys !== undefined && to.holdOnKeys !== null) out.holdOnKeys = r.arr(to.holdOnKeys, `${p}.holdOnKeys`, HOLD_ON_KEYS_MAX).map((k, j) => r.keycode(k, `${p}.holdOnKeys[${j}]`));
+    if (to.holdOnLists !== undefined && to.holdOnLists !== null) {
+      const ids = r.arr(to.holdOnLists, `${p}.holdOnLists`, KEY_LISTS_MAX).filter((id, j) => {
+        if (typeof id === 'string' && listIds.has(id)) return true;
+        r.warn(`${p}.holdOnLists[${j}]`, 'unknown key list, dropped');
+        return false;
+      }) as string[];
+      if (ids.length) out.holdOnLists = ids;
+    }
     return out;
   });
   // Slot rules (no nested tap-hold keys, the stand-in fits its hold) are checked by checkTapHoldActions; the
@@ -737,6 +753,7 @@ export function validateProject(input: unknown): { project: Project | null; issu
     customKeycodes,
     keyAliases,
     tapHolds,
+    keyLists,
     tapHoldActions,
     leaderSequences,
     unicodeMap,

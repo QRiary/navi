@@ -160,7 +160,7 @@ describe('tap-hold keys with actions: generator', () => {
   it('a hold-preferred key gets the replay fix; settings of a stand-in use its name', () => {
     const p0 = project();
     const standIn = p0.tapHoldActions[1].keycode;
-    const p: Project = { ...p0, tapHolds: [{ id: 'a', keycode: standIn, flavor: 'hold-preferred' }, { id: 'b', keycode: q('LT(1, KC_B)'), holdOnKeys: [q('KC_C')] }] };
+    const p: Project = { ...p0, tapHolds: [{ id: 'a', keycodes: [standIn], flavor: 'hold-preferred' }, { id: 'b', keycodes: [q('LT(1, KC_B)')], holdOnKeys: [q('KC_C')] }] };
     const c = keymapC(p);
     expect(c).toContain('case NAVI_TH_1: return true;');
     expect(c).toContain('if (navi_interrupter[row][col] == KC_C) return true;');
