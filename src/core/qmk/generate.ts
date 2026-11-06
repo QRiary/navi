@@ -222,7 +222,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const aliasOf = new Map<number, string>();
   aliases.defines.forEach((a) => aliasOf.has(a.keycode) || aliasOf.set(a.keycode, a.cName));
   const kc = (v: number) => aliasOf.get(v) ?? qmkExpr(v);
-  const tdC = tapDanceCode(tdSorted, kc, cString);
+  const tdC = tapDanceCode(tdSorted, kc, cString, lang);
   const tdReserved = tapDanceReservedNames(project, keymap, [...tdC.symbols, 'navi_send', 'navi_sending', ...standInName.values()]);
   const issues: AdvancedIssue[] = [
     ...checkTapDances(spec, project.tapDances, tdReserved),
@@ -236,6 +236,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   issues.push(...checkTapHolds(spec, project));
   issues.push(...checkTapHoldActions(spec, project, projectOwnCodeRefs(spec, project, ownCode)));
   issues.push(...checkLanguages(project, keymap));
+  issues.push(...tdC.issues);
   const langNames = new Map(project.languages.map((l) => [l.id, `NAVI_LANG_${languageCName(l)}`]));
   const tapHold = planTapHolds(effectiveTapHolds(spec, project), kc, project.keyLists, (id) => langNames.get(id));
   const tracked = replayTracked(tapHold);
