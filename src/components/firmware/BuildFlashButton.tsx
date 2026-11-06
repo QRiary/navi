@@ -29,6 +29,8 @@ function label(phase: BuildFlashPhase, since: number): string {
       return t('check the files', 'проверьте файлы');
     case 'writing':
       return t('writing files…', 'запись файлов…');
+    case 'testing':
+      return `${t('testing', 'тесты')} ${elapsed(since)}`;
     case 'building':
       return `${t('building', 'сборка')} ${elapsed(since)}`;
     case 'restarting':
@@ -61,7 +63,7 @@ export function BuildFlashButton() {
     if (navi && !q.env && !q.detecting) void q.detect();
   }, []);
   useEffect(() => {
-    if (phase !== 'building') return;
+    if (phase !== 'building' && phase !== 'testing') return;
     const id = setInterval(() => tick((n) => n + 1), 1000);
     return () => clearInterval(id);
   }, [phase]);

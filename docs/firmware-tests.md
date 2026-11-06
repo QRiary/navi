@@ -92,3 +92,47 @@ What the computer would get, decoded as a US QWERTY layout types it:
 - Nothing typed at all: `∅`.
 
 A key held while another is pressed shows once, when it's first pressed (an auto-repeating OS isn't modeled).
+
+## NAVI's runner
+
+Firmware → Flash has the tick "Run the firmware tests before flashing" (`firmware.runTests`) and a "Run firmware
+tests" button. With the tick on, "Build + flash" runs the tests after writing the files and before building; anything
+but a pass stops it before the keyboard is touched, with the mismatches (or the compiler errors) behind the error
+toast's details.
+
+**What it needs**: `navi_tests.txt` in the keymap folder ("Write firmware tests" on), and QMK in WSL or on Linux:
+the test build is QMK's own `builddefs/build_test.mk` (GoogleTest, the host compiler, `fork()`), which QMK MSYS can't
+build.
+
+**Security**: the tests compile the keymap's C, your own code included, into a program that runs on this PC (firmware
+runs on the keyboard; this doesn't). So a run is refused wherever a build would be: while an imported project's own
+code waits for "allow" (`firmware.customReview`), when the keymap folder or `users/<keymap>` has files the allowlist
+can't pass and the folder isn't trusted, and when QMK's dry run (`qmk compile -n`) would build another folder than
+the one NAVI shows (`runFirmwareTests` in `electron/qmk.cjs`).
+
+**What it builds** (`electron/firmwareTests.cjs`): a temp folder (`/tmp/navi-tests-*` inside the WSL distro, removed
+after the run) with the player (`electron/firmwareTests/navi_tests_player.cpp`), the run script and a board stand-in:
+
+- `config.h`: the project's matrix size in place of the test framework's 4 x 10, `QMK_KEYBOARD_H` as `quantum.h`,
+  then the keymap folder's own `config.h`.
+- `test.mk`: the keymap folder's `rules.mk` (own pipeline: yours, with `navi_rules.mk` and your `SRC` files), the
+  keymap folder on `VPATH`, then these turned off, since the test platform has no stand-in for them and none changes
+  what a key types: RGB Matrix, RGB Light, LED Matrix, backlight, OLED, ST7565, Quantum Painter, haptic, audio,
+  encoders, split, raw HID, VIA / Vial / dynamic keymap (it would replace the test fixture's key lookup), pointing
+  devices, PS/2, joystick, digitizer, MIDI, Bluetooth, DIP switches, NKRO (the player reads 6-key reports), console,
+  LTO, steno, virtual serial, sleep LED, WPM.
+- Not read: keyboard-level files (`keyboards/<kb>/config.h`, `rules.mk`, `keyboard.json`), so a keyboard's own
+  `TAPPING_TERM` or features are missing from the test build; `users/<keymap>` isn't on `VPATH`. A split board is
+  built as its whole matrix on one board; `is_keyboard_left()` and `is_keyboard_master()` are QMK's defaults for a
+  board that isn't split. Code that needs any of the features above (an RGB call outside `#ifdef RGB_MATRIX_ENABLE`)
+  can't build, and the run says so with the first compiler errors.
+
+Nothing is written into `qmk_firmware` or the keymap folder. The player registers every spot of every layer from the
+built keymap (`keycode_at_keymap_location_raw`), plays each scenario in a forked child (30 s at most), and prints one
+block per mismatch (`navi_tests.txt:<line>: <steps>`, `  expected: ...`, `  actual: ...`) and a last line
+`navi tests: <passed> passed, <failed> failed`. The result comes only from that line and the exit code: pass, fail
+(with the blocks), can't build (with the first error lines), or an error (a line of `navi_tests.txt` it can't read, a
+crash, no summary).
+
+`npm run test:fw` checks the runner end to end: sample keymaps NAVI generates (`tests/firmware-tests/samples.test.ts`)
+with hand-written `navi_tests.txt` files, built and played exactly as the app does.

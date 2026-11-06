@@ -15,6 +15,8 @@ export interface TabDef {
   group?: () => string;
   /** Tooltip, also searched. */
   tip?: () => string;
+  /** Extra words the search finds the tab by (not shown): the settings on it, in both languages. */
+  keywords?: string;
 }
 
 export interface SectionDef {
@@ -89,7 +91,11 @@ export const SECTIONS: readonly SectionDef[] = [
       { id: 'features', title: () => t('3 · Features', '3 · Функции') },
       { id: 'files', title: () => t('4 · Keymap files', '4 · Файлы keymap') },
       { id: 'build', title: () => t('5 · Build', '5 · Сборка') },
-      { id: 'flash', title: () => t('6 · Flash', '6 · Прошить') },
+      {
+        id: 'flash',
+        title: () => t('6 · Flash', '6 · Прошить'),
+        keywords: 'firmware tests navi_tests.txt run the firmware tests before flashing bootloader reboot тесты прошивки запускать перед прошивкой перезагрузка в загрузчик',
+      },
     ],
   },
   { id: 'device', title: () => t('Device', 'Устройство'), icon: Cable },

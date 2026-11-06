@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld('navi', {
     writeKeymap: invoke('navi:qmk:write-keymap'),
     writeKeyboard: invoke('navi:qmk:write-keyboard'),
     compile: invoke('navi:qmk:compile'),
+    runTests: invoke('navi:qmk:run-tests'),
     run: invoke('navi:qmk:run'),
     cancel: invoke('navi:qmk:cancel'),
     onStarted: (cb) => subscribe('navi:qmk:started', cb),

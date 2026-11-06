@@ -74,6 +74,11 @@ describe('sections registry', () => {
 });
 
 describe('global search', () => {
+  it('finds Firmware › Flash by the settings on it (firmware tests, bootloader reboot), in both languages', () => {
+    for (const query of ['firmware tests', 'тесты прошивки', 'bootloader reboot'])
+      expect(searchItems(index(), query).some((h) => h.kind === 'page' && h.route.section === 'firmware' && h.route.tab === 'flash')).toBe(true);
+  });
+
   it('finds a key by its name and says where it is', () => {
     const hits = searchItems(index(), 'left');
     const key = hits.find((h) => h.kind === 'key');
