@@ -16,6 +16,9 @@ import {
   type Project,
 } from './types';
 
+/** New projects: “layer keys bring their layer to the top” (firmware.layerKeysOnTop). */
+export const LAYER_KEYS_ON_TOP_DEFAULT = false;
+
 export const KC_NO = 0x0000;
 export const KC_TRNS = 0x0001;
 
@@ -96,6 +99,7 @@ export function createProject({ name, hardware, geometry, layers = 4, encoderCou
       flags: {},
       buildFeatures: {},
       buildConfig: {},
+      layerKeysOnTop: LAYER_KEYS_ON_TOP_DEFAULT,
     },
     device: null,
   };

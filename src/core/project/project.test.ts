@@ -4,7 +4,7 @@ import { loadSpec } from '../keycodes/spec';
 import { checkGeometry, geometryBounds, hitKey, keyCenter, knobKey } from '../layout/geometry';
 import { dilemma4x6Clone } from '../layout/templates';
 import { diffProjects, isEmptyDiff } from './diff';
-import { createBlankProject, createDilemmaProject, KC_NO, KC_TRNS } from './factory';
+import { createBlankProject, createDilemmaProject, KC_NO, KC_TRNS, LAYER_KEYS_ON_TOP_DEFAULT } from './factory';
 import { migrateProject } from './migrate';
 import { PROJECT_SCHEMA_VERSION } from './types';
 import {
@@ -248,9 +248,27 @@ describe('format migrations', () => {
     delete v4.keyAliases;
     const { project: loaded, issues } = validateProject(v4);
     expect(issues.filter((i) => i.level === 'error')).toEqual([]);
-    expect(PROJECT_SCHEMA_VERSION).toBe(5);
-    expect(loaded?.schemaVersion).toBe(5);
+    expect(loaded?.schemaVersion).toBe(PROJECT_SCHEMA_VERSION);
     expect(loaded?.keyAliases).toEqual([]);
+  });
+
+  it('a format 5 file opens with “layer keys bring their layer to the top” off', () => {
+    const { p } = project();
+    const v5 = JSON.parse(serializeProject(p));
+    v5.schemaVersion = 5;
+    delete v5.firmware.layerKeysOnTop;
+    expect(migrateProject(v5)).toMatchObject({ from: 5, data: { schemaVersion: 6, firmware: { layerKeysOnTop: false } } });
+    const { project: loaded, issues } = validateProject(v5);
+    expect(issues.filter((i) => i.level === 'error')).toEqual([]);
+    expect(PROJECT_SCHEMA_VERSION).toBe(6);
+    expect(loaded?.firmware.layerKeysOnTop).toBe(false);
+  });
+
+  it('“layer keys bring their layer to the top” survives a save and load; new projects use the default', () => {
+    const { p } = project();
+    expect(p.firmware.layerKeysOnTop).toBe(LAYER_KEYS_ON_TOP_DEFAULT);
+    const on = { ...p, firmware: { ...p.firmware, layerKeysOnTop: true } };
+    expect(parseProjectText(serializeProject(on)).project?.firmware.layerKeysOnTop).toBe(true);
   });
 
   it('key aliases survive a save and load', () => {

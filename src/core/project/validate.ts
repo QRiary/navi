@@ -484,6 +484,7 @@ function readFirmware(r: Reader, v: unknown): FirmwareConfig {
     custom,
     customReview: custom && o.customReview === true ? true : undefined,
     pipeline,
+    layerKeysOnTop: r.bool(o.layerKeysOnTop ?? false, 'firmware.layerKeysOnTop', false),
     keyboard: keyboard || null,
     keymap,
     keycodeSpec,
