@@ -129,6 +129,7 @@ export function createProject({ name, hardware, geometry, layers = 4, encoderCou
       tests: FIRMWARE_TESTS_DEFAULT,
       runTests: false,
       secretsHeader: SECRETS_HEADER_DEFAULT,
+      indicatorLeds: [],
       autoRepeat: { ...AUTO_REPEAT_DEFAULT },
       textRoute: TEXT_ROUTE_DEFAULT,
     },

@@ -106,6 +106,12 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
     if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 21 }; // validate reports it
     return { ...d, schemaVersion: 21, firmware: { ...(f as Data), secretsHeader: SECRETS_HEADER_DEFAULT } };
   },
+  // 21 → 22: indicator LEDs (firmware.indicatorLeds), none for older files.
+  21: (d) => {
+    const f = d.firmware;
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 22 }; // validate reports it
+    return { ...d, schemaVersion: 22, firmware: { ...(f as Data), indicatorLeds: [] } };
+  },
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {

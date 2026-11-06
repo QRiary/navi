@@ -40,6 +40,8 @@ import { checkSecrets, secretsCode } from './secretText';
 import { isTextStep, textArg } from '../project/textSteps';
 import { layoutMacro, renderLayers, textLayout } from './layoutText';
 import { FIRMWARE_TESTS_FILE, firmwareTestsFile } from './firmwareTests';
+import { indicatorLedCode, indicatorLedConfig, indicatorLedRecordLine, LED_SPLIT_IDS, LED_SYMBOLS, userSplitIds, writtenLeds } from './indicatorLeds';
+import { checkIndicatorLeds } from '../project/indicatorLeds';
 
 export interface GeneratedFile {
   name: 'keymap.c' | 'rules.mk' | 'config.h' | 'keymap.json' | 'readme.md' | 'navi.h' | 'navi_rules.mk' | 'navi_config.h' | 'navi_tests.txt';
@@ -281,6 +283,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   issues.push(...aliases.issues);
   issues.push(...checkTapHolds(spec, project));
   issues.push(...checkTapHoldActions(spec, project, projectOwnCodeRefs(spec, project, ownCode)));
+  for (const i of checkIndicatorLeds(project)) issues.push({ level: i.level, where: i.led < 0 ? 'indicator LEDs' : `indicator LED ${i.led}`, message: i.message });
   issues.push(...checkLanguages(project, keymap));
   issues.push(...oneShotCancelIssues(project));
   issues.push(...checkLanguageActions(project));
@@ -597,7 +600,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push(...layerOnTopState());
     c.push(...layerOnTopCallback(hookName('layer_state_set_user'), !!lang?.layers));
   }
-  if (lang) c.push(...languageSwitchCode({ project, plan: lang, kc, layersOnTop, layerHook: hookName('layer_state_set_user'), postInit: hookName('keyboard_post_init_user'), spec }));
+  if (lang) c.push(...languageSwitchCode({ project, plan: lang, kc, layersOnTop, layerHook: hookName('layer_state_set_user'), spec }));
   // Keys ticked “repeat while held”: one switch on press and release; the rest keep the press-only switch.
   const repeatMacros = macros.filter((m) => m.repeat === true);
   const repeatCustoms = sendStringCustoms.filter((ck) => ck.repeat === true);
@@ -640,10 +643,18 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const standInCheck = pipeline || thActions.length > 0;
   if (standInCheck) c.push(...standInCheckCode([...standInName.values()]));
   const osCancel = oneShotCancelActive(project);
-  const recordHook = keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang || viaLift || osCancel;
   if (osCancel) c.push(...oneShotCancelState());
+  // Indicator LEDs: worked out on every housekeeping pass; toggle keys seen in process_record.
+  const ledsOn = writtenLeds(project.firmware.indicatorLeds).length > 0;
+  if (ledsOn) c.push(...indicatorLedCode({ leds: project.firmware.indicatorLeds, layersOn: layersOnTop || pipeline ? 'navi_layers_on()' : 'layer_state', housekeeping: hookName('housekeeping_task_user') }));
+  const ledRecord = indicatorLedRecordLine(project.firmware.indicatorLeds);
+  // keyboard_post_init: what runs once at power-on (languages, LEDs).
+  const postInit = [...(lang?.layers ? ['    layer_state_set(layer_state); // the first language’s layer on at power-on'] : []), ...(ledsOn ? ['    navi_leds_init(); // indicator LED pins (and the split link)'] : [])];
+  if (postInit.length) c.push(`void ${hookName('keyboard_post_init_user')}(void) {`, ...postInit, '}', '');
+  const recordHook = keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang || viaLift || osCancel || ledRecord.length > 0;
   if (recordHook) {
     c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
+    c.push(...ledRecord);
     if (layersOnTop) c.push('    navi_layer_keys(keycode, record); // layer keys bring their layer to the top');
     if (tdC.keys) {
       c.push(
@@ -713,7 +724,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const hookUsed: Record<keyof typeof NAVI_HOOKS, boolean> = {
     process_record_user: recordHook,
     layer_state_set_user: layersOnTop || !!lang?.layers,
-    keyboard_post_init_user: !!lang?.layers,
+    keyboard_post_init_user: postInit.length > 0,
+    housekeeping_task_user: ledsOn,
     get_tapping_term: tappingTerms,
     get_quick_tap_term: quickTap,
     get_hold_on_other_key_press: holdPress,
@@ -743,6 +755,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       { hook: 'leader_end_user', guard: 'LEADER_ENABLE', lines: ['void leader_end_navi(void) {}'] },
       { hook: 'layer_state_set_user', lines: layerOnTopStubs(!hookUsed.layer_state_set_user) },
       { hook: 'keyboard_post_init_user', lines: ['void keyboard_post_init_navi(void) {}'] },
+      { hook: 'housekeeping_task_user', lines: ['void housekeeping_task_navi(void) {}', 'void navi_leds_update(void) {}', 'void navi_leds_mark_toggled(uint8_t layer) {', '    (void)layer;', '}'] },
       { hook: 'caps_word_press_user', lines: capsWordCode({ rules: CAPS_WORD_QMK_DEFAULT, keyLists: [], kc, layerIds, fn: 'caps_word_press_navi' }).slice(1, -1) },
     ];
     // Languages may write the layer callback without “layer keys on top”: navi_layers_on / navi_layer_off still stubs.
@@ -775,6 +788,12 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     h.push('layer_state_t layer_state_set_navi(layer_state_t state);');
     h.push('void keyboard_post_init_navi(void);');
     h.push('bool caps_word_press_navi(uint16_t keycode);');
+    h.push('void housekeeping_task_navi(void);');
+    h.push('// Indicator LEDs (Lighting → indicator LEDs): define navi_led_user to light the LEDs set to “your code says so”;');
+    h.push('// call navi_leds_update() after that state changed, navi_leds_mark_toggled(layer) for a layer you turn on yourself.');
+    h.push('bool navi_led_user(uint8_t led);');
+    h.push('void navi_leds_update(void);');
+    h.push('void navi_leds_mark_toggled(uint8_t layer);');
     h.push('layer_state_t navi_layers_on(void); // layers turned on, hidden ones included');
     h.push('void navi_layer_off(uint8_t layer); // also turns off a hidden layer');
     h.push('// Call it first from your raw_hid_receive: if (navi_raw_hid_receive(data, length)) return; (true = NAVI\'s own packet, handled)');
@@ -809,6 +828,15 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   // A Unicode text route needs QMK's Unicode input (UNICODEMAP brings it too).
   const routeMode = lang?.routed ? ROUTE_UNICODE_MODE[lang.route] : undefined;
   if (routeMode && !unicodeTable.length) rules.UNICODE_ENABLE = 'yes';
+  // An LED showing Caps Word in a build without it never lights (own pipeline: the user's rules.mk may turn it on).
+  const capsWordLed = writtenLeds(project.firmware.indicatorLeds).some((x) => x.led.states.includes('caps-word'));
+  if (capsWordLed && !pipeline && rules.CAPS_WORD_ENABLE !== 'yes' && !/^\s*CAPS_WORD_ENABLE\s*=\s*yes\b/m.test(project.firmware.custom?.['rules.mk'] ?? '')) {
+    issues.push({
+      level: 'warning',
+      where: 'indicator LEDs',
+      message: { en: 'An LED shows Caps Word, but Caps Word is not in this build: put CW_TOGG on a key or turn Caps Word on in Advanced.', ru: 'Светодиод показывает Caps Word, но Caps Word нет в сборке: поставьте CW_TOGG на клавишу или включите Caps Word в «Расширенном».' },
+    });
+  }
   // Own pipeline: rules.mk / config.h are the user's and include these files (the line to add is in the comment).
   // $(dir $(lastword $(MAKEFILE_LIST))) is the folder of the makefile being read — the keymap folder, wherever it is.
   const rulesHint = pipeline ? ['# Your rules.mk includes this file; add as its first line:', '#   include $(dir $(lastword $(MAKEFILE_LIST)))navi_rules.mk'] : [];
@@ -863,6 +891,23 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (permissive) define('PERMISSIVE_HOLD_PER_KEY');
   if (routeMode) define('UNICODE_SELECTED_MODES', routeMode);
   if (via && keymap.layers.length !== 4 && !('DYNAMIC_KEYMAP_LAYER_COUNT' in project.firmware.buildConfig)) define('DYNAMIC_KEYMAP_LAYER_COUNT', keymap.layers.length);
+  if (ledsOn) {
+    // The user's own split transactions: their SPLIT_TRANSACTION_IDS_USER must list NAVI's id (never a silent clash).
+    const ownConfig = project.firmware.customReview ? [] : [project.firmware.custom?.['config.h'] ?? ''];
+    const ownFiles = (ownCode ?? []).filter((f) => !/(^|\/)navi_config\.h$/.test(f.path)).map((f) => f.text);
+    const ids = userSplitIds([...ownConfig, ...ownFiles]);
+    cfg.push(...indicatorLedConfig(ids.defines));
+    if (ids.defines && !ids.namesNavi) {
+      issues.push({
+        level: 'warning',
+        where: 'indicator LEDs · config.h',
+        message: {
+          en: `Your config defines SPLIT_TRANSACTION_IDS_USER: add ${LED_SPLIT_IDS} to its list (#define SPLIT_TRANSACTION_IDS_USER MY_SYNC, ${LED_SPLIT_IDS}), or a split build fails on NAVI_LEDS_SYNC.`,
+          ru: `Ваш config задаёт SPLIT_TRANSACTION_IDS_USER: добавьте в его список ${LED_SPLIT_IDS} (#define SPLIT_TRANSACTION_IDS_USER MY_SYNC, ${LED_SPLIT_IDS}), иначе сборка сплита упадёт на NAVI_LEDS_SYNC.`,
+        },
+      });
+    }
+  }
   cfg.push('');
 
   // ── the user's own lines: at the end of each file ─────────────────
@@ -911,6 +956,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (!pipeline && leaders.length) generatedSymbols.add('leader_end_user');
   if (!pipeline && hookUsed.layer_state_set_user) generatedSymbols.add('layer_state_set_user');
   if (!pipeline && hookUsed.keyboard_post_init_user) generatedSymbols.add('keyboard_post_init_user');
+  if (!pipeline && ledsOn) generatedSymbols.add('housekeeping_task_user');
+  if (pipeline || ledsOn) for (const name of LED_SYMBOLS) generatedSymbols.add(name);
   if (!pipeline && capsRules) generatedSymbols.add('caps_word_press_user');
   if (lang) {
     for (const name of [...LANGUAGE_SYMBOLS, 'navi_lang', 'navi_language_key']) generatedSymbols.add(name);
@@ -965,8 +1012,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
         hook: 'process_record_user',
         call: 'if (!process_record_navi(keycode, record)) return false;',
         why: {
-          en: [keysHandled && 'custom keycodes and macros', tdC.keys && 'tap dances play their keys at the dance key position', tapHoldInCode && 'tap-hold keys (call it first: it plays their actions)', layersOnTop && 'layer keys bring their layer to the top: it must see layer key releases', osCancel && 'a second tap of a one-shot mod key cancels it'].filter(Boolean).join('; '),
-          ru: [keysHandled && 'свои keycodes и макросы', tdC.keys && 'tap dance играют свои клавиши на месте клавиши TD', tapHoldInCode && 'тап-холд клавиши (вызывайте её первой: она играет их действия)', layersOnTop && 'клавиши слоёв поднимают свой слой наверх: она должна видеть отпускание клавиш слоёв', osCancel && 'второе нажатие one-shot модификатора отменяет его'].filter(Boolean).join('; '),
+          en: [keysHandled && 'custom keycodes and macros', tdC.keys && 'tap dances play their keys at the dance key position', tapHoldInCode && 'tap-hold keys (call it first: it plays their actions)', layersOnTop && 'layer keys bring their layer to the top: it must see layer key releases', osCancel && 'a second tap of a one-shot mod key cancels it', ledRecord.length > 0 && 'indicator LEDs see toggle keys'].filter(Boolean).join('; '),
+          ru: [keysHandled && 'свои keycodes и макросы', tdC.keys && 'tap dance играют свои клавиши на месте клавиши TD', tapHoldInCode && 'тап-холд клавиши (вызывайте её первой: она играет их действия)', layersOnTop && 'клавиши слоёв поднимают свой слой наверх: она должна видеть отпускание клавиш слоёв', osCancel && 'второе нажатие one-shot модификатора отменяет его', ledRecord.length > 0 && 'светодиоды-индикаторы видят клавиши переключения слоёв'].filter(Boolean).join('; '),
         },
       },
       { hook: 'get_tapping_term', call: 'return get_tapping_term_navi(keycode, record);', why: { en: 'TAPPING_TERM_PER_KEY is on — without it the build fails', ru: 'включён TAPPING_TERM_PER_KEY — без неё сборка не пройдёт' } },
@@ -994,7 +1041,15 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
           ru: [layersOnTop && 'клавиши слоёв поднимают свой слой наверх', lang?.layers && 'слой текущего языка остаётся включённым'].filter(Boolean).join('; '),
         },
       },
-      { hook: 'keyboard_post_init_user', call: 'keyboard_post_init_navi();', why: { en: 'the first language’s layer turns on at power-on', ru: 'слой первого языка включается при включении клавиатуры' } },
+      {
+        hook: 'keyboard_post_init_user',
+        call: 'keyboard_post_init_navi();',
+        why: {
+          en: [lang?.layers && 'the first language’s layer turns on at power-on', ledsOn && 'indicator LED pins are set up'].filter(Boolean).join('; '),
+          ru: [lang?.layers && 'слой первого языка включается при включении клавиатуры', ledsOn && 'настраиваются пины светодиодов-индикаторов'].filter(Boolean).join('; '),
+        },
+      },
+      { hook: 'housekeeping_task_user', call: 'housekeeping_task_navi();', why: { en: 'indicator LEDs follow their states — without it the build still passes, but the LEDs never change', ru: 'светодиоды-индикаторы следуют своим состояниям — без неё сборка пройдёт, но светодиоды не будут меняться' } },
       { hook: 'caps_word_press_user', call: 'return caps_word_press_navi(keycode);', why: { en: 'Caps Word key rules', ru: 'правила клавиш Caps Word' } },
     ];
     // Said only while no file of the user's own C calls it (ownCode null = not read: warn).

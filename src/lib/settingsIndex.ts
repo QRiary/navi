@@ -66,6 +66,14 @@ export const PROJECT_SETTING_ITEMS: readonly SettingItem[] = [
     section: () => `${t('Firmware', 'Прошивка')} › ${t('6 · Flash', '6 · Прошить')}`,
     route: { section: 'firmware', tab: 'flash' },
   },
+  {
+    key: 'firmware.indicatorLeds',
+    label: () => t('Indicator LEDs', 'Светодиоды-индикаторы'),
+    hint: () => t('LEDs on controller pins lit by Caps Lock, Caps Word, one-shot modifiers, toggled layers or your code', 'Светодиоды на выводах контроллера: Caps Lock, Caps Word, one-shot модификаторы, включённые слои или ваш код'),
+    keywords: 'led leds indicator pin gpio caps lock caps word one-shot oneshot toggle layer светодиод индикатор пин',
+    section: () => t('Lighting', 'Подсветка'),
+    route: { section: 'lighting' },
+  },
 ];
 
 const palette = () => t('palette', 'палитра');
