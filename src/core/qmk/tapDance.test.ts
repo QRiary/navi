@@ -60,7 +60,8 @@ describe('tap dance kinds: generator', () => {
     expect(c).toContain('.on_each_tap = navi_td_every_tap');
     expect(c).toContain('switch ((state->count - 1) % 2)');
     expect(c).toContain('send_string("->")');
-    expect(c).toContain('navi_td_mods_off');
+    expect(c).toContain('navi_td_mods_off(MOD_MASK_CSAG)'); // a version with text: all mods off
+    expect(c).toContain('navi_td_mods_off(MOD_MASK_AG)'); // no mods' version: GUI / Alt off, Shift / Ctrl kept (H7)
     expect(c).not.toContain('navi_send');
     expect(c).not.toContain('navi_td_keys');
     const k = file(project([everyKeys]), 'keymap.c');

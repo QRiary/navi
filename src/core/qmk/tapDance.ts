@@ -80,8 +80,9 @@ function everyTapBody(everyTap: TapDance[], kc: (v: number) => string, cString: 
           c.push('                        navi_td_mods_on(held);', '                        break;', '                    }');
         }
         const none = st.none ?? [];
+        // Shift / Ctrl held without a version of their own still apply to it (H7); GUI and Alt never do
         if (hasText(none)) {
-          c.push('                    {', '                        navi_td_held_t held = navi_td_mods_off(MOD_MASK_CSAG);');
+          c.push('                    {', '                        navi_td_held_t held = navi_td_mods_off(MOD_MASK_AG);');
           c.push(...play(none, '                        '));
           c.push('                        navi_td_mods_on(held);', '                    }');
         } else c.push(...play(none, '                    '));
@@ -276,8 +277,8 @@ export function tapDanceCode(tds: TapDance[], kc: (v: number) => string, cString
       sym('navi_td_held_t', 'navi_td_mods_off', 'navi_td_mods_on');
       c.push(
         '// Mods let go while a step plays (real, weak and one-shot), navi_td_mods_on puts them back: Shift / Ctrl for a',
-        '// step they picked, every mod for a step with text (a GUI or Alt left on by a home row mod would turn it into',
-        '// shortcuts).',
+        '// version they picked, and GUI / Alt too for a step with text (a home row mod that misfired would turn the text',
+        '// into shortcuts).',
         'typedef struct {',
         '    uint8_t mods, weak, oneshot;',
         '} navi_td_held_t;',
