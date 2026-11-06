@@ -52,7 +52,7 @@ try {
   const split = await play('split', 10, 6);
   check('split: a split board builds as one matrix and both halves type', split.status === 'pass' && split.passed === 1, split);
 
-  for (const [name, rows, cols] of [['generated-plain', 4, 10], ['generated-split', 10, 6]]) {
+  for (const [name, rows, cols] of [['generated-plain', 4, 10], ['generated-split', 10, 6], ['generated-languages', 4, 10]]) {
     const gen = await play(name, rows, cols);
     check(`${name}: NAVI's own navi_tests.txt passes whole on the firmware it wrote`, gen.status === 'pass' && gen.passed > 0, gen);
   }

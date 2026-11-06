@@ -98,6 +98,8 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
     if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 19 }; // validate reports it
     return { ...d, schemaVersion: 19, firmware: { ...(f as Data), oneShotCancel: false } };
   },
+  // 19 → 20: an own keycode's action may be per language (`by-language`); older files have none, nothing to change.
+  19: (d) => ({ ...d, schemaVersion: 20 }),
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {

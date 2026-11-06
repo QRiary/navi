@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 19;
+export const PROJECT_SCHEMA_VERSION = 20;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -295,6 +295,26 @@ export interface KeyOverride {
 
 export type CustomAction = { type: 'none' } | { type: 'send-string'; text: string; heldMods?: HeldMods } | { type: 'tap'; keycode: number };
 
+/** One language's action of a per-language own keycode. */
+export interface LanguageActionEntry {
+  /** Language id (Project.languages), so moving languages keeps it; removing the language drops the entry. */
+  language: string;
+  action: CustomAction;
+}
+
+/**
+ * Per-language action (since format 19): the action of the language that is on when the key fires
+ * (`navi_language()` in the C); a language without an entry of its own plays `other`.
+ */
+export interface ByLanguageAction {
+  type: 'by-language';
+  byLanguage: LanguageActionEntry[];
+  other: CustomAction;
+}
+
+/** What an own keycode does: one action, or one per language. */
+export type CustomKeycodeAction = CustomAction | ByLanguageAction;
+
 /** Leader key sequence: QK_LEAD, then 1–5 keys → action. */
 export interface LeaderSequence {
   id: string;
@@ -318,7 +338,7 @@ export interface CustomKeycode {
   /** C identifier: MY_KEY. */
   name: string;
   description: string;
-  action: CustomAction;
+  action: CustomKeycodeAction;
   /** Repeat while held; works only with an action (a ticked keycode with action none is kept but ignored). */
   repeat?: boolean;
 }

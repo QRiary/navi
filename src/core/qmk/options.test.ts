@@ -39,8 +39,8 @@ const gen = (p: Project) => generateKeymap({ project: p, keymap: activeKeymap(p)
 const keymapC = (p: Project) => gen(p).files.find((f) => f.name === 'keymap.c')!.text;
 
 describe('options: project format', () => {
-  it('the schema is 19; new projects have no one-shot cancel and no spots', () => {
-    expect(PROJECT_SCHEMA_VERSION).toBe(19);
+  it('the schema is 19 or later; new projects have no one-shot cancel and no spots', () => {
+    expect(PROJECT_SCHEMA_VERSION).toBeGreaterThanOrEqual(19);
     expect(createBlankProject('x', 2, 2, false).firmware.oneShotCancel).toBe(false);
   });
 
@@ -49,7 +49,7 @@ describe('options: project format', () => {
     v18.schemaVersion = 18;
     delete v18.firmware.oneShotCancel;
     const r = migrateProject(v18);
-    expect(r).toMatchObject({ from: 18, data: { schemaVersion: 19, firmware: { oneShotCancel: false } } });
+    expect(r).toMatchObject({ from: 18, data: { schemaVersion: PROJECT_SCHEMA_VERSION, firmware: { oneShotCancel: false } } });
     expect(validateProject('data' in r ? r.data : {}).project?.firmware.oneShotCancel).toBe(false);
   });
 

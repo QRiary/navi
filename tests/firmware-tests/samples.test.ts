@@ -16,6 +16,7 @@ import { parseQmk } from '../../src/core/keycodes/codec';
 import { loadSpec } from '../../src/core/keycodes/spec';
 import { createBlankProject, createDilemmaProject } from '../../src/core/project/factory';
 import { activeKeymap, setKeycodes } from '../../src/core/project/ops';
+import { ensureTapHold } from '../../src/core/project/tapHoldActions';
 import type { Project } from '../../src/core/project/types';
 import { generateKeymap } from '../../src/core/qmk/generate';
 
@@ -95,6 +96,23 @@ const ownC = (extra: string[]) =>
     '',
   ].join('\n');
 
+/** Per-language custom keycode: "'s" in English (the first language, the tests' one), "'" in the other; also as a tap-hold key's tap. */
+function languages(): Project {
+  const base = plain();
+  const th = ensureTapHold(spec, base, q('QK_USER_0'), { type: 'layer', layer: 1, mods: 0 });
+  const p = withKeys(th.project, [[0, 2, 0, 'QK_USER_0']]);
+  activeKeymap(p).layers[0]!.keys[2 * 10 + 1] = th.keycode;
+  return {
+    ...p,
+    languages: [
+      { id: 'en', name: 'English', code: 'en', plainKeys: true },
+      { id: 'xx', name: 'Other', code: 'xx', plainKeys: false },
+    ],
+    customKeycodes: [{ id: 'apos', name: 'APOS', description: '', action: { type: 'by-language', byLanguage: [{ language: 'en', action: { type: 'send-string', text: "'s" } }], other: { type: 'send-string', text: "'" } } }],
+    firmware: { ...p.firmware, textRoute: 'wincompose' },
+  };
+}
+
 function pipeline(name: string): Project {
   const p = withKeys(createBlankProject(name, 4, 10, false), [
     [0, 0, 0, 'KC_A'],
@@ -147,6 +165,7 @@ it.skipIf(!out)('writes the sample keymap folders for the firmware test runner',
   // NAVI's own navi_tests.txt (firmware.tests on): the generator's expectations must hold on the firmware it wrote.
   writeGenerated(join(out!, 'generated-plain'), plain());
   writeGenerated(join(out!, 'generated-split'), splitWithOptions());
+  writeGenerated(join(out!, 'generated-languages'), languages());
 });
 
 function writeGenerated(dir: string, p: Project) {
