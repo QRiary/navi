@@ -58,6 +58,17 @@ export function removeKeyList(project: Project, id: string): Project {
   return {
     ...project,
     keyLists: project.keyLists.filter((l) => l.id !== id),
+    firmware: project.firmware.capsWordRules
+      ? {
+          ...project.firmware,
+          capsWordRules: project.firmware.capsWordRules.map((r) => {
+            if (!r.lists?.includes(id)) return r;
+            const lists = r.lists.filter((x) => x !== id);
+            const { lists: _, ...other } = r;
+            return lists.length ? { ...other, lists } : other;
+          }),
+        }
+      : project.firmware,
     tapHolds: project.tapHolds.map((s) => {
       let next = s;
       if (s.holdOnLists?.includes(id)) {

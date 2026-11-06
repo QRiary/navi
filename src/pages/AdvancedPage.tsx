@@ -26,6 +26,7 @@ import { UnicodeTab } from '../components/advanced/UnicodeTab';
 import { LanguagesTab } from '../components/advanced/LanguagesTab';
 import { LayerKeysOnTopRow } from '../components/advanced/LayerKeysOnTop';
 import { AutoRepeatRows } from '../components/advanced/AutoRepeat';
+import { CapsWordRules } from '../components/advanced/CapsWordRules';
 import { ModsInput } from '../components/keyboard/KeycodeComposer';
 import { getLanguage, t } from '../i18n';
 import { openDocs, QMK_DOCS } from '../lib/qmkDocs';
@@ -385,6 +386,12 @@ function NaviBehaviorTab({ project }: { project: Project }) {
         <div className="panel-box rows">
           <AutoRepeatRows project={project} />
         </div>
+      </section>
+      <section className="section">
+        <div className="section-head">
+          <h2>{t('Caps Word', 'Caps Word')}</h2>
+        </div>
+        <CapsWordRules project={project} />
       </section>
     </div>
   );

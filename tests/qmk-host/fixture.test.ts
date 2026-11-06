@@ -55,6 +55,10 @@ export function hostProject(): Project {
   put(1, 32, q('KC_1'));
   put(1, 33, q('KC_2'));
   put(2, 34, q('KC_3')); // 35 stays transparent on layer 2
+  // Caps Word (layer 0 is full, so its keys sit on layers 1 and 2, reached with MO at 30 and 31)
+  put(1, 18, q('CW_TOGG'));
+  put(1, 12, q('KC_DOT'));
+  put(2, 12, q('KC_DOT'));
   p = pruneTapHoldActions(p);
   // Tap dances on rows 1 and 2 (positions 10…23, qmk_host_test.cpp names them).
   const td = (index: number, col: number, d: Partial<TapDance>): TapDance => {
@@ -98,6 +102,11 @@ export function hostProject(): Project {
     firmware: {
       ...p.firmware,
       autoRepeat: { delay: 300, rate: 50 },
+      capsWordRules: [
+        { id: 'cw-letters', keys: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((l) => q(`KC_${l}`)), shift: true },
+        { id: 'cw-dot', keys: [q('KC_DOT')], shift: true, layers: [1] },
+        { id: 'cw-td', keys: [q('TD(1)')], shift: false },
+      ],
       custom: {
         'keymap.c': [
           'void post_process_record_user(uint16_t keycode, keyrecord_t *record) {',
