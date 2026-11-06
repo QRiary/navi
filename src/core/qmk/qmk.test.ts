@@ -413,7 +413,7 @@ describe('leader key and unicode map', async () => {
     const res = generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: true, encoderCount: 2 });
     const c = res.files.find((f) => f.name === 'keymap.c')!.text;
     expect(c).toContain('void leader_end_user(void) {');
-    expect(c).toContain('    if (leader_sequence_two_keys(KC_D, KC_D)) {\n        SEND_STRING("hi \\"you\\"");');
+    expect(c).toContain('    if (leader_sequence_two_keys(KC_D, KC_D)) {\n        { uint8_t navi_held = navi_lift_mods(); SEND_STRING("hi \\"you\\""); navi_lower_mods(navi_held); }');
     expect(c).toContain('    } else if (leader_sequence_one_key(KC_E)) {\n        tap_code16(LCTL(KC_A));');
     expect(c).not.toContain('LCTL_T(KC_A))');
     expect(res.rules.LEADER_ENABLE).toBe('yes');

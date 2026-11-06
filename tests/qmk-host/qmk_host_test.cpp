@@ -19,6 +19,7 @@
 //   5 MC_0 taps A, repeats   6 REP_KEY types "b", repeats   7 MC_1 taps C, doesn't repeat
 // Caps Word rules (letters shifted; "." shifted only with layer 1 on top; TD at 10 keeps it on; any other key ends it):
 //   layer 1 (hold 30): 18 CW_TOGG   12 KC_DOT      layer 2 (hold 31): 12 KC_DOT
+// Typed text with a Shift held (21), on layer 1 (hold 30): 15 SEMI types ";" (held mods lifted), 16 SEMI_KEEP the same, "keep"   17 macro: ";" then A
 #include "navi_host.hpp"
 
 // QMK's replay trap: the mod-tap's press and release were held back behind the undecided LT
@@ -123,9 +124,9 @@ TEST_F(NaviHost, every_tap_dance_shift_variant_plays_without_shift) {
     EXPECT_EQ(play({"+21", "+16", "-16", "-21"}), "LSFT 0x2D - LSFT LSFT+0x37 LSFT - LSFT -");
 }
 
-// H7: a variant not set falls back to no mods with the mods kept; one set empty types nothing
-TEST_F(NaviHost, every_tap_dance_unset_shift_variant_keeps_shift) {
-    EXPECT_EQ(play({"+21", "+17", "-17", "-21"}), "LSFT LSFT+A LSFT -");
+// H7: a variant not set falls back to no mods; since liftHeldMods the text lets go of a held Shift; one set empty types nothing
+TEST_F(NaviHost, every_tap_dance_unset_shift_variant_lifts_the_held_shift_for_its_text) {
+    EXPECT_EQ(play({"+21", "+17", "-17", "-21"}), "LSFT A - LSFT -");
 }
 
 TEST_F(NaviHost, every_tap_dance_empty_shift_variant_types_nothing) {
@@ -320,4 +321,22 @@ TEST_F(CapsWordHost, caps_word_tap_dance_in_a_keep_rule_keeps_it_on) {
 
 TEST_F(CapsWordHost, caps_word_key_in_no_rule_ends_it) {
     EXPECT_EQ(play({"+30", "+18", "-18", "-30", "+0", "-0", "+2", "-2"}), "0x2C - C -");
+}
+
+// Typed text lets go of the Shift you hold and puts it back after: the host gets ";", not ":"
+TEST_F(NaviHost, send_string_key_lifts_a_held_shift_while_it_types) {
+    EXPECT_EQ(play({"+21", "+30", "+15", "-15", "-30", "-21"}), "LSFT - 0x33 - LSFT -");
+}
+
+TEST_F(NaviHost, send_string_key_marked_keep_types_with_the_held_shift) {
+    EXPECT_EQ(play({"+21", "+30", "+16", "-16", "-30", "-21"}), "LSFT LSFT+0x33 LSFT -");
+}
+
+// A lift covers the whole macro, its key steps too (17: types ";", then taps A)
+TEST_F(NaviHost, macro_lifts_a_held_shift_for_its_text_and_its_keys) {
+    EXPECT_EQ(play({"+21", "+30", "+17", "-17", "-30", "-21"}), "LSFT - 0x33 - A - LSFT -");
+}
+
+TEST_F(NaviHost, send_string_key_without_a_held_mod_sends_no_extra_reports) {
+    EXPECT_EQ(play({"+30", "+15", "-15", "-30"}), "0x33 -");
 }

@@ -36,6 +36,14 @@ export const PROJECT_SETTING_ITEMS: readonly SettingItem[] = [
     route: { section: 'firmware', tab: 'flash' },
   },
   {
+    key: 'firmware.liftHeldMods',
+    label: () => t('Macros type with held modifiers lifted', 'Макросы печатают с отпущенными модификаторами'),
+    hint: () => t('A Shift you hold does not change the typed text', 'Зажатый Shift не меняет печатаемый текст'),
+    keywords: 'macro shift modifiers held text type send_string макрос шифт модификаторы',
+    section: () => `${t('Advanced', 'Дополнительно')} › ${t('NAVI additions', 'Дополнения NAVI')}`,
+    route: { section: 'advanced', tab: 'navi' },
+  },
+  {
     key: 'firmware.bootloaderReboot',
     label: () => t('Let NAVI restart the keyboard into its bootloader', 'Разрешить NAVI перезагружать клавиатуру в загрузчик'),
     keywords: 'bootloader reboot загрузчик перезагрузка',

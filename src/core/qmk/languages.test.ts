@@ -190,7 +190,7 @@ describe('languages: generated C', () => {
   it('every language plain: no route, no symbol code, text as before', () => {
     const res = gen(project({ languages: [EN, { ...RU, plainKeys: true }] }));
     const c = keymapC(res);
-    expect(c).toContain('void navi_send_text(const char *text) {\n    send_string(text);\n}');
+    expect(c).toContain('void navi_send_text(const char *text) {\n    uint8_t held = navi_lift_mods();\n    send_string(text);\n    navi_lower_mods(held);\n}');
     for (const s of ['navi_symbol', 'navi_route_text', 'register_unicode']) expect(c).not.toContain(s);
     expect(file(res, 'rules.mk')).not.toContain('UNICODE_ENABLE');
   });
@@ -224,9 +224,9 @@ describe('languages: generated C', () => {
     expect(c).toContain('void navi_switch_language_user(uint8_t language);');
     expect(body(c, 'void navi_switch_language(uint8_t language) {')).toContain('navi_switch_language_user(language);');
     expect(c).not.toContain('navi_lang_shortcuts');
-    expect(c).toContain('tap_code(0x29);\n            navi_send_text("привет" "\\001\\001\\050");\n            wait_ms(50);\n            navi_send_text("a\\n");');
-    expect(c).toContain('navi_send_text("@team" "\\001\\002\\340" "\\001\\001\\050" "\\001\\003\\340");');
-    expect(c).toContain('case HELLO: navi_send_text("hi"); return false;');
+    expect(c).toContain('tap_code(0x29);\n            navi_type_text("привет" "\\001\\001\\050", true);\n            wait_ms(50);\n            navi_type_text("a\\n", true);');
+    expect(c).toContain('navi_type_text("@team" "\\001\\002\\340" "\\001\\001\\050" "\\001\\003\\340", true);');
+    expect(c).toContain('case HELLO: navi_type_text("hi", true); return false;');
     expect(file(res, 'rules.mk')).not.toContain('UNICODE_ENABLE');
     expect(res.issues.some((i) => i.message.en.includes('navi_type_text_user'))).toBe(true);
   });

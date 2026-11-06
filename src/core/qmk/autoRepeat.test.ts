@@ -94,7 +94,7 @@ describe('auto repeat: generated C', () => {
     // the plain ones keep their press case; the ticked ones have no second one
     const press = hook.slice(pressOnly);
     expect(press).toContain('case QK_MACRO_1:');
-    expect(press).toContain('case NOREP: SEND_STRING("y"); return false;');
+    expect(press).toContain('case NOREP: { uint8_t navi_held = navi_lift_mods(); SEND_STRING("y"); navi_lower_mods(navi_held); } return false;');
     expect(press).not.toContain('case QK_MACRO_0:');
     expect(press).not.toContain('case REP:');
   });

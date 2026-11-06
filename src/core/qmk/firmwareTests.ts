@@ -21,6 +21,7 @@ import { cleanC } from './customCode';
 import { tapDanceKind } from '../project/tapDances';
 import type { HoldAction, Keymap, MacroStep, MatrixPos, Project, TapDance } from '../project/types';
 import { layerIdentifiers } from './generate';
+import { liftOf, liftSetting } from './heldMods';
 
 export const FIRMWARE_TESTS_FILE = 'navi_tests.txt';
 
@@ -63,6 +64,8 @@ const printable = (code: number) => code >= KC_A && code <= KC_SLSH && UNSHIFTED
 export type Op =
   | { t: 'mods+' | 'mods-' | 'weak+' | 'weak-'; mods: number }
   | { t: 'down' | 'up'; code: number }
+  /** NAVI typing text lets go of the real mods (navi_lift_mods) and puts them back (navi_lower_mods). */
+  | { t: 'lift' | 'lower' }
   | { t: 'extra'; usage: number }
   | { t: 'mouse'; what: 'btn' | 'x' | 'y' | 'v' | 'h'; value: number }
   /** A key override starts: the trigger's mods suppressed, the replacement's added (its key follows as 'down'); 'override-end' undoes it and lifts the key in one report. */
@@ -75,6 +78,7 @@ export class Typist {
   private keys: number[] = [];
   private real = 0;
   private weak = 0;
+  private lifted = 0;
   private suppress = 0;
   private over = 0;
   private mods = 0;
@@ -91,6 +95,8 @@ export class Typist {
     switch (op.t) {
       case 'mods+': this.real |= op.mods; return this.report(this.keys);
       case 'mods-': this.real &= ~op.mods; return this.report(this.keys);
+      case 'lift': (this.lifted = this.real), (this.real = 0); return this.report(this.keys);
+      case 'lower': (this.real = this.lifted), (this.lifted = 0); return this.report(this.keys);
       case 'weak+': this.weak |= op.mods; return this.report(this.keys);
       case 'weak-': this.weak &= ~op.mods; return this.report(this.keys);
       case 'override': (this.suppress = op.suppress), (this.over = op.mods); return this.report(this.keys);
@@ -257,8 +263,11 @@ function textOps(text: string): Op[] | Why {
   return ops;
 }
 
-/** Macro steps (tap_code / register_code of basic keys, send_string) as ops. */
-function macroOps(steps: MacroStep[]): Op[] | Why {
+/** The ops with the held real mods lifted around them (heldMods.ts); nothing to type: nothing to lift. */
+const lifted = (ops: Op[], lift: boolean): Op[] => (lift && ops.length ? [{ t: 'lift' }, ...ops, { t: 'lower' }] : ops);
+
+/** Macro steps (tap_code / register_code of basic keys, send_string) as ops; `lift`: the held mods are let go for all of it. */
+function macroOps(steps: MacroStep[], lift: boolean): Op[] | Why {
   const ops: Op[] = [];
   for (const s of steps) {
     if (s.type === 'delay') continue;
@@ -273,7 +282,7 @@ function macroOps(steps: MacroStep[]): Op[] | Why {
     if (s.type === 'tap') ops.push(...tapOps(p));
     else ops.push(...(s.type === 'down' ? p.down : p.up));
   }
-  return ops;
+  return lifted(ops, lift);
 }
 
 const holdTime = (term: number) => Math.max(300, term + 100);
@@ -353,7 +362,7 @@ function namedBehavior(c: Ctx, v: number, key: string): Behavior {
     const m = project.macros.find((x) => x.index === index);
     if (!m || !m.steps.length) return why(`${c.kc(v)}, a macro with no steps`);
     if (project.firmware.buildFeatures.via === true) return why(`${c.kc(v)}, a VIA macro (the keyboard's memory decides it)`);
-    const ops = macroOps(m.steps);
+    const ops = macroOps(m.steps, liftOf(project, m.heldMods));
     return isWhy(ops) ? why(`${c.kc(v)}: ${ops.why}`) : { tap: { down: ops, up: [] }, term: 0 };
   }
   if (range('QK_USER')) {
@@ -362,7 +371,7 @@ function namedBehavior(c: Ctx, v: number, key: string): Behavior {
     if (!ck || ck.action.type === 'none') return why(`${c.kc(v)}, a custom keycode your code handles`);
     if (ck.action.type === 'send-string') {
       const ops = textOps(ck.action.text);
-      return isWhy(ops) ? why(`${c.kc(v)}: ${ops.why}`) : { tap: { down: ops, up: [] }, term: 0 };
+      return isWhy(ops) ? why(`${c.kc(v)}: ${ops.why}`) : { tap: { down: lifted(ops, liftOf(project, ck.action.heldMods)), up: [] }, term: 0 };
     }
     const p = plainPress(c, ck.action.keycode);
     return isWhy(p) ? why(`${c.kc(v)} taps ${p.why}`) : { tap: { down: tapOps(p), up: [] }, term: 0 };
@@ -790,7 +799,7 @@ function danceTests(c: Ctx, td: TapDance, at: { route: Route; pos: MatrixPos }, 
     for (let n = 1; n <= steps.length; n++) {
       const st = steps[n - 1];
       if (!st.none) return skip(`tap ${n}`, 'no step without modifiers');
-      const ops = macroOps(st.none);
+      const ops = macroOps(st.none, liftSetting(c.project) && st.none.some((x) => x.type === 'text'));
       if (isWhy(ops)) return skip(`tap ${n}`, ops.why);
       played.push(...ops);
       lines.push([[n === 1 ? s : `${s}*${n}`], [...played]]);

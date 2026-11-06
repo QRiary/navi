@@ -38,6 +38,7 @@ import {
   type FirmwareConfig,
   type Geometry,
   type HardwareProfile,
+  type HeldMods,
   type KeyGeom,
   type KeyOverride,
   type Keymap,
@@ -394,6 +395,14 @@ function readKeymap(r: Reader, v: unknown, path: string, rows: number, cols: num
   };
 }
 
+/** Optional `heldMods` of a macro / send-string key: `lift` or `keep`; anything else is dropped with a warning. */
+function readHeldMods(r: Reader, v: unknown, path: string): { heldMods?: HeldMods } {
+  if (v === undefined) return {};
+  if (v === 'lift' || v === 'keep') return { heldMods: v };
+  r.warn(path, 'must be "lift" or "keep" — dropped');
+  return {};
+}
+
 function readMacroStep(r: Reader, v: unknown, path: string): MacroStep | null {
   const o = r.obj(v, path);
   switch (o.type) {
@@ -596,6 +605,7 @@ function readFirmware(r: Reader, v: unknown): FirmwareConfig {
     customReview: custom && o.customReview === true ? true : undefined,
     pipeline,
     layerKeysOnTop: r.bool(o.layerKeysOnTop ?? false, 'firmware.layerKeysOnTop', false),
+    liftHeldMods: r.bool(o.liftHeldMods ?? true, 'firmware.liftHeldMods', true),
     bootloaderReboot: r.bool(o.bootloaderReboot ?? false, 'firmware.bootloaderReboot', false),
     tests: r.bool(o.tests ?? false, 'firmware.tests', false),
     runTests: r.bool(o.runTests ?? false, 'firmware.runTests', false),
@@ -649,6 +659,7 @@ export function validateProject(input: unknown): { project: Project | null; issu
         .map((s, j) => readMacroStep(r, s, `macros[${i}].steps[${j}]`))
         .filter((s): s is MacroStep => s !== null),
       ...(mo.repeat === true ? { repeat: true } : {}),
+      ...readHeldMods(r, mo.heldMods, `macros[${i}].heldMods`),
     };
   });
   const tapDances: TapDance[] = r.arr(o.tapDances, 'tapDances', LIMITS.maxTapDances).map((t, i) => {
@@ -707,7 +718,7 @@ export function validateProject(input: unknown): { project: Project | null; issu
     const ao = r.obj(co.action ?? { type: 'none' }, `${p}.action`);
     const action =
       ao.type === 'send-string'
-        ? { type: 'send-string' as const, text: r.str(ao.text, `${p}.action.text`, '', 1000) }
+        ? { type: 'send-string' as const, text: r.str(ao.text, `${p}.action.text`, '', 1000), ...readHeldMods(r, ao.heldMods, `${p}.action.heldMods`) }
         : ao.type === 'tap'
           ? { type: 'tap' as const, keycode: r.keycode(ao.keycode, `${p}.action.keycode`) }
           : { type: 'none' as const };

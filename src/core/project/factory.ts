@@ -19,6 +19,9 @@ import {
 /** New projects: “layer keys bring their layer to the top” (firmware.layerKeysOnTop). */
 export const LAYER_KEYS_ON_TOP_DEFAULT = false;
 
+/** New projects: typed text lets go of held modifiers (firmware.liftHeldMods). */
+export const LIFT_HELD_MODS_DEFAULT = true;
+
 /** New projects: NAVI may not restart the keyboard into its bootloader (firmware.bootloaderReboot). */
 export const BOOTLOADER_REBOOT_DEFAULT = false;
 
@@ -117,6 +120,7 @@ export function createProject({ name, hardware, geometry, layers = 4, encoderCou
       buildFeatures: {},
       buildConfig: {},
       layerKeysOnTop: LAYER_KEYS_ON_TOP_DEFAULT,
+      liftHeldMods: LIFT_HELD_MODS_DEFAULT,
       bootloaderReboot: BOOTLOADER_REBOOT_DEFAULT,
       tests: FIRMWARE_TESTS_DEFAULT,
       runTests: false,

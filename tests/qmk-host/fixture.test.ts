@@ -86,6 +86,10 @@ export function hostProject(): Project {
   put(0, 13, q('KC_N'));
   put(1, 13, q('KC_A'));
   put(1, 14, q('KC_B'));
+  // Typed text with a Shift held (layer 1): SEMI types ";" (default: held mods lifted), SEMI_KEEP the same with "keep"
+  put(1, 15, q('QK_USER_2'));
+  put(1, 16, q('QK_USER_3'));
+  put(1, 17, q('QK_MACRO_2')); // a macro: text, then a key
   put(0, 21, q('KC_LSFT'));
   const refs: Record<number, 'self'> = { 1: 'self', 2: 'self' };
   return {
@@ -94,10 +98,13 @@ export function hostProject(): Project {
     customKeycodes: [
       { id: 'ck-host', name: 'HOST_KEY', description: 'handled by the own lines', action: { type: 'none' } },
       { id: 'ck-rep', name: 'REP_KEY', description: 'repeats', action: { type: 'send-string', text: 'b' }, repeat: true },
+      { id: 'ck-semi', name: 'SEMI', description: 'types ;', action: { type: 'send-string', text: ';' } },
+      { id: 'ck-keep', name: 'SEMI_KEEP', description: 'types ; with the held mods kept', action: { type: 'send-string', text: ';', heldMods: 'keep' } },
     ],
     macros: [
       { id: 'mc-0', index: 0, name: 'repeats', steps: [{ type: 'tap', keycode: q('KC_A') }], repeat: true },
       { id: 'mc-1', index: 1, name: 'once', steps: [{ type: 'tap', keycode: q('KC_C') }] },
+      { id: 'mc-2', index: 2, name: 'text and key', steps: [{ type: 'text', text: ';' }, { type: 'tap', keycode: q('KC_A') }] },
     ],
     firmware: {
       ...p.firmware,
