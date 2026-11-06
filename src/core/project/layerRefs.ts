@@ -138,6 +138,70 @@ export function layerRefs(p: Project, spec: KeycodeSpec, keymap: Keymap = p.keym
   return out;
 }
 
+/** More reachable layer states than this: layerStacks gives up (null). */
+const STATE_LIMIT = 4096;
+
+/**
+ * Every set of layers the keyboard can show at once, highest first, the default layer included: the layer states
+ * reachable through the routes above, walked from power-on (base layer 0, the keymap's default layer, or a PDF
+ * target; the first language's layer on). A route counts only where its key is the one serving its spot (a higher
+ * layer's key there hides it), an encoder's where no higher layer shows its own, a combo's on the layers it works on.
+ * MO / LT / LM / TT / OSL / TG turn a layer on, TO leaves only its layer (and the language's), DF / PDF set the base,
+ * and any layer on can go off again (a key let go, a toggle). With “layer keys bring their layer to the top”, a
+ * layer turned on hides the ones above it. Language layers stay on under the others and swap with each other.
+ * An over-approximation in what can go off (any layer, in any order), exact in what can come on.
+ * null: more than STATE_LIMIT states (callers assume any layer can be under any other).
+ */
+export function layerStacks(p: Project, spec: KeycodeSpec, keymap: Keymap = p.keymaps.find((k) => k.id === p.activeKeymapId) ?? p.keymaps[0]): number[][] | null {
+  const count = keymap.layers.length;
+  const cols = p.hardware.matrix.cols;
+  const onTop = p.firmware.layerKeysOnTop === true;
+  const refs = layerRefs(p, spec, keymap).filter((r) => r.layer < count);
+  const langs = [...new Set(p.languages.map((l) => l.layer).filter((l): l is number => l !== undefined && l < count))];
+  const isLang = (l: number) => langs.includes(l);
+  type State = { base: number; on: number[] };
+  const stackOf = (s: State) => [...new Set([...s.on, s.base])].sort((a, b) => b - a);
+  // The layer QMK takes a spot from (transparent falls through, nothing found: layer 0).
+  const serving = (stack: number[], value: (l: number) => number) => stack.find((l) => value(l) !== 1) ?? 0;
+  const works = (r: LayerRef, stack: number[]): boolean => {
+    const src = r.source;
+    if (src.kind === 'key') return serving(stack, (l) => keymap.layers[l]?.keys[src.pos[0] * cols + src.pos[1]] ?? 0) === src.layer;
+    if (src.kind === 'encoder') return serving(stack, (l) => keymap.layers[l]?.encoders[src.encoder]?.[src.dir] ?? 0) === src.layer;
+    return !src.layers || src.layers.includes(stack[0]);
+  };
+  const add = (s: State, layer: number): State => ({ base: s.base, on: [...s.on.filter((l) => l !== layer && (!onTop || l < layer || isLang(l))), layer] });
+  const keyOf = (s: State) => `${s.base}|${[...s.on].sort((a, b) => a - b).join(',')}`;
+  const bases = new Set([0, Math.min(keymap.defaultLayer, count - 1), ...refs.filter((r) => r.how === 'PDF').map((r) => r.layer)]);
+  const seen = new Map<string, State>();
+  const queue: State[] = [];
+  const visit = (s: State) => {
+    const k = keyOf(s);
+    if (seen.has(k)) return;
+    seen.set(k, s);
+    queue.push(s);
+  };
+  for (const base of bases) visit({ base, on: langs.length && p.languages[0]?.layer !== undefined ? [p.languages[0].layer] : [] });
+  while (queue.length) {
+    if (seen.size > STATE_LIMIT) return null;
+    const s = queue.shift()!;
+    const stack = stackOf(s);
+    for (const r of refs) {
+      if (!works(r, stack)) continue;
+      if (r.how === 'TO') visit({ base: s.base, on: [...s.on.filter(isLang).filter((l) => l !== r.layer), r.layer] });
+      else if (r.how === 'DF' || r.how === 'PDF') visit({ base: r.layer, on: s.on });
+      else visit(add(s, r.layer));
+    }
+    for (const l of s.on) visit({ base: s.base, on: s.on.filter((x) => x !== l) });
+    for (const l of langs) visit({ base: s.base, on: [...s.on.filter((x) => !isLang(x)), l] });
+  }
+  const stacks = new Map<string, number[]>();
+  for (const s of seen.values()) {
+    const st = stackOf(s);
+    stacks.set(st.join(','), st);
+  }
+  return [...stacks.values()];
+}
+
 /** The routes to one layer. */
 export const routesTo = (refs: readonly LayerRef[], layer: number) => refs.filter((r) => r.layer === layer);
 

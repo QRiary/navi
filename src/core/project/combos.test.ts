@@ -86,6 +86,51 @@ describe('combo reference layers', () => {
     ]);
   });
 
+  /**
+   * Layer 0: Q W at (0,0) (0,1), MO(1) at (1,0), TG(2) at (1,1). Layer 1 (reads itself): K at (0,0), MO(2) at (1,1).
+   * Layer 2 (reads itself): (0,0) transparent, 8 at (0,1). A combo on (0,0) + (0,1) limited to layer 2.
+   */
+  function overLayer(extra: (p: Project) => Project = (p) => p): Project {
+    let p = createBlankProject('fall through', 4, 6, false);
+    const id = activeKeymap(p).id;
+    const put = (layer: number, pos: [number, number], k: string) => (p = setKeycodes(p, id, layer, [pos], q(k)));
+    put(0, [0, 0], 'KC_Q');
+    put(0, [0, 1], 'KC_W');
+    put(0, [1, 0], 'MO(1)');
+    put(0, [1, 1], 'TG(2)');
+    put(1, [0, 0], 'KC_K');
+    put(1, [1, 1], 'MO(2)');
+    put(2, [0, 1], 'KC_8');
+    p = {
+      ...p,
+      combos: [combo('kb', [[0, 0], [0, 1]], 'KC_ESC', { layers: [2] })],
+      keymaps: p.keymaps.map((k) => (k.id !== id ? k : { ...k, layers: k.layers.map((l, i) => (i === 1 || i === 2 ? { ...l, comboRef: 'self' as const } : l)) })),
+    };
+    return extra(p);
+  }
+
+  it('a transparent key falls through to every layer that can be on under its layer', () => {
+    // Layer 1 held, then MO(2) on it: (0,0) falls to layer 1's K. Layer 2 alone (TG, or layer 1's key let go): Q.
+    const c = file(overLayer(), 'keymap.c');
+    expect(c).toContain('const uint16_t PROGMEM kb_keys[] = { KC_K, KC_8, COMBO_END }; // on L_LAYER_2');
+    expect(c).toContain('const uint16_t PROGMEM kb_2_keys[] = { KC_Q, KC_8, COMBO_END }; // on L_LAYER_2');
+    expect(c).not.toContain('kb_3_keys');
+  });
+
+  it('layer keys on top: a layer turned on later hides the one above it, so it is not under it', () => {
+    // Layer 1 has KC_NO where TG(2) is: layer 2 can't be turned on while layer 1 is on, and turning layer 1 on
+    // after layer 2 brings layer 1 to the top. So under layer 2 there is only layer 0.
+    const noTg = (p: Project) => setKeycodes(p, activeKeymap(p).id, 1, [[1, 1]], q('KC_NO'));
+    const onTop = (p: Project): Project => ({ ...noTg(p), firmware: { ...p.firmware, layerKeysOnTop: true } });
+    const c = file(overLayer(onTop), 'keymap.c');
+    expect(c).toContain('const uint16_t PROGMEM kb_keys[] = { KC_Q, KC_8, COMBO_END }; // on L_LAYER_2');
+    expect(c).not.toContain('kb_2_keys');
+    // Without “on top”: TG(2), then MO(1) under it.
+    const plain = file(overLayer(noTg), 'keymap.c');
+    expect(plain).toContain('const uint16_t PROGMEM kb_keys[] = { KC_K, KC_8, COMBO_END }; // on L_LAYER_2');
+    expect(plain).toContain('const uint16_t PROGMEM kb_2_keys[] = { KC_Q, KC_8, COMBO_END }; // on L_LAYER_2');
+  });
+
   it('own pipeline: combo_ref_from_layer_navi and a forwarding warning; the stub keeps QMK behavior', () => {
     const mixed = gen(pipe(base([combo('qw', [[0, 0], [0, 1]], 'KC_ESC')], [undefined, 'self'])));
     const c = mixed.files.find((f) => f.name === 'keymap.c')!.text;

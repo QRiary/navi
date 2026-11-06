@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { parseQmk } from '../keycodes/codec';
 import { loadSpec } from '../keycodes/spec';
 import { createDilemmaProject, KC_NO } from './factory';
-import { keysLeadingTo, layerRefs, routesTo, type LayerRef } from './layerRefs';
+import { keysLeadingTo, layerRefs, layerStacks, routesTo, type LayerRef } from './layerRefs';
 import { activeKeymap, fillLayer, insertLayer, moveLayer, removeLayer, setEncoder, setKeycodes } from './ops';
 import { ensureTapHold } from './tapHoldActions';
 import type { MatrixPos, Project, TapDance } from './types';
@@ -149,5 +149,39 @@ describe('layerRefs', () => {
     expect(lines(moveLayer(p, id, spec, 1, 3))).toEqual(before);
     const gone = removeLayer(p, id, spec, 3);
     expect(routesTo(layerRefs(gone, spec), 3).map(line)).toEqual(['→L3 TO key L2 0,0 via tap-dance double-tap']); // old L4, now L3
+  });
+});
+
+describe('layerStacks', () => {
+  const sorted = (s: number[][] | null) => s?.map((x) => x.join(',')).sort();
+
+  it('the layers that can be on together, by the keys that are really reachable', () => {
+    // L0: MO(1) at 0,0, TG(3) at 0,1. L1: MO(2) at 0,1 (hides TG(3)). L3 has KC_NO where MO(1) is.
+    const p = project([
+      [0, [0, 0], q('MO(1)')],
+      [0, [0, 1], q('TG(3)')],
+      [1, [0, 1], q('MO(2)')],
+    ]);
+    expect(sorted(layerStacks(p, spec))).toEqual(['0', '1,0', '2,0', '2,1,0', '3,0']);
+  });
+
+  it('layer keys on top: a lower layer turned on later hides the higher one', () => {
+    // L0: TG(3) at 0,0; L3 transparent at 0,1, where L0 has MO(1): L1 turned on last hides L3.
+    let p = project([
+      [0, [0, 0], q('TG(3)')],
+      [0, [0, 1], q('MO(1)')],
+    ]);
+    p = setKeycodes(p, activeKeymap(p).id, 3, [[0, 1]], 1);
+    expect(sorted(layerStacks(p, spec))).toEqual(['0', '1,0', '3,0', '3,1,0']);
+    expect(sorted(layerStacks({ ...p, firmware: { ...p.firmware, layerKeysOnTop: true } }, spec))).toEqual(['0', '1,0', '3,0']);
+  });
+
+  it('gives up (null) past its state limit', () => {
+    // 13 layers toggled from L0, all transparent: every subset can be on (8192 states).
+    let p = createDilemmaProject();
+    const id = activeKeymap(p).id;
+    while (activeKeymap(p).layers.length < 14) p = insertLayer(p, id, spec, 'L', activeKeymap(p).layers.length);
+    for (let l = 1; l < 14; l++) p = setKeycodes(p, id, 0, [[Math.floor((l - 1) / 6), (l - 1) % 6]], q(`TG(${l})`));
+    expect(layerStacks(p, spec)).toBeNull();
   });
 });
