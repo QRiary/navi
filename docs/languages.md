@@ -65,7 +65,8 @@ modifiers' presses, the key, and the modifiers' releases. Your program should ty
 the keys in the order they come.
 
 The keyboard doesn't release the modifiers the user is holding before it calls `navi_type_text_user`. A tap dance
-step picked by Shift or Ctrl takes them off inside the keyboard only, so the computer still sees them held. Your
+step with text takes every modifier off inside the keyboard only (a step of keys alone: the Shift or Ctrl that
+picked it), so the computer still sees them held. Your
 program should release the modifiers the computer sees as down before it types, and press them again after.
 
 ### Macros

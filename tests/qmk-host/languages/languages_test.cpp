@@ -3,7 +3,7 @@
 //   0 NAVI_TO_RU   1 NAVI_TOGGLE_RU   2 NAVI_TO_EN   3 MO(2)   4 KC_A (layer 3: KC_B, layer 2: KC_C)
 //   5 LSFT_T(KC_F): holds on KC_J in English, on KC_P in Russian   6 KC_J   7 KC_P   8 KC_LSFT   9 KC_SCLN
 //   20 MC_0: tap A, "hi", tap B   21 HELLO: "ok"   22 TO(0)
-//   23 TD_TEXT, every tap: 1) "hi", Left, Shift+Home (Shift: "->", End)   2) tap X, "2"
+//   23 TD_TEXT, every tap: 1) "hi", Left, Shift+Home (Shift: "->", End)   2) tap X, "2"   24 LGUI_T(KC_S)
 // Layer 2 (symbols, not a typing layer): 10 S(KC_1)   11 KC_SCLN   12 KC_1   13 C(KC_1)   14 KC_A
 #include "../navi_host.hpp"
 
@@ -153,4 +153,9 @@ TEST_F(Languages, every_tap_shift_version_goes_to_the_program_without_shift) {
 TEST_F(Languages, every_tap_second_tap_presses_its_key_then_sends_text) {
     EXPECT_EQ(play({"+0", "-0", "+23", "-23", "+23", "-23"}), "X -");
     EXPECT_STREQ(host_text, "hi\x01\x01\x50\x01\x02\xE1\x01\x01\x4A\x01\x03\xE1" "2");
+}
+
+// A home row GUI held (misfired) while a step with text plays: the text is typed without it, GUI comes back after
+TEST_F(Languages, every_tap_text_plays_without_a_held_gui) {
+    EXPECT_EQ(play({"+24", "wait", "+23", "-23", "-24"}), "LGUI H - I - 0x50 - LSFT LSFT+0x4A LSFT - LGUI -");
 }

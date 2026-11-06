@@ -60,7 +60,7 @@ describe('tap dance kinds: generator', () => {
     expect(c).toContain('.on_each_tap = navi_td_every_tap');
     expect(c).toContain('switch ((state->count - 1) % 2)');
     expect(c).toContain('send_string("->")');
-    expect(c).toContain('navi_td_cs_off');
+    expect(c).toContain('navi_td_mods_off');
     expect(c).not.toContain('navi_send');
     expect(c).not.toContain('navi_td_keys');
     const k = file(project([everyKeys]), 'keymap.c');
@@ -69,7 +69,7 @@ describe('tap dance kinds: generator', () => {
     expect(k).toMatch(/state->finished +=  ?false;/);
     // the empty Ctrl variant: no helpers to switch mods off, just nothing
     expect(k).toMatch(/if \(.*MOD_MASK_CTRL.*\) break;/);
-    expect(k).not.toContain('navi_td_cs_off');
+    expect(k).not.toContain('navi_td_mods_off');
     expect(errors(project([everyText, everyKeys]))).toEqual([]);
   });
 
@@ -191,13 +191,13 @@ describe('every-tap text in the language (step 14)', () => {
     const c = file(withLanguages([mixed], 'own-program'), 'keymap.c');
     expect(c).toContain(
       [
-        '                    navi_td_tap(state->index, KC_X);',
-        '                    navi_send_text("ab" "\\001\\001\\120" "\\001\\002\\341" "\\001\\001\\112" "\\001\\003\\341" "\\001\\002\\344" "\\001\\002\\004" "\\001\\003\\004" "\\001\\003\\344");',
-        '                    wait_ms(10);',
-        '                    navi_send_text("c");',
+        '                        navi_td_tap(state->index, KC_X);',
+        '                        navi_send_text("ab" "\\001\\001\\120" "\\001\\002\\341" "\\001\\001\\112" "\\001\\003\\341" "\\001\\002\\344" "\\001\\002\\004" "\\001\\003\\004" "\\001\\003\\344");',
+        '                        wait_ms(10);',
+        '                        navi_send_text("c");',
       ].join('\n'),
     );
-    expect(c).toContain('navi_td_cs_t cs = navi_td_cs_off();\n                        navi_send_text("->" "\\001\\001\\115");\n                        navi_td_cs_on(cs);');
+    expect(c).toContain('navi_td_held_t held = navi_td_mods_off(MOD_MASK_CSAG);\n                        navi_send_text("->" "\\001\\001\\115");\n                        navi_td_mods_on(held);');
     expect(errors(withLanguages([mixed], 'own-program'))).toEqual([]);
   });
 
@@ -215,7 +215,7 @@ describe('every-tap text in the language (step 14)', () => {
   it('own program: a key the stream cannot carry is played by the keyboard after the text so far, with a warning', () => {
     const p = withLanguages([td(0, 'TD_L', { kind: 'every-tap', steps: [{ none: [text('a'), tap('MO(2)'), text('b')] }] })], 'own-program');
     const c = file(p, 'keymap.c');
-    expect(c).toContain('navi_send_text("a");\n                    navi_td_tap(state->index, MO(L_LAYER_2));\n                    navi_send_text("b");');
+    expect(c).toContain('navi_send_text("a");\n                        navi_td_tap(state->index, MO(L_LAYER_2));\n                        navi_send_text("b");');
     const w = gen(p).issues.filter((i) => i.level === 'warning' && i.where.includes('TD_L'));
     expect(w).toHaveLength(1);
     expect(w[0].message.en).toContain('MO(L_LAYER_2)');
@@ -223,7 +223,7 @@ describe('every-tap text in the language (step 14)', () => {
 
   it('Unicode route: text through navi_send_text, keys played by the keyboard', () => {
     const c = file(withLanguages([mixed], 'wincompose'), 'keymap.c');
-    expect(c).toContain('navi_send_text("ab");\n                    navi_td_tap(state->index, KC_LEFT);');
+    expect(c).toContain('navi_send_text("ab");\n                        navi_td_tap(state->index, KC_LEFT);');
     expect(c).toContain('navi_send_text("->");');
     expect(c).not.toContain('send_string("ab")');
   });
