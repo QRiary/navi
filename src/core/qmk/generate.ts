@@ -34,9 +34,10 @@ import { checkTapHoldActions, effectiveTapHoldActions, projectOwnCodeRefs, type 
 import { anyHoldsOn, caseLines, comboEventCode, hasHoldKeys, keyListsCode, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, naviSendCode, replayTracked, standInCheckCode, tapHoldsCode, type StandIn } from './tapHold';
 import { tapDanceCode } from './tapDance';
 import { layoutMacro, renderLayers, textLayout } from './layoutText';
+import { FIRMWARE_TESTS_FILE, firmwareTestsFile } from './firmwareTests';
 
 export interface GeneratedFile {
-  name: 'keymap.c' | 'rules.mk' | 'config.h' | 'keymap.json' | 'readme.md' | 'navi.h' | 'navi_rules.mk' | 'navi_config.h';
+  name: 'keymap.c' | 'rules.mk' | 'config.h' | 'keymap.json' | 'readme.md' | 'navi.h' | 'navi_rules.mk' | 'navi_config.h' | 'navi_tests.txt';
   text: string;
 }
 
@@ -942,19 +943,22 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
 
   const rulesFile = custom['rules.mk']?.trim() ? `${withCustom('rules.mk', [rulesText.replace(/\n$/, '')]).join('\n')}\n` : rulesText;
   const configFile = custom['config.h']?.trim() ? `${withCustom('config.h', cfg.slice(0, -1)).join('\n')}\n` : cfg.join('\n');
+  const files: GeneratedFile[] = pipeline
+    ? [
+        { name: 'keymap.c', text: `${withCustom('keymap.c', c).join('\n')}\n` },
+        { name: 'navi.h', text: `${h.join('\n')}` },
+        { name: 'navi_rules.mk', text: rulesFile },
+        { name: 'navi_config.h', text: configFile },
+      ]
+    : [
+        { name: 'keymap.c', text: `${withCustom('keymap.c', c).join('\n')}\n` },
+        { name: 'rules.mk', text: rulesFile },
+        { name: 'config.h', text: configFile },
+      ];
+  // Firmware tests: worked out from the project, not from the C above (docs/firmware-tests.md).
+  if (project.firmware.tests === true) files.push({ name: FIRMWARE_TESTS_FILE, text: firmwareTestsFile(project, spec, ownCode) });
   return {
-    files: pipeline
-      ? [
-          { name: 'keymap.c', text: `${withCustom('keymap.c', c).join('\n')}\n` },
-          { name: 'navi.h', text: `${h.join('\n')}` },
-          { name: 'navi_rules.mk', text: rulesFile },
-          { name: 'navi_config.h', text: configFile },
-        ]
-      : [
-          { name: 'keymap.c', text: `${withCustom('keymap.c', c).join('\n')}\n` },
-          { name: 'rules.mk', text: rulesFile },
-          { name: 'config.h', text: configFile },
-        ],
+    files,
     issues,
     rules,
     symbols: generatedSymbols,

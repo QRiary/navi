@@ -4,6 +4,7 @@
  * `data-find-id="setting:<key>"` for the search to land on.
  */
 import { t } from '../i18n';
+import type { Route } from './router';
 
 export interface SettingItem {
   key: string;
@@ -12,7 +13,36 @@ export interface SettingItem {
   section: () => string;
   /** Extra words the search finds it by (not shown). */
   keywords?: string;
+  /** A project setting on another page: where the search goes (`section` is then the whole "where" line). */
+  route?: Route;
 }
+
+/** Project settings that live on other pages but are found like settings. */
+export const PROJECT_SETTING_ITEMS: readonly SettingItem[] = [
+  {
+    key: 'firmware.tests',
+    label: () => t('write firmware tests', 'писать тесты прошивки'),
+    hint: () => t('navi_tests.txt: key presses and what the firmware must type', 'navi_tests.txt: нажатия клавиш и что прошивка должна напечатать'),
+    keywords: 'navi_tests.txt test tests тест',
+    section: () => `${t('Firmware', 'Прошивка')} › ${t('4 · Keymap files', '4 · Файлы keymap')}`,
+    route: { section: 'firmware', tab: 'files' },
+  },
+  {
+    key: 'firmware.runTests',
+    label: () => t('Run the firmware tests before flashing', 'Запускать тесты прошивки перед прошивкой'),
+    hint: () => t('navi_tests.txt played in QMK’s test framework on this PC', 'navi_tests.txt проигрывается в тестовой среде QMK на этом компьютере'),
+    keywords: 'navi_tests.txt test tests тест',
+    section: () => `${t('Firmware', 'Прошивка')} › ${t('6 · Flash', '6 · Прошить')}`,
+    route: { section: 'firmware', tab: 'flash' },
+  },
+  {
+    key: 'firmware.bootloaderReboot',
+    label: () => t('Let NAVI restart the keyboard into its bootloader', 'Разрешить NAVI перезагружать клавиатуру в загрузчик'),
+    keywords: 'bootloader reboot загрузчик перезагрузка',
+    section: () => `${t('Firmware', 'Прошивка')} › ${t('6 · Flash', '6 · Прошить')}`,
+    route: { section: 'firmware', tab: 'flash' },
+  },
+];
 
 const palette = () => t('palette', 'палитра');
 const colors = () => t('colors', 'цвета');

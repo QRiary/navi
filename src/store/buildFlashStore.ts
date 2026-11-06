@@ -1,7 +1,8 @@
 /**
  * “Build + flash” (the button beside Save): save the project, write the keymap files, build, restart the keyboard into
  * its bootloader (NAVI's Raw HID message when the project's firmware allows it, else the user presses QK_BOOT), flash
- * the half with the cable, wait for it to come back. Each step is the same call the Firmware tabs make; the only
+ * the half with the cable, wait for it to come back. With firmware.runTests the firmware tests run after the write
+ * and before the build: anything but a pass stops the run. Each step is the same call the Firmware tabs make; the only
  * question asked is the diff of a file that isn't what NAVI wrote last (edited outside NAVI). Any refusal or failure
  * stops the run with a toast that leads to the tab where it can be fixed.
  */
@@ -11,6 +12,7 @@ import { navi, type FirmwareInfo } from '../desktop/bridge';
 import { sendRawPacket } from '../device/rawHid';
 import { t } from '../i18n';
 import { generateFiles } from '../lib/firmwareFiles';
+import { testsBlocker, testsResultDetail, testsResultSentence } from '../lib/firmwareTests';
 import { expectedUsb, hasBoardBackup, inBootloader, noBackupAccepted, pickFlashTarget, planKeymapWrite, waitForKeyboardBack, type KeymapWritePlan } from '../lib/flashSteps';
 import { navigate } from '../lib/router';
 import { useDeviceStore } from './deviceStore';
@@ -20,7 +22,7 @@ import { useQmkStore } from './qmkStore';
 import { useSettingsStore } from './settingsStore';
 import { toast } from './toastStore';
 
-export type BuildFlashPhase = 'idle' | 'saving' | 'review' | 'writing' | 'building' | 'restarting' | 'press' | 'backing-up' | 'flashing' | 'returning' | 'done';
+export type BuildFlashPhase = 'idle' | 'saving' | 'review' | 'writing' | 'testing' | 'building' | 'restarting' | 'press' | 'backing-up' | 'flashing' | 'returning' | 'done';
 
 export interface BuildFlashState {
   phase: BuildFlashPhase;
@@ -110,7 +112,18 @@ export const useBuildFlashStore = create<BuildFlashState>()((set, get) => {
       check();
     }
 
-    // 3. Build.
+    // 3. Firmware tests: a key that types something else stops the run before the keyboard is touched.
+    if (project.firmware.runTests) {
+      const blocked = testsBlocker(project, env.runner);
+      if (blocked) stopWith(t(`The firmware tests can’t run, so nothing was built: ${blocked}`, `Тесты прошивки не запускаются, поэтому ничего не собрано: ${blocked}`), { tab: 'flash' });
+      phase('testing');
+      const tests = await qmk().runTests(project);
+      check();
+      if (!tests) stopWith(qmk().error ?? t('The firmware tests didn’t start.', 'Тесты прошивки не запустились.'), { detail: qmk().errorDetail ?? undefined, tab: 'flash' });
+      if (tests.status !== 'pass') stopWith(`${testsResultSentence(tests)} ${t('Nothing was flashed.', 'Ничего не прошито.')}`, { detail: testsResultDetail(tests), tab: 'flash' });
+    }
+
+    // 4. Build.
     phase('building');
     const build = project.firmware.build ?? {};
     const res = await qmk().compile(kb, km, build.env ?? {}, build.parallel);
@@ -120,7 +133,7 @@ export const useBuildFlashStore = create<BuildFlashState>()((set, get) => {
     if (!res.firmware) stopWith(t('The build finished, but NAVI found no firmware file it made.', 'Сборка закончилась, но NAVI не нашёл созданного ею файла прошивки.'), { tab: 'build' });
     const fw: FirmwareInfo = res.firmware;
 
-    // 4. Into the bootloader.
+    // 5. Into the bootloader.
     const expect = expectedUsb(project);
     let scan = await navi.flash.scan();
     if (!inBootloader(scan)) {
@@ -162,7 +175,7 @@ export const useBuildFlashStore = create<BuildFlashState>()((set, get) => {
       }
     }
 
-    // 5. Flash (the half with the cable: the one in its bootloader now).
+    // 6. Flash (the half with the cable: the one in its bootloader now).
     const target = pickFlashTarget(scan);
     if (target.kind === 'several') stopWith(t('Several boards are in their bootloader: flash the one you mean on Firmware → flash.', 'В загрузчике несколько плат: прошейте нужную во вкладке «Прошивка → прошить».'), { tab: 'flash' });
     if (target.kind === 'none') stopWith(t('The bootloader is gone before flashing: try again.', 'Загрузчик пропал до прошивки: повторите.'), { tab: 'flash' });
@@ -207,7 +220,7 @@ export const useBuildFlashStore = create<BuildFlashState>()((set, get) => {
       if (res2.code !== 0) stopWith(t(`qmk flash failed (exit code ${res2.code}).`, `qmk flash не удался (код ${res2.code}).`), { detail: res2.output, tab: 'flash' });
     }
 
-    // 6. Back over USB.
+    // 7. Back over USB.
     phase('returning');
     const back = await waitForKeyboardBack(expect, () => !alive());
     check();
@@ -240,7 +253,7 @@ export const useBuildFlashStore = create<BuildFlashState>()((set, get) => {
     },
     cancel() {
       const p = get().phase;
-      if (p === 'building') void useQmkStore.getState().cancel();
+      if (p === 'building' || p === 'testing') void useQmkStore.getState().cancel();
       // Flashing itself is never interrupted halfway: the copy / qmk flash finishes, only the waits stop.
       if (p === 'flashing') return;
       runId++;

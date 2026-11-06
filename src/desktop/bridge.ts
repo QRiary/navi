@@ -90,6 +90,20 @@ export interface CompileResult {
   durationMs: number;
 }
 
+/**
+ * A firmware test run (electron/firmwareTests.cjs parseRunOutput), only from facts: the run's exit code and the
+ * player's summary line. `failures`: one block per mismatch (`navi_tests.txt:<line>: <steps>`, expected, actual);
+ * `errors`: the test build's first error lines.
+ */
+export type FirmwareTestResult = { job?: number | null; durationMs?: number } & (
+  | { status: 'pass'; passed: number; failed: number }
+  | { status: 'fail'; passed: number; failed: number; failures: string[] }
+  | { status: 'cant-build'; errors: string[] }
+  | { status: 'error'; message: string; tail?: string }
+  | { status: 'unsupported' }
+  | { status: 'no-tests' }
+);
+
 /** A file the build gate cannot pass in an untrusted folder. */
 export interface TrustIssue {
   file: string;
@@ -209,6 +223,8 @@ export interface NaviBridge {
     writeKeymap(home: string, userspace: string | null, kb: string, km: string, files: { name: string; text: string }[]): Promise<{ dir: string; backup: string | null }>;
     writeKeyboard(home: string, kb: string, files: { name: string; text: string }[]): Promise<{ dir: string; backup: string | null }>;
     compile(settings: QmkSettings, opts: { home: string; userspace: string | null; keyboard: string; keymap: string; keymapDir: string; env?: Record<string, string>; parallel?: number }): Promise<CompileResult>;
+    /** Firmware tests (electron/firmwareTests.cjs): gated like a build; a refusal rejects. */
+    runTests(settings: QmkSettings, opts: { home: string; userspace: string | null; keyboard: string; keymap: string; keymapDir: string; rows: number; cols: number; customReview: boolean }): Promise<FirmwareTestResult>;
     run(settings: QmkSettings, command: 'doctor' | 'version' | 'env'): Promise<{ job: number | null; code: number | null }>;
     cancel(job: number): Promise<boolean>;
     onStarted(cb: (e: { job: number; kind: string; args: string[] }) => void): () => void;

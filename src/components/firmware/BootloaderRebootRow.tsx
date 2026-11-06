@@ -2,6 +2,7 @@
  * “Let NAVI restart the keyboard into its bootloader” (firmware.bootloaderReboot): NAVI's own C code in keymap.c.
  * One checkbox row; the packet itself is src/core/qmk/bootloaderReboot.ts.
  */
+import { findAttr } from '../../lib/find';
 import type { Project } from '../../core/project/types';
 import { useProjectStore } from '../../store/projectStore';
 import { t } from '../../i18n';
@@ -12,7 +13,7 @@ export function BootloaderRebootRow({ project }: { project: Project }) {
   const on = project.firmware.bootloaderReboot;
   const title = t('Let NAVI restart the keyboard into its bootloader', 'Разрешить NAVI перезагружать клавиатуру в загрузчик');
   return (
-    <div className="row" style={{ ['--row-cols' as string]: 'minmax(0,1.3fr) minmax(0,1fr) auto' }}>
+    <div className="row" {...findAttr('setting:firmware.bootloaderReboot')} style={{ ['--row-cols' as string]: 'minmax(0,1.3fr) minmax(0,1fr) auto' }}>
       <span>
         {title}{' '}
         <InfoTip label={title}>

@@ -14,11 +14,13 @@ const { cancel, findMsys, findOnPath, fromWslUnc, parseWslList, qmkCommand, run,
 const { allowedBuildOption, insideDir, joinInside, readTextIfExists, safeFileName, safeId, unsafeSource, writeFileAtomic } = require('./safety.cjs');
 const { createTrustStore, scanFolders, trustDialogDetail, trustRefusal } = require('./trust.cjs');
 const { createKeymapWrites } = require('./keymapWrites.cjs');
+const { stageAndRun, testsSupported } = require('./firmwareTests.cjs');
 
 const KB_RE = /^[a-z0-9_][a-z0-9_/.+-]{0,150}$/i;
 const KM_RE = /^[a-z0-9_][a-z0-9_-]{0,60}$/i;
 // navi.h / navi_rules.mk / navi_config.h: the "own pipeline" mode writes these beside the user's own rules.mk/config.h.
-const KEYMAP_FILES = new Set(['keymap.c', 'keymap.json', 'rules.mk', 'config.h', 'readme.md', 'navi.h', 'navi_rules.mk', 'navi_config.h']);
+// navi_tests.txt: firmware tests (firmware.tests), checked as data that can't work as a C include (safety.cjs).
+const KEYMAP_FILES = new Set(['keymap.c', 'keymap.json', 'rules.mk', 'config.h', 'readme.md', 'navi.h', 'navi_rules.mk', 'navi_config.h', 'navi_tests.txt']);
 const KEYBOARD_FILES = new Set(['keyboard.json', 'info.json', 'rules.mk', 'config.h', 'readme.md', 'halconf.h', 'mcuconf.h']);
 const MAX_SOURCE = 2 * 1024 * 1024;
 
@@ -656,6 +658,35 @@ function checkUserspace(userspace) {
   return userspace;
 }
 
+/** Thrown while an imported project's own code waits for “allow” (firmware.customReview). */
+const REVIEW_REFUSAL = 'the firmware tests are refused: the imported project has own code that is not allowed yet';
+
+/**
+ * Firmware tests (firmwareTests.cjs): they compile the keymap folder's C, the user's own code included, into a program
+ * that RUNS ON THIS PC, so every gate of a build holds first: own code still under review, the trusted-folder /
+ * allowlist scan, QMK's dry run naming the folder on screen. A refusal throws (like a build); otherwise the result of
+ * the run, `{ status, ... }` (status 'unsupported' for a runner that can't run them: MSYS, or `qmk` on Windows' PATH).
+ * deps: runner / runQmk / stage / platform can be swapped in tests.
+ */
+async function runFirmwareTests(trust, settings, args, deps = {}) {
+  const { home, userspace: us, keyboard, keymap, keymapDir: shown, rows, cols, customReview } = args ?? {};
+  validatePath(home);
+  const userspace = checkUserspace(us);
+  checkKb(keyboard);
+  checkKm(keymap);
+  if (customReview !== false) throw new Error(REVIEW_REFUSAL);
+  const getRunner = deps.runner ?? runner;
+  const r = await getRunner(settings);
+  if (!testsSupported(r, deps.platform)) return { status: 'unsupported' };
+  const untrusted = await checkTrust(trust, home, userspace, keyboard, keymap);
+  if (untrusted) throw new Error(untrusted);
+  const dry = await (deps.runQmk ?? runQmk)(settings, ['compile', '-n', '-kb', validateArg(keyboard), '-km', validateArg(keymap)], { cwd: home, timeoutMs: 60000 });
+  const expected = keymapDir(home, userspace, keyboard, keymap);
+  const refusal = checkBuildFolder({ output: dry.output, expected, shown: String(shown ?? ''), userspace, toLocal: (p) => homeFromConfig(p, r) });
+  if (refusal) throw new Error(refusal);
+  return (deps.stage ?? stageAndRun)({ r, home, keymapDir: expected.dir, rows, cols, onJob: deps.onJob, onLine: deps.onLine, platform: deps.platform });
+}
+
 function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
   const send = (channel, payload) => getWindow()?.webContents.send(channel, payload);
   // Only NAVI's local data, never the JSONC config the renderer writes.
@@ -712,6 +743,22 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
     }
     const payload = { job: jobId, code: result.code, firmware, durationMs: Date.now() - started };
     send('navi:qmk:done', payload);
+    return payload;
+  });
+
+  /** Firmware tests: navi_tests.txt played in QMK's unit test framework (runFirmwareTests has the gates). */
+  ipcMain.handle('navi:qmk:run-tests', async (_e, settings, args) => {
+    let jobId = null;
+    const started = Date.now();
+    const result = await runFirmwareTests(trust, settings, args, {
+      onJob: (id) => {
+        jobId = id;
+        send('navi:qmk:started', { job: id, kind: 'tests', args: [] });
+      },
+      onLine: (stream, line) => send('navi:qmk:log', { job: jobId, stream, line }),
+    });
+    const payload = { ...result, job: jobId, durationMs: Date.now() - started };
+    if (jobId !== null) send('navi:qmk:done', { job: jobId, code: result.status === 'pass' ? 0 : 1 });
     return payload;
   });
 
@@ -800,4 +847,4 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
   });
 }
 
-module.exports = { registerQmkIpc, buildScanFolders, checkTrust, chooseRunner, homeFromConfig, parseQmkConfig, parseQmkEnv, isUserspace, keymapDir, writeKeymap, checkBuildFolder, firmwareSnapshot, runner, keyboardTargets, listKeyboards, readKeyboard, readKeymap, describeFirmware, scanUf2, archiveFirmware, listFirmware, firmwarePath, findBuiltFirmware, isQmkHome, readOwnCode, BACKUP_MAX };
+module.exports = { registerQmkIpc, runFirmwareTests, REVIEW_REFUSAL, buildScanFolders, checkTrust, chooseRunner, homeFromConfig, parseQmkConfig, parseQmkEnv, isUserspace, keymapDir, writeKeymap, checkBuildFolder, firmwareSnapshot, runner, keyboardTargets, listKeyboards, readKeyboard, readKeymap, describeFirmware, scanUf2, archiveFirmware, listFirmware, firmwarePath, findBuiltFirmware, isQmkHome, readOwnCode, BACKUP_MAX };

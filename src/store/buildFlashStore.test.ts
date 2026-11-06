@@ -64,17 +64,21 @@ beforeAll(async () => {
 let generate: (p: Project) => { name: string; text: string }[];
 
 /** disk 'navi': the folder holds exactly what NAVI would write now, as NAVI wrote it. */
-function setup(opts: { disk?: { name: string; text: string; navi?: boolean }[] | 'navi'; tick?: boolean; compileCode?: number } = {}) {
+function setup(opts: { disk?: { name: string; text: string; navi?: boolean }[] | 'navi'; tick?: boolean; compileCode?: number; runTests?: boolean; tests?: boolean; runner?: string; testResult?: unknown } = {}) {
   calls.length = 0;
   vi.mocked(raw.sendRawPacket).mockReset();
   toasts.useToastStore.setState({ toasts: [] });
-  const p = { ...project, firmware: { ...project.firmware, bootloaderReboot: opts.tick ?? true } };
+  const p = { ...project, firmware: { ...project.firmware, bootloaderReboot: opts.tick ?? true, runTests: opts.runTests ?? false, tests: opts.tests ?? opts.runTests ?? false } };
   const disk = opts.disk === 'navi' ? generate(p).map((f) => ({ ...f, navi: true })) : (opts.disk ?? []);
   projectStore.useProjectStore.setState({ project: p, saved: p });
   deviceStore.useDeviceStore.setState({ refresh: async () => {} });
   const fw = { id: 'fw1', file: 'kb.uf2', source: 'build' };
   qmkStore.useQmkStore.setState({
-    env: { runner: 'msys', homeValid: true, home: 'C:/qmk', userspace: null } as never,
+    env: { runner: { kind: opts.runner ?? 'wsl', path: 'x' }, homeValid: true, home: 'C:/qmk', userspace: null } as never,
+    runTests: vi.fn(async () => {
+      calls.push('tests');
+      return (opts.testResult ?? { status: 'pass', passed: 3, failed: 0 }) as never;
+    }),
     keymapSources: { dir: 'D', exists: true, root: 'firmware', files: disk },
     sources: null,
     ownCode: null,
@@ -232,5 +236,55 @@ describe('build + flash', () => {
     await runToEnd();
     expect(calls).toEqual(['compile']);
     expect(toasts.useToastStore.getState().toasts.some((t) => t.tone === 'error' && !!t.detail?.includes('read error'))).toBe(true);
+  });
+
+  describe('firmware tests before flashing (firmware.runTests)', () => {
+    const errors = () => toasts.useToastStore.getState().toasts.filter((t) => t.tone === 'error');
+
+    it('a pass: the tests run after the write and before the build, then it flashes', async () => {
+      setup({ disk: 'navi', runTests: true });
+      scans = [{ ...empty(), uf2Drives: [drive] }, keyboardBack()];
+      await runToEnd();
+      expect(calls).toEqual(['tests', 'compile', 'uf2']);
+      expect(errors()).toEqual([]);
+    });
+
+    it('a mismatch stops before the build, with the mismatch lines as details and a way to Firmware → flash', async () => {
+      const failure = 'navi_tests.txt:7: r0c1\n  expected: x\n  actual: b';
+      setup({ disk: 'navi', runTests: true, testResult: { status: 'fail', passed: 2, failed: 1, failures: [failure] } });
+      scans = [{ ...empty(), uf2Drives: [drive] }];
+      await runToEnd();
+      expect(calls).toEqual(['tests']);
+      expect(errors()).toHaveLength(1);
+      expect(errors()[0].detail).toBe(failure);
+      expect(errors()[0].action).toBeDefined();
+    });
+
+    it('tests that can’t build stop it too, with the compiler errors as details', async () => {
+      setup({ disk: 'navi', runTests: true, testResult: { status: 'cant-build', errors: ['own.c:5: error: implicit declaration'] } });
+      scans = [{ ...empty(), uf2Drives: [drive] }];
+      await runToEnd();
+      expect(calls).toEqual(['tests']);
+      expect(errors()[0].detail).toContain('implicit declaration');
+    });
+
+    it('the tick without “Write firmware tests”, or on QMK MSYS: stops without running or building anything', async () => {
+      setup({ disk: 'navi', runTests: true, tests: false });
+      scans = [{ ...empty(), uf2Drives: [drive] }];
+      await runToEnd();
+      expect(calls).toEqual([]);
+      expect(errors()).toHaveLength(1);
+      setup({ disk: 'navi', runTests: true, runner: 'msys' });
+      await runToEnd();
+      expect(calls).toEqual([]);
+      expect(errors()).toHaveLength(1);
+    });
+
+    it('the tick off: no tests', async () => {
+      setup({ disk: 'navi' });
+      scans = [{ ...empty(), uf2Drives: [drive] }, keyboardBack()];
+      await runToEnd();
+      expect(calls).toEqual(['compile', 'uf2']);
+    });
   });
 });

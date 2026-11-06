@@ -5,7 +5,9 @@
 import { create } from 'zustand';
 import { analyzeKeyboard, type KeyboardSourceInfo } from '../core/qmk/sources';
 import type { OwnCodeFile } from '../core/project/tapHoldActions';
-import { navi, type CompileResult, type FirmwareInfo, type FlashScan, type KeyboardSources, type KeymapSources, type QmkEnvironment, type TrustState } from '../desktop/bridge';
+import type { Project } from '../core/project/types';
+import { testsRefusalSentence } from '../lib/firmwareTests';
+import { navi, type CompileResult, type FirmwareTestResult, type FirmwareInfo, type FlashScan, type KeyboardSources, type KeymapSources, type QmkEnvironment, type TrustState } from '../desktop/bridge';
 import { getLanguage, t } from '../i18n';
 import { useSettingsStore } from './settingsStore';
 
@@ -27,6 +29,8 @@ export interface QmkState {
   job: { id: number | null; kind: string; running: boolean; startedAt: number } | null;
   log: LogLine[];
   lastCompile: CompileResult | null;
+  /** The last firmware test run (null: none yet, or one is running). */
+  lastTests: FirmwareTestResult | null;
   firmware: FirmwareInfo[];
   scan: FlashScan | null;
   /** What went wrong, as a sentence in the interface language; the raw text is in errorDetail. */
@@ -46,6 +50,8 @@ export interface QmkState {
   grantTrust(keyboard: string, keymap: string): Promise<void>;
   revokeTrust(dir: string): Promise<void>;
   compile(keyboard: string, keymap: string, env?: Record<string, string>, parallel?: number): Promise<CompileResult | null>;
+  /** Firmware tests of the project's target (gated like a build in the main process); null = refused, see `error`. */
+  runTests(project: Project): Promise<FirmwareTestResult | null>;
   runDiagnostic(cmd: 'doctor' | 'version' | 'env'): Promise<void>;
   cancel(): Promise<void>;
   refreshFirmware(): Promise<void>;
@@ -129,6 +135,7 @@ export const useQmkStore = create<QmkState>()((set, get) => {
     job: null,
     log: [],
     lastCompile: null,
+    lastTests: null,
     firmware: [],
     scan: null,
     error: null,
@@ -278,6 +285,28 @@ export const useQmkStore = create<QmkState>()((set, get) => {
         // A refused build: show the folder as it is now, so the next build is a choice made on what's on screen.
         await get().loadSources(keyboard, keymap);
         set({ ...failure(buildRefusalSentence(rawText(err)), err), job: null });
+        return null;
+      }
+    },
+
+    async runTests(project) {
+      const home = get().home();
+      const keyboard = project.firmware.keyboard;
+      const keymap = project.firmware.keymap;
+      if (!navi || !home || !keyboard) return null;
+      set({ log: [{ stream: 'app', text: `$ navi tests ${keyboard}:${keymap}` }], lastTests: null, error: null, errorDetail: null, job: { id: null, kind: 'tests', running: true, startedAt: Date.now() } });
+      try {
+        const s = get().sources;
+        if (!get().keymapSources || s?.keyboard !== keyboard || s.keymap !== keymap) await get().loadSources(keyboard, keymap);
+        const keymapDir = get().keymapSources?.dir;
+        if (!keymapDir) throw new Error(get().errorDetail ?? 'Could not resolve the keymap folder');
+        const { rows, cols } = project.hardware.matrix;
+        const res = await navi.qmk.runTests(qmkSettings(), { home, userspace: get().userspace(), keyboard, keymap, keymapDir, rows, cols, customReview: project.firmware.customReview === true });
+        set({ lastTests: res, job: { ...(get().job ?? { kind: 'tests', startedAt: Date.now() }), id: res.job ?? null, running: false } });
+        return res;
+      } catch (err) {
+        await get().loadSources(keyboard, keymap);
+        set({ ...failure(testsRefusalSentence(rawText(err)), err), job: null });
         return null;
       }
     },

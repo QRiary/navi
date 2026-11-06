@@ -1,0 +1,66 @@
+// npm run test:fw — host check of NAVI's firmware test runner (electron/firmwareTests.cjs): writes the sample keymap
+// folders (tests/firmware-tests/samples.test.ts), then stages, builds and plays each one exactly as the app does and
+// checks the result. On Windows it runs in WSL: NAVI_WSL_DISTRO names the distro with QMK (default QMK). QMK_HOME is
+// qmk_firmware as a Linux path (default /home/<user>/qmk_firmware of that distro).
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+
+const require = createRequire(import.meta.url);
+const root = resolve(import.meta.dirname, '..');
+const { stageAndRun } = require(join(root, 'electron/firmwareTests.cjs'));
+const { toWslUnc, run } = require(join(root, 'electron/runner.cjs'));
+
+const win = process.platform === 'win32';
+const distro = process.env.NAVI_WSL_DISTRO || 'QMK';
+const sh = (cmd) => spawnSync('wsl.exe', ['-d', distro, '--exec', 'bash', '-c', cmd], { encoding: 'utf8' }).stdout.trim();
+const homeLinux = process.env.QMK_HOME || (win ? `${sh('echo $HOME')}/qmk_firmware` : `${process.env.HOME}/qmk_firmware`);
+const r = win ? { kind: 'wsl', distro } : { kind: 'path', qmk: 'qmk' };
+const local = (p) => (win ? toWslUnc(distro, p) : p);
+
+// Sample folders live in Linux's /tmp (the keymap folder must be a Linux path for the test build).
+const samplesLinux = win ? sh('mktemp -d /tmp/navi-fw-samples.XXXXXX') : mkdtempSync(join(tmpdir(), 'navi-fw-samples-'));
+const samples = local(samplesLinux);
+let failed = 0;
+const check = (name, ok, detail) => {
+  console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : `\n${JSON.stringify(detail, null, 2)}`}`);
+  if (!ok) failed++;
+};
+
+try {
+  const gen = spawnSync(process.execPath, [join(root, 'node_modules/vitest/vitest.mjs'), 'run', 'tests/firmware-tests/samples.test.ts'], {
+    stdio: 'inherit',
+    cwd: root,
+    env: { ...process.env, NAVI_FW_TESTS_OUT: samples },
+  });
+  if (gen.status !== 0) process.exit(gen.status ?? 1);
+  const play = (name, rows, cols) => stageAndRun({ r, home: local(homeLinux), keymapDir: join(samples, name), rows, cols, run });
+
+  const plain = await play('plain', 4, 10);
+  const wrong = ['navi_tests.txt:19: r0c1', '  expected: x', '  actual: b'].join('\n');
+  check('plain: every scenario but the wrong one passes', plain.status === 'fail' && plain.passed === 14 && plain.failed === 1, plain);
+  check('plain: the wrong expectation is reported with its line, steps, expected and actual', plain.failures?.[0] === wrong, plain.failures);
+
+  const pipeline = await play('pipeline', 4, 10);
+  check('pipeline: the own C compiles with NAVI files and its key types "y"', pipeline.status === 'pass' && pipeline.passed === 3, pipeline);
+
+  const broken = await play('broken', 4, 10);
+  check('broken: own C calling an RGB Matrix function can\'t build, and the error names it', broken.status === 'cant-build' && broken.errors?.some((l) => l.includes('rgb_matrix_set_color')), broken);
+
+  const split = await play('split', 10, 6);
+  check('split: a split board builds as one matrix and both halves type', split.status === 'pass' && split.passed === 1, split);
+
+  for (const [name, rows, cols] of [['generated-plain', 4, 10], ['generated-split', 10, 6]]) {
+    const gen = await play(name, rows, cols);
+    check(`${name}: NAVI's own navi_tests.txt passes whole on the firmware it wrote`, gen.status === 'pass' && gen.passed > 0, gen);
+  }
+
+  const none = await stageAndRun({ r, home: local(homeLinux), keymapDir: samples, rows: 4, cols: 10, run });
+  check('a folder without navi_tests.txt: no-tests', none.status === 'no-tests', none);
+} finally {
+  rmSync(samples, { recursive: true, force: true });
+}
+console.log(failed ? `${failed} check(s) failed` : 'all checks passed');
+process.exit(failed ? 1 : 0);

@@ -33,6 +33,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:qmk": "node scripts/qmk-host-test.mjs",
+    "test:fw": "node scripts/firmware-tests-host.mjs",
     "check:docs": "node scripts/check-docs-links.mjs",
     "postinstall": "node node_modules/electron/install.js",
     "app": "vite build && electron .",

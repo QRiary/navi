@@ -115,6 +115,6 @@ describe('bootloader reboot', () => {
     expect(validateProject(v14).project?.firmware.bootloaderReboot).toBe(false);
     const on = JSON.parse(serializeProject({ ...p, firmware: { ...p.firmware, bootloaderReboot: true } }));
     expect(validateProject(on).project?.firmware.bootloaderReboot).toBe(true);
-    expect(PROJECT_SCHEMA_VERSION).toBe(15);
+    expect(PROJECT_SCHEMA_VERSION).toBeGreaterThanOrEqual(15);
   });
 });

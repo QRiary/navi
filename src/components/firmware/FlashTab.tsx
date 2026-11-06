@@ -18,6 +18,7 @@ import { toast, toastError } from '../../store/toastStore';
 import { BootloaderHelp } from '../device/BootloaderHelp';
 import { BuildLog } from './BuildLog';
 import { BootloaderRebootRow } from './BootloaderRebootRow';
+import { FirmwareTestsRow } from './FirmwareTestsRow';
 import { QMK_DOCS } from '../../lib/qmkDocs';
 import { acceptNoBackup, expectedUsb, hasBoardBackup, noBackupAccepted, waitForKeyboardBack } from '../../lib/flashSteps';
 import { whyDisabled } from '../../lib/whyDisabled';
@@ -220,6 +221,7 @@ export function FlashTab({ active = true }: { active?: boolean }) {
         <div className="panel-box" style={{ marginBottom: 'var(--gap)' }}>
           <div className="panel-box-body">
             <BootloaderRebootRow project={project} />
+            <FirmwareTestsRow project={project} />
           </div>
         </div>
       )}
@@ -453,7 +455,7 @@ export function FlashTab({ active = true }: { active?: boolean }) {
       <div style={{ marginTop: 'var(--gap)' }}>
         <BootloaderHelp />
       </div>
-      {job?.kind === 'flash' && <BuildLog />}
+      {(job?.kind === 'flash' || job?.kind === 'tests') && <BuildLog />}
       {deleting && (
         <Modal
           title={t('Delete firmware file?', 'Удалить файл прошивки?')}
