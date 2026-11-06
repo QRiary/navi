@@ -178,11 +178,21 @@ export function languageEarlyCode(o: { project: Project; keymap: Keymap; plan: L
     );
   }
   out.push(
-    '// Plain keys type ASCII text as it is; anything else goes through the text route.',
+    '// Plain keys type ASCII text as it is; anything else goes through the text route. SS_TAP / SS_DOWN / SS_UP codes',
+    '// are skipped whole: their keycode byte may be 0x80 or more (KC_LCTL is 0xE0).',
     'void navi_send_text(const char *text) {',
     '    if (navi_typing_plain()) {',
     '        const char *s = text;',
-    '        while (*s && (uint8_t)*s < 0x80) s++;',
+    '        while (*s) {',
+    '            if ((uint8_t)*s == SS_QMK_PREFIX) {',
+    '                s++;                                // the code',
+    '                if (*s && *s != SS_DELAY_CODE) s++; // the keycode (a delay\'s digits are ASCII)',
+    '                if (*s) s++;',
+    '                continue;',
+    '            }',
+    '            if ((uint8_t)*s >= 0x80) break;',
+    '            s++;',
+    '        }',
     '        if (!*s) {',
     '            send_string(text);',
     '            return;',
@@ -424,11 +434,40 @@ export function languageViaMacroLines(plan: LanguagePlan, via: boolean): string[
 }
 
 /**
- * Macro steps with a text route. Unicode routes: text steps through navi_send_text. Own program: from the first
- * text step on, the steps go to the program as one send_string stream (it types them in order; a key the keyboard
- * sent itself would overtake the program's text), split only by delays, which wait on the keyboard.
+ * A key step as send_string codes (SS_TAP / SS_DOWN / SS_UP, separate literals so the octal escapes can't run into
+ * the text after them): a basic key, or a key with modifiers (LCTL(KC_A)) as the modifiers' down / up around it.
+ * Null for anything else (layer keys, QMK features, own keycodes): the program can't type those.
  */
-export function routedMacroStatements(steps: MacroStep[], plan: LanguagePlan, normal: (s: MacroStep) => string, cString: (s: string) => string): string[] {
+function streamCodes(type: 'tap' | 'down' | 'up', keycode: number): string[] | null {
+  const byte = (v: number) => `\\${v.toString(8).padStart(3, '0')}`;
+  const code = (t: 'tap' | 'down' | 'up', kc: number) => `"${byte(1)}${byte(t === 'tap' ? 1 : t === 'down' ? 2 : 3)}${byte(kc)}"`;
+  if (keycode <= 0xff) return keycode > 0 ? [code(type, keycode)] : [];
+  if (keycode > 0x1fff) return null; // QK_MODS ends at 0x1FFF
+  const bits = (keycode >> 8) & 0x1f; // QMK's 5-bit mods: Ctrl, Shift, Alt, GUI, then the right-hand flag
+  const first = bits & 0x10 ? 0xe4 : 0xe0; // KC_RCTL / KC_LCTL; Shift, Alt, GUI follow
+  const mods = [0, 1, 2, 3].filter((i) => bits & (1 << i)).map((i) => first + i);
+  const key = keycode & 0xff;
+  const down = mods.map((m) => code('down', m));
+  const up = [...mods].reverse().map((m) => code('up', m));
+  if (type === 'down') return [...down, ...(key ? [code('down', key)] : [])];
+  if (type === 'up') return [...(key ? [code('up', key)] : []), ...up];
+  return [...down, ...(key ? [code('tap', key)] : []), ...up];
+}
+
+/**
+ * Macro (and every-tap dance) steps with a text route. Unicode routes: text steps through navi_send_text. Own
+ * program: from the first text step on, the steps go to the program as one send_string stream (it types them in
+ * order; a key the keyboard sent itself would overtake the program's text), split only by delays, which wait on the
+ * keyboard. A key the stream can't carry (`streamCodes`) is played by the keyboard after the text so far, and
+ * reported through `unstreamed`.
+ */
+export function routedMacroStatements(
+  steps: MacroStep[],
+  plan: LanguagePlan,
+  normal: (s: MacroStep) => string,
+  cString: (s: string) => string,
+  unstreamed?: (s: MacroStep) => void,
+): string[] {
   if (!plan.routed || !steps.some((s) => s.type === 'text')) return steps.map(normal);
   if (!plan.program) return steps.map((s) => (s.type === 'text' ? `navi_send_text(${cString(s.text)});` : normal(s)));
   const out: string[] = [];
@@ -438,7 +477,6 @@ export function routedMacroStatements(steps: MacroStep[], plan: LanguagePlan, no
     if (stream.length) out.push(`navi_send_text(${stream.join(' ')});`);
     stream = [];
   };
-  const byte = (v: number) => `\\${v.toString(8).padStart(3, '0')}`;
   for (const s of steps) {
     if (!started && s.type !== 'text') {
       out.push(normal(s));
@@ -450,10 +488,15 @@ export function routedMacroStatements(steps: MacroStep[], plan: LanguagePlan, no
     } else if (s.type === 'delay') {
       flush();
       out.push(`wait_ms(${s.ms});`);
-    } else if (s.keycode > 0 && s.keycode <= 0xff) {
-      // Macros hold basic keys only (VIA's format); a key with modifiers is the modifier's down and up steps.
-      // Separate literals, so the octal escapes can't run into the text after them.
-      stream.push(`"${byte(1)}${byte(s.type === 'tap' ? 1 : s.type === 'down' ? 2 : 3)}${byte(s.keycode)}"`);
+    } else {
+      const codes = streamCodes(s.type, s.keycode);
+      if (codes) {
+        stream.push(...codes);
+      } else {
+        flush();
+        out.push(normal(s));
+        unstreamed?.(s);
+      }
     }
   }
   flush();
