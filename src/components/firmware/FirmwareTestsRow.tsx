@@ -20,6 +20,9 @@ export function FirmwareTestsRow({ project }: { project: Project }) {
   const job = useQmkStore((s) => s.job);
   const lastTests = useQmkStore((s) => s.lastTests);
   const runTests = useQmkStore((s) => s.runTests);
+  const grantTrust = useQmkStore((s) => s.grantTrust);
+  // The last refusal was own code in an untrusted folder: offer the trust right here (the main process asks again).
+  const ownCodeRefused = useQmkStore((s) => !!s.errorDetail?.includes('code NAVI did not generate from the project'));
   const on = project.firmware.runTests;
   const blocker = testsBlocker(project, runner);
   const title = t('Run the firmware tests before flashing', 'Запускать тесты прошивки перед прошивкой');
@@ -39,8 +42,8 @@ export function FirmwareTestsRow({ project }: { project: Project }) {
           {title}{' '}
           <InfoTip label={title}>
             {t(
-              '“Build + flash” first builds the keymap into QMK’s unit test framework and plays navi_tests.txt; a key that types something else stops it before the keyboard is touched. The tests run the keymap’s code, your own C included, as a program on this PC, so they are refused wherever a build would be.',
-              '«Собрать и прошить» сначала собирает раскладку во фреймворк юнит-тестов QMK и проигрывает navi_tests.txt; клавиша, которая печатает другое, останавливает его до того, как клавиатура затронута. Тесты запускают код раскладки, ваш C тоже, как программу на этом компьютере, поэтому они отменяются везде, где отменилась бы сборка.',
+              '“Build + flash” first builds the keymap into QMK’s unit test framework and plays navi_tests.txt; a key that types something else stops it before the keyboard is touched. The tests run the keymap’s code, your own C included, as a program on this PC, so they are refused wherever a build would be, and code NAVI didn’t generate from the project (your own lines or files) runs only from a folder you trusted.',
+              '«Собрать и прошить» сначала собирает раскладку во фреймворк юнит-тестов QMK и проигрывает navi_tests.txt; клавиша, которая печатает другое, останавливает его до того, как клавиатура затронута. Тесты запускают код раскладки, ваш C тоже, как программу на этом компьютере, поэтому они отменяются везде, где отменилась бы сборка, а код, который NAVI не генерировала из проекта (ваши строки или файлы), запускается только из папки, которой вы доверили.',
             )}
           </InfoTip>
         </span>
@@ -63,6 +66,19 @@ export function FirmwareTestsRow({ project }: { project: Project }) {
         {result && <span className={lastTests?.status === 'pass' ? 'kicker' : 'field-hint'}>{result}</span>}
         {on && blocker && <span className="field-hint">{blocker}</span>}
       </div>
+      {ownCodeRefused && project.firmware.keyboard && (
+        <div className="field-row">
+          <span className="field-hint">
+            {t(
+              'This keymap folder has code NAVI didn’t generate from the project (your own lines or files). The tests would run it as a program on this PC: trust the folder only if you know this code.',
+              'В этой папке keymap есть код, который NAVI не генерировала из проекта (ваши строки или файлы). Тесты запустили бы его как программу на этом компьютере: доверяйте папке, только если знаете этот код.',
+            )}
+          </span>
+          <button className="btn" onClick={() => void grantTrust(project.firmware.keyboard!, project.firmware.keymap)}>
+            {t('trust this folder…', 'доверять этой папке…')}
+          </button>
+        </div>
+      )}
     </>
   );
 }

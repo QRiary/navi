@@ -100,8 +100,9 @@ const FAILURE_RE = /^navi_tests\.txt:\d+: /;
  *   error      anything else (bad navi_tests.txt, crash, no summary): `message`
  */
 function parseRunOutput(code, output) {
-  // GCC colors its messages (ANSI escapes): plain text for the log and the toast.
-  const lines = String(output ?? '').replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').split(/\r?\n/);
+  // GCC colors its messages (ANSI escapes): plain text for the log and the toast. NUL bytes: a wsl.exe that ignores
+  // WSL_UTF8 prints its own messages (e.g. its localhost proxy warning) in UTF-16 ahead of the run's first line.
+  const lines = String(output ?? '').replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').replace(/\0/g, '').split(/\r?\n/);
   const built = lines.indexOf('NAVI-TESTS: build failed');
   if (code === 3 && built >= 0) {
     const errors = lines.slice(built + 1).filter((l) => l.trim());
@@ -170,7 +171,8 @@ async function stageAndRun({ r, home, keymapDir, rows, cols, onLine, onJob, run 
     const script = [`${tmpLinux}/${RUN_SCRIPT}`, tmpLinux, homeLinux].map((a) => runner.validatePath(runner.validateArg(a)));
     // No login shell: make and the host compiler are system programs (and ~/.bash_logout can't touch the exit code).
     const cmd = r.kind === 'wsl' ? { command: 'wsl.exe', args: ['-d', runner.validateDistro(r.distro), '--exec', 'bash', ...script] } : { command: 'bash', args: script };
-    const job = run(cmd.command, cmd.args, { onLine, timeoutMs: RUN_TIMEOUT_MS });
+    // WSL_UTF8: wsl.exe's own messages (e.g. its localhost proxy warning) in UTF-8, not UTF-16 glued to our first line.
+    const job = run(cmd.command, cmd.args, { onLine, timeoutMs: RUN_TIMEOUT_MS, ...(r.kind === 'wsl' ? { env: { WSL_UTF8: '1' } } : {}) });
     onJob?.(job.id);
     const result = await job.done;
     return parseRunOutput(result.code, result.output);

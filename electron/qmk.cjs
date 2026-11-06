@@ -662,11 +662,67 @@ function checkUserspace(userspace) {
 const REVIEW_REFUSAL = 'the firmware tests are refused: the imported project has own code that is not allowed yet';
 
 /**
+ * Thrown when the keymap folder has C that NAVI did not generate from the project and the folder is not trusted. The
+ * allowlist scan only stops make from running programs and C from including outside files; it does not read what C
+ * code does. Firmware C is harmless on this PC (it runs on the keyboard), but the test build runs it here.
+ */
+const OWN_CODE_REFUSAL = 'the firmware tests are refused: the keymap folder has code NAVI did not generate from the project, and the tests would run it as a program on this PC';
+
+/** Files NAVI writes into a keymap folder. Any other file there, or in users/<keymap>, is the user's own. */
+const NAVI_KEYMAP_FILES = new Set(['keymap.c', 'keymap.json', 'rules.mk', 'config.h', 'readme.md', 'navi.h', 'navi_rules.mk', 'navi_config.h', 'navi_tests.txt']);
+/** NAVI's files that carry code (they are compiled or included); the others are data. */
+const NAVI_CODE_FILES = new Set(['keymap.c', 'rules.mk', 'config.h', 'navi.h', 'navi_rules.mk', 'navi_config.h']);
+/** The marker of the user's own lines in a generated file (customBlock in src/core/qmk/customCode.ts). */
+const OWN_LINES_MARK = '── your own lines (NAVI: Firmware → keymap files) ──';
+
+/**
+ * Why the test build would compile code NAVI did not generate from the project, or null. folders = buildScanFolders
+ * (the keymap folder first, then users/<keymap>). writes (keymapWrites.cjs, optional): a NAVI file that is not what
+ * NAVI wrote there last was edited outside NAVI. Read-only; unreadable entries count as foreign.
+ */
+async function foreignCode(folders, writes = null) {
+  const [dir, ...users] = folders;
+  for (const u of users) {
+    let names = [];
+    try {
+      names = await fs.promises.readdir(u);
+    } catch (err) {
+      if (err && err.code === 'ENOENT') continue;
+      return `users folder can't be read: ${u}`;
+    }
+    if (names.length) return `files in ${u}`;
+  }
+  let entries;
+  try {
+    entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    return `keymap folder can't be read: ${dir}`;
+  }
+  for (const e of entries) {
+    if (!e.isFile() || !NAVI_KEYMAP_FILES.has(e.name)) return `own ${e.isDirectory() ? 'folder' : 'file'}: ${e.name}`;
+    if (!NAVI_CODE_FILES.has(e.name)) continue;
+    const full = path.join(dir, e.name);
+    let text;
+    try {
+      text = await fs.promises.readFile(full, 'utf8');
+    } catch {
+      return `${e.name} can't be read`;
+    }
+    if (text.includes(OWN_LINES_MARK)) return `own lines in ${e.name}`;
+    if (writes && !writes.isNavis(full, text)) return `${e.name} is not what NAVI wrote there last`;
+  }
+  return null;
+}
+
+/**
  * Firmware tests (firmwareTests.cjs): they compile the keymap folder's C, the user's own code included, into a program
  * that RUNS ON THIS PC, so every gate of a build holds first: own code still under review, the trusted-folder /
- * allowlist scan, QMK's dry run naming the folder on screen. A refusal throws (like a build); otherwise the result of
- * the run, `{ status, ... }` (status 'unsupported' for a runner that can't run them: MSYS, or `qmk` on Windows' PATH).
- * deps: runner / runQmk / stage / platform can be swapped in tests.
+ * allowlist scan, QMK's dry run naming the folder on screen. On top of a build's gates: C that NAVI did not generate
+ * from the project (own lines, own files, users/<keymap>, a NAVI file edited outside NAVI: foreignCode) runs only from a
+ * trusted folder, because the allowlist does not read what C does. A refusal throws (like a build); otherwise the
+ * result of the run, `{ status, ... }` (status 'unsupported' for a runner that can't run them: MSYS, or `qmk` on
+ * Windows' PATH). deps: runner / runQmk / stage / platform can be swapped in tests; writes = keymapWrites.cjs.
  */
 async function runFirmwareTests(trust, settings, args, deps = {}) {
   const { home, userspace: us, keyboard, keymap, keymapDir: shown, rows, cols, customReview } = args ?? {};
@@ -680,6 +736,12 @@ async function runFirmwareTests(trust, settings, args, deps = {}) {
   if (!testsSupported(r, deps.platform)) return { status: 'unsupported' };
   const untrusted = await checkTrust(trust, home, userspace, keyboard, keymap);
   if (untrusted) throw new Error(untrusted);
+  // Code NAVI did not generate runs here only from a folder the user trusted (main-process dialog).
+  const folders = buildScanFolders(home, userspace, keyboard, keymap);
+  if (!trust.isTrusted(folders[0])) {
+    const own = await foreignCode(folders, deps.writes ?? null);
+    if (own) throw new Error(`${OWN_CODE_REFUSAL} (${own})`);
+  }
   const dry = await (deps.runQmk ?? runQmk)(settings, ['compile', '-n', '-kb', validateArg(keyboard), '-km', validateArg(keymap)], { cwd: home, timeoutMs: 60000 });
   const expected = keymapDir(home, userspace, keyboard, keymap);
   const refusal = checkBuildFolder({ output: dry.output, expected, shown: String(shown ?? ''), userspace, toLocal: (p) => homeFromConfig(p, r) });
@@ -751,6 +813,7 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
     let jobId = null;
     const started = Date.now();
     const result = await runFirmwareTests(trust, settings, args, {
+      writes,
       onJob: (id) => {
         jobId = id;
         send('navi:qmk:started', { job: id, kind: 'tests', args: [] });
@@ -847,4 +910,4 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
   });
 }
 
-module.exports = { registerQmkIpc, runFirmwareTests, REVIEW_REFUSAL, buildScanFolders, checkTrust, chooseRunner, homeFromConfig, parseQmkConfig, parseQmkEnv, isUserspace, keymapDir, writeKeymap, checkBuildFolder, firmwareSnapshot, runner, keyboardTargets, listKeyboards, readKeyboard, readKeymap, describeFirmware, scanUf2, archiveFirmware, listFirmware, firmwarePath, findBuiltFirmware, isQmkHome, readOwnCode, BACKUP_MAX };
+module.exports = { registerQmkIpc, runFirmwareTests, REVIEW_REFUSAL, OWN_CODE_REFUSAL, foreignCode, buildScanFolders, checkTrust, chooseRunner, homeFromConfig, parseQmkConfig, parseQmkEnv, isUserspace, keymapDir, writeKeymap, checkBuildFolder, firmwareSnapshot, runner, keyboardTargets, listKeyboards, readKeyboard, readKeymap, describeFirmware, scanUf2, archiveFirmware, listFirmware, firmwarePath, findBuiltFirmware, isQmkHome, readOwnCode, BACKUP_MAX };

@@ -22,6 +22,11 @@ export function testsBlocker(project: Project, runner: QmkEnvironment['runner'] 
 export function testsRefusalSentence(raw: string): string {
   if (raw.includes('own code that is not allowed yet'))
     return t('The tests were refused: the imported own code isn’t allowed yet (Firmware → keymap files).', 'Тесты отменены: импортированный свой код ещё не разрешён («Прошивка → файлы keymap»).');
+  if (raw.includes('code NAVI did not generate from the project'))
+    return t(
+      'The tests were refused: the keymap folder has code NAVI didn’t generate from the project (your own lines or files), and the tests would run it as a program on this PC. Trust the folder (Firmware → flash, next to “Run firmware tests”) only if you know this code.',
+      'Тесты отменены: в папке keymap есть код, который NAVI не генерировала из проекта (ваши строки или файлы), а тесты запустили бы его как программу на этом компьютере. Доверьте папку («Прошивка → прошить», рядом с «Запустить тесты прошивки»), только если знаете этот код.',
+    );
   if (raw.includes('outside what NAVI can check as safe to build'))
     return t(
       'The tests were refused: the keymap folder has files NAVI can’t check as safe, and the tests would run them on this PC. Fix them, or trust the folder if you know this code.',

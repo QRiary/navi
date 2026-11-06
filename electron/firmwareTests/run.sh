@@ -8,7 +8,10 @@ set -u
 dir=$1
 qmk_home=$2
 finish() {
-    rm -rf "$dir"
+    # Only a test folder NAVI staged (firmwareTests.cjs: <tmp>/navi-tests-<hex>) is removed, whatever $1 was.
+    case "$dir" in
+        */navi-tests-[0-9a-f]*) rm -rf -- "$dir" ;;
+    esac
     # bash -l runs ~/.bash_logout on exit; its exit status must not replace ours.
     exit "$1"
 }

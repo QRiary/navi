@@ -73,8 +73,8 @@ export function CustomLines({ file, generatedSymbols }: { file: CustomFile; gene
         <div className="notice" role="alert" style={{ borderColor: 'var(--danger-color)', margin: '8px 12px' }}>
           <span>
             {t(
-              'This code came with an imported project and is not used yet. Read it (all three files): it is compiled into the firmware and runs on the keyboard — a keyboard can type anything into your computer.',
-              'Этот код пришёл с импортированным проектом и пока не используется. Прочитайте его (во всех трёх файлах): он вкомпилируется в прошивку и работает на клавиатуре — а клавиатура может напечатать в компьютер что угодно.',
+              'This code came with an imported project and is not used yet. Read it (all three files): it is compiled into the firmware and runs on the keyboard — a keyboard can type anything into your computer. The firmware tests would also run it as a program on this computer (only after you trust the keymap folder).',
+              'Этот код пришёл с импортированным проектом и пока не используется. Прочитайте его (во всех трёх файлах): он вкомпилируется в прошивку и работает на клавиатуре — а клавиатура может напечатать в компьютер что угодно. Тесты прошивки запустили бы его и как программу на этом компьютере (только после того, как вы доверите папку keymap).',
             )}{' '}
             <button className="btn" onClick={() => apply((p) => patchProject(p, { firmware: { ...p.firmware, customReview: undefined } }), t('allow own code', 'разрешить свой код'))}>
               <ShieldCheck size={14} strokeWidth={1.5} /> {t('I have read it — allow', 'прочитал(а) — разрешить')}

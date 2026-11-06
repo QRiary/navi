@@ -9,7 +9,7 @@ import path from 'node:path';
 
 const require = createRequire(import.meta.url);
 const { OFF_IN_TESTS, parseRunOutput, standInFiles, testsSupported } = require('./firmwareTests.cjs');
-const { runFirmwareTests, REVIEW_REFUSAL } = require('./qmk.cjs');
+const { runFirmwareTests, REVIEW_REFUSAL, OWN_CODE_REFUSAL, foreignCode } = require('./qmk.cjs');
 const { createTrustStore } = require('./trust.cjs');
 
 describe('board stand-in', () => {
@@ -72,6 +72,14 @@ describe('a run’s output → status, only from facts', () => {
   it('a file the player can’t read is an error with its reason', () => {
     expect(parseRunOutput(1, 'navi tests: navi_tests.txt:4: no =>: r0c1\n')).toMatchObject({ status: 'error', message: 'navi_tests.txt:4: no =>: r0c1' });
   });
+
+  it('wsl.exe’s own UTF-16 message ahead of the run (its localhost proxy warning) does not hide the result', () => {
+    // As read through a UTF-8 pipe: every UTF-16 code unit is followed by a NUL, and its line ends "\r\0\n\0".
+    const warning = Buffer.from('wsl: localhost proxy configuration was detected\r\n', 'utf16le').toString('latin1');
+    expect(parseRunOutput(0, `${warning}navi tests: 84 passed, 0 failed\n`)).toEqual({ status: 'pass', passed: 84, failed: 0 });
+    expect(parseRunOutput(3, `${warning}NAVI-TESTS: build failed\nown.c:5:32: error: implicit declaration\n`)).toEqual({ status: 'cant-build', errors: ['own.c:5:32: error: implicit declaration'] });
+    expect(parseRunOutput(1, `${warning}navi_tests.txt:7: r0c1\n  expected: x\n  actual: b\nnavi tests: 3 passed, 1 failed\n`)).toMatchObject({ status: 'fail', failures: ['navi_tests.txt:7: r0c1\n  expected: x\n  actual: b'] });
+  });
 });
 
 describe('runFirmwareTests gates (a refusal stages nothing)', () => {
@@ -116,6 +124,40 @@ describe('runFirmwareTests gates (a refusal stages nothing)', () => {
     expect(stage).not.toHaveBeenCalled();
     trust.grant(dir);
     expect(await runFirmwareTests(trust, settings, args, deps())).toMatchObject({ status: 'pass' });
+  });
+
+  // The allowlist only keeps make from running programs and C from including outside files; it does not read what C
+  // does. On the keyboard that C is firmware; in the test build it is a program on this PC.
+  it('C that NAVI did not generate (own lines, own files, users/<keymap>) runs only from a trusted folder', async () => {
+    const own = ['', '// ── your own lines (NAVI: Firmware → keymap files) ──', 'void keyboard_post_init_user(void) {}', '// ── end of your own lines ──', ''].join('\n');
+    put(path.join(dir, 'keymap.c'), `#include QMK_KEYBOARD_H\n${own}`);
+    await expect(runFirmwareTests(trust, settings, args, deps())).rejects.toThrow(OWN_CODE_REFUSAL);
+    put(path.join(dir, 'keymap.c'), '#include QMK_KEYBOARD_H\n');
+    put(path.join(dir, 'rules.mk'), 'SRC += own.c\n');
+    put(path.join(dir, 'own.c'), 'void own(void) {}\n'); // passes the allowlist: only its includes are checked
+    await expect(runFirmwareTests(trust, settings, args, deps())).rejects.toThrow(/own file: own\.c/);
+    fs.rmSync(path.join(dir, 'own.c'));
+    fs.rmSync(path.join(dir, 'rules.mk'));
+    put(path.join(home, 'users', 'mine', 'mine.c'), 'void mine(void) {}\n');
+    await expect(runFirmwareTests(trust, settings, args, deps())).rejects.toThrow(/files in .*users/);
+    expect(stage).not.toHaveBeenCalled();
+    trust.grant(dir);
+    expect(await runFirmwareTests(trust, settings, args, deps())).toMatchObject({ status: 'pass' });
+  });
+
+  it('a NAVI file that is not what NAVI wrote there last counts as own code', async () => {
+    const writes = (navis) => ({ isNavis: () => navis });
+    await expect(runFirmwareTests(trust, settings, args, { ...deps(), writes: writes(false) })).rejects.toThrow(/keymap\.c is not what NAVI wrote there last/);
+    expect(await runFirmwareTests(trust, settings, args, { ...deps(), writes: writes(true) })).toMatchObject({ status: 'pass' });
+  });
+
+  it('foreignCode: only NAVI’s own files, without own lines, are not foreign; a missing folder is nothing', async () => {
+    put(path.join(dir, 'config.h'), '#pragma once\n#define TAPPING_TERM 200\n');
+    put(path.join(dir, 'readme.md'), 'own text, not code\n');
+    expect(await foreignCode([dir])).toBeNull();
+    expect(await foreignCode([path.join(tmp, 'nowhere')])).toBeNull();
+    put(path.join(dir, 'sub', 'x.h'), '#pragma once\n');
+    expect(await foreignCode([dir])).toMatch(/own folder: sub/);
   });
 
   it('refused when QMK would build another folder than the one on screen', async () => {

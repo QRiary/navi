@@ -192,9 +192,9 @@ function trustDialogDetail(folders, km, ru) {
     : `\n\nThis trust also covers the users/${km} folders QMK builds with this keymap:\n` +
       `${users.length ? users.join('\n') : '(none right now)'}\nIncluding one created later.`;
   return ru
-    ? `${dir}${also}\n\nПри сборке make запустит код из этих папок (их rules.mk, .mk-файлы и C-код) на этом компьютере. ` +
+    ? `${dir}${also}\n\nПри сборке make запустит код из этих папок (их rules.mk, .mk-файлы и C-код) на этом компьютере, а тесты прошивки запустят их C-код как программу на этом компьютере. ` +
         'NAVI больше не будет проверять их файлы. Доверяйте, только если знаете этот код. Доверие можно отозвать.'
-    : `${dir}${also}\n\nWhen building, make will run code from these folders (their rules.mk, .mk files and C code) on this computer. ` +
+    : `${dir}${also}\n\nWhen building, make will run code from these folders (their rules.mk, .mk files and C code) on this computer, and the firmware tests run their C code as a program on this computer. ` +
         'NAVI will no longer check their files. Trust only if you know this code. You can revoke trust later.';
 }
 

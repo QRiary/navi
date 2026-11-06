@@ -214,7 +214,8 @@ function qmkCommand(runner, args, opts = {}) {
     }
     // bash -l: qmk lives in ~/.local/bin, which only the login PATH has.
     wslArgs.push('--', 'bash', '-lc', `qmk ${quoted}`);
-    return { command: 'wsl.exe', args: wslArgs, env: {} };
+    // WSL_UTF8: wsl.exe's own messages (e.g. its localhost proxy warning) reach the log in UTF-8, not UTF-16.
+    return { command: 'wsl.exe', args: wslArgs, env: { WSL_UTF8: '1' } };
   }
   return { command: runner.qmk, args, env: {} };
 }
