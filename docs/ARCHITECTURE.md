@@ -22,6 +22,8 @@ build/           app icon (icon.svg is the source)
   move keys, add geometry variants or import a layout without touching the keymap.
 - **Layers are numbers in QMK.** Reordering or deleting layers goes through `src/core/project/ops.ts`, which renumbers
   `MO()/LT()/TG()…` and the references inside tap dance and combos.
+  Custom keycodes are numbered by list position too: delete one only with `deleteCustomKeycode` (same file), which moves
+  the later ones down in every stored keycode.
 - **Nothing is faked.** Connection, write, build and flash statuses come only from facts: the keyboard's answer,
   reading back after a write, the exit code, a device appearing. Unknown hardware stays “unknown”; guesses are marked
   with evidence `heuristic`.

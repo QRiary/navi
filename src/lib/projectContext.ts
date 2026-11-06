@@ -9,18 +9,14 @@ import type { LabelContext } from '../core/keycodes/labels';
 import type { KeycodeSpec } from '../core/keycodes/spec';
 import { aliasLookup } from '../core/project/aliases';
 import { languageKeycodes, languageKeyOf } from '../core/project/languages';
-import { activeGeometry, activeKeymap } from '../core/project/ops';
+import { activeGeometry, activeKeymap, customKeycodeValue } from '../core/project/ops';
 import { languageKeyName as languageKeyCName } from '../core/qmk/languages';
 import { tapHoldActionLookup } from '../core/project/tapHoldActions';
 import type { Project } from '../core/project/types';
 import { useProjectStore, useSpec } from '../store/projectStore';
 import { useSettingsStore } from '../store/settingsStore';
 
-/** Value of an own keycode: QK_USER_0 + number (like SAFE_RANGE in keymap.c). */
-export function customKeycodeValue(spec: KeycodeSpec, index: number): number {
-  const start = spec.rangeByDefine.get('QK_USER')?.start ?? 0x7e40;
-  return start + index;
-}
+export { customKeycodeValue };
 
 export function labelContext(project: Project, spec: KeycodeSpec, settings: { os: LabelContext['os']; hostLayout: string }): LabelContext {
   const km = activeKeymap(project);

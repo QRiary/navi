@@ -276,8 +276,8 @@ function remapAllLayerRefs(p: Project, keymapId: string, spec: KeycodeSpec, mapp
 /**
  * Every keycode the project stores, through `fix` (language keys renumbered after a language moved or went): keys and
  * encoders of every keymap, tap dances, combo results, key overrides, aliases, tap-hold settings and key lists, tap-hold
- * action slots, leader and custom keycode actions, language shortcuts. A key that becomes KC_NO is dropped from
- * aliases, hold keys and key lists. Macro steps hold basic keys only, so they are left alone.
+ * action slots, leader and custom keycode actions, language shortcuts, macro key steps. A key that becomes KC_NO is
+ * dropped from aliases, hold keys and key lists.
  */
 export function mapProjectKeycodes(p: Project, fix: (v: number) => number): Project {
   const keep = (keys: number[]) => keys.map(fix).filter((k) => k !== KC_NO);
@@ -300,7 +300,36 @@ export function mapProjectKeycodes(p: Project, fix: (v: number) => number): Proj
     leaderSequences: p.leaderSequences.map((s) => ({ ...s, action: action(s.action) })),
     customKeycodes: p.customKeycodes.map((c) => ({ ...c, action: action(c.action) })),
     languages: p.languages.map((l) => (l.osShortcut === undefined ? l : { ...l, osShortcut: fix(l.osShortcut) })),
+    macros: p.macros.map((m) => ({ ...m, steps: m.steps.map((s) => (s.type === 'tap' || s.type === 'down' || s.type === 'up' ? { ...s, keycode: fix(s.keycode) } : s)) })),
   });
+}
+
+/** Value of an own keycode: QK_USER_0 + its place in the list (like SAFE_RANGE in keymap.c). */
+export function customKeycodeValue(spec: KeycodeSpec, index: number): number {
+  return (spec.rangeByDefine.get('QK_USER')?.start ?? 0x7e40) + index;
+}
+
+/**
+ * Deletes a custom keycode. Values follow the list position, so every later one moves down by one in every place a
+ * keycode is stored (`mapProjectKeycodes`) and keeps meaning the same keycode; places that used the deleted one become
+ * KC_NO (its alias goes). `cleared` counts those places. Language keys sit at the top of QK_USER, past the list, and
+ * stay as they are.
+ */
+export function deleteCustomKeycode(spec: KeycodeSpec, p: Project, id: string): { project: Project; cleared: number } {
+  const index = p.customKeycodes.findIndex((c) => c.id === id);
+  if (index < 0) return { project: p, cleared: 0 };
+  const gone = customKeycodeValue(spec, index);
+  const end = customKeycodeValue(spec, p.customKeycodes.length);
+  let cleared = 0;
+  const fix = (v: number) => {
+    if (v === gone) {
+      cleared++;
+      return KC_NO;
+    }
+    return v > gone && v < end ? v - 1 : v;
+  };
+  const project = mapProjectKeycodes({ ...p, customKeycodes: p.customKeycodes.filter((c) => c.id !== id) }, fix);
+  return { project, cleared };
 }
 
 export function addLayer(p: Project, keymapId: string, name: string, at?: number): Project {
