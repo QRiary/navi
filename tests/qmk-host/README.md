@@ -2,7 +2,8 @@
 
 `npm run test:qmk` builds a keymap NAVI generated into QMK's own unit test framework and plays key sequences on it,
 checking the HID reports the computer would get. It covers the C that `npm test` can only read as text: tap-hold
-keys with actions (stand-in MT / LT keycodes) and the replay fix for keys that hold when another key is pressed.
+keys with actions (stand-in MT / LT keycodes), the replay fix for keys that hold when another key is pressed, tap
+dances, combos and auto repeat (a held macro or custom keycode running again at a rate).
 
 - `fixture.test.ts` builds the test project (`hostProject()`, a 4x10 matrix like the test framework's) and writes
   its `keymap.c`, `rules.mk` and `config.h` to `NAVI_QMK_OUT`. Without that variable it is skipped, so `npm test`

@@ -15,6 +15,8 @@
 //   36 37 Y U → G, only with layer 1 on top   38 39 I O → X on layer 0, Y on layer 1
 //   24 LSFT_T(KC_A) holds when KC_Z is pressed   25 26 K L → Z
 //   27 28 F H → the every-tap dance at 16
+// Auto repeat (delay 300 ms, rate 50 ms), on layer 2 (hold 31):
+//   5 MC_0 taps A, repeats   6 REP_KEY types "b", repeats   7 MC_1 taps C, doesn't repeat
 #include <string>
 #include <vector>
 
@@ -68,12 +70,17 @@ class NaviHost : public TestFixture {
     }
 
    protected:
-    // Presses (+n) and releases (-n) one scan apart, n = row * 10 + col; "wait" waits out the tapping term.
+    // Presses (+n) and releases (-n) one scan apart, n = row * 10 + col; "wait" waits out the tapping term,
+    // "idle:N" waits N ms.
     // settle: wait out the tapping term at the end too (false: the reports as they are right after the last step).
     std::string play(const std::vector<std::string> &steps, bool settle = true) {
         for (auto &s : steps) {
             if (s == "wait") {
                 idle_for(TAPPING_TERM + 1);
+                continue;
+            }
+            if (s.rfind("idle:", 0) == 0) {
+                idle_for(std::stoi(s.substr(5)));
                 continue;
             }
             int n = std::stoi(s.substr(1));
@@ -330,4 +337,30 @@ TEST_F(NaviHost, combo_slots_dance_tapped_on_the_layer_of_the_key_at_0_0) {
 
 TEST_F(NaviHost, key_at_0_0_taps_normally_after_a_combo_slots_dance_hold) {
     EXPECT_EQ(play({"+9", "+29", "wait", "wait", "-9", "-29", "+0", "-0"}), "LSFT - 0x2C -");
+}
+
+// Auto repeat: a ticked key runs its action on press, again after the delay (300 ms), then every 50 ms until released.
+TEST_F(NaviHost, repeating_macro_held_runs_again_after_the_delay_then_at_the_rate) {
+    EXPECT_EQ(play({"+31", "+5", "idle:420", "-5", "idle:200", "-31"}), "A - A - A - A -");
+}
+
+TEST_F(NaviHost, repeating_macro_tapped_runs_once) {
+    EXPECT_EQ(play({"+31", "+5", "-5", "idle:400", "-31"}), "A -");
+}
+
+TEST_F(NaviHost, repeating_custom_keycode_held_repeats_its_string) {
+    EXPECT_EQ(play({"+31", "+6", "idle:320", "-6", "-31"}), "B - B -");
+}
+
+// One key repeats at a time: the last pressed. The earlier one does not come back when the newer is released.
+TEST_F(NaviHost, repeating_key_pressed_last_takes_over_the_repeat) {
+    EXPECT_EQ(play({"+31", "+5", "idle:100", "+6", "idle:320", "-6", "idle:400", "-5", "-31"}), "A - B - B -");
+}
+
+TEST_F(NaviHost, releasing_the_older_repeating_key_does_not_stop_the_newer) {
+    EXPECT_EQ(play({"+31", "+5", "idle:100", "+6", "idle:50", "-5", "idle:270", "-6", "-31"}), "A - B - B -");
+}
+
+TEST_F(NaviHost, macro_not_ticked_does_not_repeat) {
+    EXPECT_EQ(play({"+31", "+7", "idle:420", "-7", "-31"}), "C -");
 }

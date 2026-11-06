@@ -43,6 +43,10 @@ export function hostProject(): Project {
   p = r8.project;
   put(0, 8, r8.keycode);
   put(2, 2, q('KC_V'));
+  // Auto repeat on layer 2 (hold 31): MC_0 and REP_KEY repeat, MC_1 doesn't.
+  put(2, 5, q('QK_MACRO_0'));
+  put(2, 6, q('QK_USER_1'));
+  put(2, 7, q('QK_MACRO_1'));
   // Combos (positions 24…39): layer keys, then the keys of each scenario
   const combo = (n: number): [number, number] => [Math.floor(n / 10), n % 10];
   ([[30, 'MO(1)'], [31, 'MO(2)'], [32, 'KC_Q'], [33, 'KC_W'], [34, 'KC_R'], [35, 'KC_T'], [36, 'KC_Y'], [37, 'KC_U'], [38, 'KC_I'], [39, 'KC_O'],
@@ -82,9 +86,17 @@ export function hostProject(): Project {
   return {
     ...p,
     tapDances,
-    customKeycodes: [{ id: 'ck-host', name: 'HOST_KEY', description: 'handled by the own lines', action: { type: 'none' } }],
+    customKeycodes: [
+      { id: 'ck-host', name: 'HOST_KEY', description: 'handled by the own lines', action: { type: 'none' } },
+      { id: 'ck-rep', name: 'REP_KEY', description: 'repeats', action: { type: 'send-string', text: 'b' }, repeat: true },
+    ],
+    macros: [
+      { id: 'mc-0', index: 0, name: 'repeats', steps: [{ type: 'tap', keycode: q('KC_A') }], repeat: true },
+      { id: 'mc-1', index: 1, name: 'once', steps: [{ type: 'tap', keycode: q('KC_C') }] },
+    ],
     firmware: {
       ...p.firmware,
+      autoRepeat: { delay: 300, rate: 50 },
       custom: {
         'keymap.c': [
           'void post_process_record_user(uint16_t keycode, keyrecord_t *record) {',
@@ -108,10 +120,10 @@ export function hostProject(): Project {
       { id: 'c7', name: 'c7_slots', keys: [combo(9), combo(29)], result: q('TD(12)') },
     ],
     tapHolds: [
-      { id: 'th-p', keycode: q('LSFT_T(KC_P)'), flavor: 'hold-preferred' },
-      { id: 'th-alt', keycode: altStandIn, flavor: 'hold-preferred' },
-      { id: 'th-d', keycode: q('LCTL_T(KC_D)'), holdOnKeys: [q('KC_C')] },
-      { id: 'th-a', keycode: q('LSFT_T(KC_A)'), holdOnKeys: [q('KC_Z')] },
+      { id: 'th-p', keycodes: [q('LSFT_T(KC_P)')], flavor: 'hold-preferred' },
+      { id: 'th-alt', keycodes: [altStandIn], flavor: 'hold-preferred' },
+      { id: 'th-d', keycodes: [q('LCTL_T(KC_D)')], holdOnKeys: [q('KC_C')] },
+      { id: 'th-a', keycodes: [q('LSFT_T(KC_A)')], holdOnKeys: [q('KC_Z')] },
     ],
   };
 }
