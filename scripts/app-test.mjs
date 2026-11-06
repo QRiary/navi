@@ -1,6 +1,7 @@
 // `npm run app:test`: builds and opens the copy of NAVI with the newest commit among the worktrees under
 // .claude/worktrees that have commits not on master (by commit date of HEAD; uncommitted edits don't count),
-// or the main checkout when none has. `--dry-run` only prints the pick.
+// or the main checkout when none has; a worktree whose HEAD another one's contains (lower in a branch stack) is
+// skipped. `--dry-run` only prints the pick.
 // A worktree without node_modules gets a junction to the main checkout's when their package-lock.json match,
 // otherwise its own `npm install`.
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
@@ -25,8 +26,13 @@ const dirs = [
 // Only copies with commits not on master compete; master itself (or a worktree already merged) only when none has.
 // Otherwise every landing (even a tooling commit) makes master the newest and hides the change waiting for a test.
 const waiting = dirs.filter((dir) => dir !== root && Number(git(dir, 'rev-list', '--count', 'master..HEAD')) > 0);
+// A branch stacked under another one is in it already: only the tops of stacks compete. Without this, merging a
+// fix up a stack gives every branch the same commit second and the first folder found (the bottom) wins.
+const head = new Map(waiting.map((dir) => [dir, git(dir, 'rev-parse', 'HEAD')]));
+const isAncestor = (a, b) => spawnSync('git', ['merge-base', '--is-ancestor', a, b], { cwd: root, stdio: 'ignore' }).status === 0;
+const tops = waiting.filter((dir) => !waiting.some((other) => head.get(other) !== head.get(dir) && isAncestor(head.get(dir), head.get(other))));
 let best;
-for (const dir of waiting.length ? waiting : [root]) {
+for (const dir of tops.length ? tops : [root]) {
   const time = Number(git(dir, 'log', '-1', '--format=%ct')) * 1000;
   if (time && (!best || time > best.time)) best = { dir, time };
 }
