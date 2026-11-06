@@ -124,7 +124,7 @@ export function checkKeyOverrides(overrides: KeyOverride[]): AdvancedIssue[] {
     const k = `${o.mods}:${o.trigger}`;
     if (seen.has(k)) out.push({ level: 'error', where: o.name, message: { en: 'The same modifiers + key are already overridden.', ru: 'Те же модификаторы + клавиша уже подменены.' } });
     seen.add(k);
-    if (o.trigger > 0xff) out.push({ level: 'error', where: o.name, message: { en: 'The trigger must be a basic key.', ru: 'Клавиша-триггер должна быть простой.' } });
+    // Any keycode is a valid trigger: QMK compares the pressed key's full keycode (C(KC_Z), LT(…), a custom key).
   }
   return out;
 }

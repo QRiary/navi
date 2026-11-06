@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseQmk, toQmk } from '../keycodes/codec';
+import { checkKeyOverrides } from '../features/advanced';
 import { loadSpec } from '../keycodes/spec';
 import { createBlankProject, createDilemmaProject } from '../project/factory';
 import { activeGeometry, activeKeymap, renameLayer, setEncoder, setKeycodes, setLayerCName } from '../project/ops';
@@ -621,5 +622,18 @@ describe('own pipeline mode', async () => {
     expect(file(b, 'keymap.c')).not.toContain('NAVI_SAFE_RANGE');
     expect(file(b, 'keymap.c').split('// ── your own lines')[0]).not.toContain('_navi');
     expect(file(b, 'keymap.c')).toContain('enum custom_keycodes {\n    HELLO = SAFE_RANGE, // says hi\n};');
+  });
+});
+
+describe('key overrides', () => {
+  it('a trigger may be any keycode: QMK compares the pressed key’s full 16-bit keycode', () => {
+    const overrides = [
+      { id: 'a', name: 'ctrl_redo', mods: 0x01, trigger: q('C(KC_Z)'), replacement: q('C(S(KC_Z))') },
+      { id: 'b', name: 'shift_lt', mods: 0x02, trigger: q('LT(1, KC_BSPC)'), replacement: q('KC_DEL') },
+    ];
+    expect(checkKeyOverrides(overrides)).toEqual([]);
+    const p = { ...project(), keyOverrides: overrides };
+    const c = generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: false, encoderCount: 0 }).files.find((f) => f.name === 'keymap.c')!.text;
+    expect(c).toContain(`, ${toQmk(spec, q('C(KC_Z)'))}, ${toQmk(spec, q('C(S(KC_Z))'))});`);
   });
 });
