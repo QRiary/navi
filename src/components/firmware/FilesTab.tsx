@@ -4,10 +4,9 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Copy, Download, FileCode2, Save } from 'lucide-react';
-import { generateKeymap, viaInBuild } from '../../core/qmk/generate';
-import { effectiveMaxBrightness, rgbTargetDefaults } from '../../core/lighting/buildDefaults';
+import { viaInBuild } from '../../core/qmk/generate';
 import { diffLines, diffStats } from '../../core/qmk/textDiff';
-import { activeKeymap } from '../../core/project/ops';
+import { generateFiles } from '../../lib/firmwareFiles';
 import { navi } from '../../desktop/bridge';
 import { saveTextFile } from '../../lib/files';
 import { whyDisabled } from '../../lib/whyDisabled';
@@ -17,6 +16,7 @@ import { useQmkStore } from '../../store/qmkStore';
 import { toast, toastError } from '../../store/toastStore';
 import { getLanguage, t } from '../../i18n';
 import { CustomLines } from './CustomLines';
+import { TextDiff } from './TextDiff';
 import { Modal } from '../Modal';
 import { SharedTabPanel, sharedPanelDomId, Tabs } from '../Tabs';
 
@@ -36,14 +36,7 @@ export function useGenerated() {
   const spec = useSpec();
   const info = useQmkStore((s) => s.sources?.info);
   const ownCode = useQmkStore((s) => s.ownCode);
-  return useMemo(() => {
-    if (!project) return null;
-    const via = viaInBuild(project);
-    const encoderCount = info?.encoders ?? project.hardware.encoders.count ?? Math.max(0, ...activeKeymap(project).layers.map((l) => l.encoders.length));
-    const maxBrightness = effectiveMaxBrightness(rgbTargetDefaults(info), project.firmware.buildConfig);
-    const own = ownCode && ownCode.keyboard === project.firmware.keyboard && ownCode.keymap === project.firmware.keymap ? ownCode.files : null;
-    return generateKeymap({ project, keymap: activeKeymap(project), spec, via, encoderCount, maxBrightness, ownCode: own });
-  }, [project, spec, info, ownCode]);
+  return useMemo(() => (project ? generateFiles(project, spec, info, ownCode) : null), [project, spec, info, ownCode]);
 }
 
 export function FilesTab() {
@@ -251,20 +244,7 @@ export function FilesTab() {
       />
       <SharedTabPanel idBase="keymap-files" current={file} className="tab-panel">
         {diff ? (
-          <div className="diff" aria-label={t('Changes', 'Изменения')}>
-            {diff.map((l, i) =>
-              l.kind === 'skip' ? (
-                <div key={i} className="d-hunk">
-                  ⋯ {l.count} {t('unchanged lines', 'строк без изменений')}
-                </div>
-              ) : (
-                <div key={i} className={l.kind === 'add' ? 'd-add' : l.kind === 'del' ? 'd-del' : undefined}>
-                  {l.kind === 'add' ? '+ ' : l.kind === 'del' ? '- ' : '  '}
-                  {l.text}
-                </div>
-              ),
-            )}
-          </div>
+          <TextDiff lines={diff} />
         ) : (
           <pre className="mono-block" style={{ maxHeight: '50vh', overflow: 'auto', whiteSpace: 'pre' }}>
             {current.text}

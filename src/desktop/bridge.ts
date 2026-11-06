@@ -59,7 +59,8 @@ export interface KeymapSources {
   dir: string;
   exists: boolean;
   root: 'firmware' | 'userspace';
-  files: { name: string; text: string }[];
+  /** `navi`: the file is exactly what NAVI wrote there last (electron/keymapWrites.cjs); false = maybe edited outside NAVI. */
+  files: { name: string; text: string; navi?: boolean }[];
 }
 
 export interface FirmwareInfo {

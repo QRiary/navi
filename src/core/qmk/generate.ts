@@ -915,7 +915,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       { hook: 'keyboard_post_init_user', call: 'keyboard_post_init_navi();', why: { en: 'the first language’s layer turns on at power-on', ru: 'слой первого языка включается при включении клавиатуры' } },
       { hook: 'caps_word_press_user', call: 'return caps_word_press_navi(keycode);', why: { en: 'Caps Word key rules', ru: 'правила клавиш Caps Word' } },
     ];
-    if (rebootOn && !via) {
+    // Said only while no file of the user's own C calls it (ownCode null = not read: warn).
+    if (rebootOn && !via && !ownCode?.some((f) => /\bnavi_raw_hid_receive\s*\(/.test(f.text))) {
       issues.push({
         level: 'warning',
         where: 'own pipeline: raw_hid_receive()',

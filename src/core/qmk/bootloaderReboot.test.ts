@@ -68,6 +68,14 @@ describe('bootloader reboot', () => {
     expect(warn(res)).toHaveLength(1);
   });
 
+  it("VIA off, pipeline: no warning once the user's own C calls navi_raw_hid_receive", () => {
+    const base = createDilemmaProject();
+    const p: Project = { ...base, firmware: { ...base.firmware, bootloaderReboot: true, pipeline: { enabled: true, headers: [] } } };
+    const ownCode = [{ path: 'general/pc_link.c', text: 'void raw_hid_receive(uint8_t *data, uint8_t length) {\n    if (navi_raw_hid_receive(data, length)) return;\n}' }];
+    const res = generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: false, encoderCount: 0, ownCode });
+    expect(warn(res)).toEqual([]);
+  });
+
   it('VIA on, pipeline: via_command_kb, stub returns false, no warning', () => {
     const { c, rules, res } = gen({ on: true, via: true, pipeline: true });
     expect(c).toContain('bool via_command_kb(');

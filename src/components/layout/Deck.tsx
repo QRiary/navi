@@ -16,6 +16,7 @@ import { InfoTip } from '../InfoTip';
 import { Tabs } from '../Tabs';
 import { QMK_DOCS } from '../../lib/qmkDocs';
 import { whyDisabled } from '../../lib/whyDisabled';
+import { BuildFlashButton } from '../firmware/BuildFlashButton';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
 
@@ -174,6 +175,7 @@ function SaveCell() {
       >
         <Save size={14} strokeWidth={1.5} /> {t('save', 'сохранить')}
       </button>
+      <BuildFlashButton />
       <button
         className="btn"
         {...whyDisabled(
