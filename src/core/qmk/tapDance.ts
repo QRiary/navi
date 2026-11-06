@@ -38,6 +38,8 @@ const VARIANT_COND = {
   ctrl: '!(mods & MOD_MASK_SHIFT) && (mods & MOD_MASK_CTRL)',
 } as const;
 
+const hasText = (list: MacroStep[]) => list.some((s) => s.type === 'text');
+
 /** The cases of navi_td_every_tap's switch (state->index): each dance's steps by tap count and Shift / Ctrl. */
 function everyTapBody(everyTap: TapDance[], kc: (v: number) => string, cString: (s: string) => string, lang: LanguagePlan | null, issues: AdvancedIssue[]): string[] {
   const c: string[] = [];
@@ -73,11 +75,16 @@ function everyTapBody(everyTap: TapDance[], kc: (v: number) => string, cString: 
             c.push(`                    if (${VARIANT_COND[v]}) break; // ${v}: nothing`);
             continue;
           }
-          c.push(`                    if (${VARIANT_COND[v]}) {`, '                        navi_td_cs_t cs = navi_td_cs_off();');
+          c.push(`                    if (${VARIANT_COND[v]}) {`, `                        navi_td_held_t held = navi_td_mods_off(${hasText(variant) ? 'MOD_MASK_CSAG' : 'MOD_MASK_CS'});`);
           c.push(...play(variant, '                        '));
-          c.push('                        navi_td_cs_on(cs);', '                        break;', '                    }');
+          c.push('                        navi_td_mods_on(held);', '                        break;', '                    }');
         }
-        c.push(...play(st.none ?? [], '                    '));
+        const none = st.none ?? [];
+        if (hasText(none)) {
+          c.push('                    {', '                        navi_td_held_t held = navi_td_mods_off(MOD_MASK_CSAG);');
+          c.push(...play(none, '                        '));
+          c.push('                        navi_td_mods_on(held);', '                    }');
+        } else c.push(...play(none, '                    '));
         c.push('                    break;');
       });
       c.push('            }');
@@ -120,7 +127,7 @@ export function tapDanceCode(tds: TapDance[], kc: (v: number) => string, cString
   const needSend = out.sends;
   const everyStep = everyTap.flatMap((t) => t.steps ?? []);
   const modsUsed = everyStep.some((st) => st.shift !== undefined || st.ctrl !== undefined || st.ctrlShift !== undefined);
-  const variants = everyStep.some((st) => st.shift?.length || st.ctrl?.length || st.ctrlShift?.length);
+  const modsOff = everyStep.some((st) => st.shift?.length || st.ctrl?.length || st.ctrlShift?.length || hasText(st.none ?? []));
   const c = out.lines;
   const sym = (...names: string[]) => out.symbols.push(...names);
   const maxIndex = Math.max(...tds.map((t) => t.index));
@@ -265,30 +272,32 @@ export function tapDanceCode(tds: TapDance[], kc: (v: number) => string, cString
         '',
       );
     }
-    if (variants) {
-      sym('navi_td_cs_t', 'navi_td_cs_off', 'navi_td_cs_on');
+    if (modsOff) {
+      sym('navi_td_held_t', 'navi_td_mods_off', 'navi_td_mods_on');
       c.push(
-        '// A step chosen by Shift / Ctrl plays without them (real, weak and one-shot); navi_td_cs_on puts them back.',
+        '// Mods let go while a step plays (real, weak and one-shot), navi_td_mods_on puts them back: Shift / Ctrl for a',
+        '// step they picked, every mod for a step with text (a GUI or Alt left on by a home row mod would turn it into',
+        '// shortcuts).',
         'typedef struct {',
         '    uint8_t mods, weak, oneshot;',
-        '} navi_td_cs_t;',
+        '} navi_td_held_t;',
         '',
-        'static navi_td_cs_t navi_td_cs_off(void) {',
-        '    navi_td_cs_t cs = {get_mods() & MOD_MASK_CS, get_weak_mods() & MOD_MASK_CS, 0};',
-        '    del_mods(cs.mods);',
-        '    del_weak_mods(cs.weak);',
+        'static navi_td_held_t navi_td_mods_off(uint8_t mask) {',
+        '    navi_td_held_t held = {get_mods() & mask, get_weak_mods() & mask, 0};',
+        '    del_mods(held.mods);',
+        '    del_weak_mods(held.weak);',
         '#ifndef NO_ACTION_ONESHOT',
-        '    cs.oneshot = get_oneshot_mods() & MOD_MASK_CS;',
-        '    del_oneshot_mods(cs.oneshot);',
+        '    held.oneshot = get_oneshot_mods() & mask;',
+        '    del_oneshot_mods(held.oneshot);',
         '#endif',
-        '    return cs;',
+        '    return held;',
         '}',
         '',
-        'static void navi_td_cs_on(navi_td_cs_t cs) {',
-        '    add_mods(cs.mods);',
-        '    add_weak_mods(cs.weak);',
+        'static void navi_td_mods_on(navi_td_held_t held) {',
+        '    add_mods(held.mods);',
+        '    add_weak_mods(held.weak);',
         '#ifndef NO_ACTION_ONESHOT',
-        '    add_oneshot_mods(cs.oneshot);',
+        '    add_oneshot_mods(held.oneshot);',
         '#endif',
         '    send_keyboard_report();',
         '}',
