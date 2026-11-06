@@ -3,7 +3,7 @@
  */
 import { useMemo } from 'react';
 import type { CatalogContext } from '../core/keycodes/catalog';
-import type { ParseContext } from '../core/keycodes/codec';
+import { caseInsensitiveLookup, type ParseContext } from '../core/keycodes/codec';
 import { layerIdentifiers } from '../core/qmk/generate';
 import type { LabelContext } from '../core/keycodes/labels';
 import type { KeycodeSpec } from '../core/keycodes/spec';
@@ -70,11 +70,14 @@ export function parseContext(project: Project, spec: KeycodeSpec): ParseContext 
   const layers = new Map<string, number>();
   layerIdentifiers(km).forEach((id, i) => layers.set(id, i));
   km.layers.forEach((l, i) => l.name && !layers.has(l.name) && layers.set(l.name, i));
+  const tapDances = project.tapDances.map((t) => [t.name, t.index] as const);
+  const ownNames = [...custom.keys(), ...layers.keys(), ...tapDances.map(([n]) => n)].filter((n) => /^[A-Za-z_]\w*$/.test(n));
   return {
     unicode: project.firmware.unicode,
-    customByName: (n) => custom.get(n),
-    layerByName: (n) => layers.get(n),
-    tapDanceByName: (n) => project.tapDances.find((t) => t.name === n)?.index,
+    customByName: caseInsensitiveLookup(custom),
+    layerByName: caseInsensitiveLookup(layers),
+    tapDanceByName: caseInsensitiveLookup(tapDances),
+    ownNames,
   };
 }
 
