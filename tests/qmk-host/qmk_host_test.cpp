@@ -9,6 +9,12 @@
 //   16 every tap: "!" (Shift: "->"), "="   17 every tap: "a"   18 every tap: "a" (Shift: nothing)
 //   19 every tap: HOST_KEY (the own lines tap KC_Z)   20 own C: host_each taps KC_X on the second tap   21 KC_LSFT
 //   22 every tap: tap KC_A, tap KC_B   23 tap: the stand-in at 3 / hold: the stand-in at 4
+// Combos (layers 1 and 2 read combo keys from themselves, layer 0 and 3 from layer 0):
+//   30 MO(1)   31 MO(2)
+//   32 33 Q W (layer 1: 1 2) → ESC   34 35 R T (layer 2: 3, transparent) → ENTER
+//   36 37 Y U → G, only with layer 1 on top   38 39 I O → X on layer 0, Y on layer 1
+//   24 LSFT_T(KC_A) holds when KC_Z is pressed   25 26 K L → Z
+//   27 28 F H → the every-tap dance at 16
 #include <string>
 #include <vector>
 
@@ -239,4 +245,89 @@ TEST_F(NaviHost, tap_dance_stand_in_in_tap_slot_taps_its_tap) {
 
 TEST_F(NaviHost, tap_dance_stand_in_in_hold_slot_holds_its_hold) {
     EXPECT_EQ(play({"+23", "wait", "+7", "-7", "-23"}), "LALT LALT+E LALT -");
+}
+
+// C1: layer 1 reads combo keys from itself (1 2), layer 0 from layer 0 (Q W)
+TEST_F(NaviHost, combo_on_a_layer_reading_itself_fires_by_its_own_keys) {
+    EXPECT_EQ(play({"+30", "+32", "+33", "-32", "-33", "-30"}), "0x29 -");
+}
+
+TEST_F(NaviHost, combo_fires_on_layer_0_by_layer_0_keys) {
+    EXPECT_EQ(play({"+32", "+33", "-32", "-33"}), "0x29 -");
+}
+
+TEST_F(NaviHost, keys_of_a_layer_reading_itself_type_alone) {
+    EXPECT_EQ(play({"+30", "+32", "-32", "-30"}), "1 -");
+}
+
+// C2: on layer 2 (reads itself) 35 is transparent: it reads layer 0's reference, so the combo still fires
+TEST_F(NaviHost, combo_with_a_transparent_key_fires_on_a_layer_reading_itself) {
+    EXPECT_EQ(play({"+31", "+34", "+35", "-34", "-35", "-31"}), "0x28 -");
+}
+
+// C3: limited to layer 1, which must be the highest active layer
+TEST_F(NaviHost, combo_limited_to_layer_1_does_not_fire_under_layer_2) {
+    EXPECT_EQ(play({"+30", "+31", "+36", "+37", "-36", "-37", "-31", "-30"}), "Y Y+U U -");
+}
+
+TEST_F(NaviHost, combo_limited_to_layer_1_fires_with_layer_1_on_top) {
+    EXPECT_EQ(play({"+30", "+36", "+37", "-36", "-37", "-30"}), "G -");
+}
+
+// C4: the same keys, one combo per layer
+TEST_F(NaviHost, same_keys_give_x_on_layer_0) {
+    EXPECT_EQ(play({"+38", "+39", "-38", "-39"}), "X -");
+}
+
+TEST_F(NaviHost, same_keys_give_y_on_layer_1) {
+    EXPECT_EQ(play({"+30", "+38", "+39", "-38", "-39", "-30"}), "Y -");
+}
+
+// C5: a mod-tap that holds when KC_Z is pressed, rolled into the combo whose result is KC_Z
+TEST_F(NaviHost, mod_tap_rolled_into_a_combo_holds_for_its_result) {
+    EXPECT_EQ(play({"+24", "+25", "+26", "-24", "-25", "-26"}), "LSFT LSFT+Z Z -");
+}
+
+TEST_F(NaviHost, mod_tap_rolled_into_a_combo_behind_an_undecided_layer_tap_holds) {
+    EXPECT_EQ(play({"+0", "+24", "+25", "+26", "-24", "-25", "-26", "wait", "-0"}), "LSFT LSFT+Z Z -");
+}
+
+TEST_F(NaviHost, mod_tap_tapped_before_a_combo_taps) {
+    EXPECT_EQ(play({"+24", "-24", "+25", "+26", "-25", "-26"}), "A - Z -");
+}
+// C6: a combo whose result is the every-tap dance at 16 ("!", Shift: "->"); alone it types "!"
+TEST_F(NaviHost, combo_result_every_tap_dance_types_its_first_step) {
+    EXPECT_EQ(play({"+27", "+28", "-27", "-28"}, false), "LSFT LSFT+1 LSFT -");
+}
+
+// A hold-preferred LSFT_T (1) rolled into the combo holds, and the dance plays its Shift variant
+TEST_F(NaviHost, hold_preferred_mod_tap_rolled_into_a_tap_dance_combo_plays_the_shift_variant) {
+    EXPECT_EQ(play({"+1", "+27", "+28", "-27", "-28", "-1"}), "LSFT 0x2D - LSFT LSFT+0x37 LSFT - LSFT -");
+}
+
+// C7: a combo whose result is a slots dance (TD 12: tap C(KC_C), hold KC_LSFT). A combo event sits at matrix 0,0,
+// where the real key 0 (LT(1, KC_SPC)) is: the dance must not take its position. QMK keeps a combo whose keys are all
+// down until COMBO_TERM runs out, and the dance's tapping term starts only then: a hold needs two waits.
+TEST_F(NaviHost, combo_slots_dance_tapped_taps_ctrl_c) {
+    EXPECT_EQ(play({"+9", "+29", "-9", "-29"}), "LCTL LCTL+C LCTL -");
+}
+
+TEST_F(NaviHost, combo_slots_dance_held_shifts_another_key) {
+    EXPECT_EQ(play({"+9", "+29", "wait", "wait", "+7", "-7", "-9", "-29"}), "LSFT LSFT+E LSFT -");
+}
+
+TEST_F(NaviHost, combo_slots_dance_held_while_the_key_at_0_0_is_tapped) {
+    EXPECT_EQ(play({"+9", "+29", "wait", "wait", "+0", "-0", "-9", "-29", "+32", "-32"}), "LSFT LSFT+0x2C LSFT - Q -");
+}
+
+TEST_F(NaviHost, combo_slots_dance_held_while_the_key_at_0_0_holds_its_layer) {
+    EXPECT_EQ(play({"+9", "+29", "wait", "wait", "+0", "wait", "-9", "-29", "-0", "+32", "-32"}), "LSFT - Q -");
+}
+
+TEST_F(NaviHost, combo_slots_dance_tapped_on_the_layer_of_the_key_at_0_0) {
+    EXPECT_EQ(play({"+0", "wait", "+9", "+29", "-9", "-29", "-0", "+32", "-32"}), "LCTL LCTL+C LCTL - Q -");
+}
+
+TEST_F(NaviHost, key_at_0_0_taps_normally_after_a_combo_slots_dance_hold) {
+    EXPECT_EQ(play({"+9", "+29", "wait", "wait", "-9", "-29", "+0", "-0"}), "LSFT - 0x2C -");
 }

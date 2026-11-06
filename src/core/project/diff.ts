@@ -74,7 +74,8 @@ export function diffProjects(before: Project, after: Project): ProjectDiff {
   check('name', before.name, after.name);
   check('hardware', before.hardware, after.hardware);
   check('geometry', before.geometries, after.geometries);
-  check('keymaps', before.keymaps.map((k) => [k.id, k.name, k.defaultLayer, k.layers.map((l) => [l.id, l.name, l.color])]), after.keymaps.map((k) => [k.id, k.name, k.defaultLayer, k.layers.map((l) => [l.id, l.name, l.color])]));
+  const keymapMeta = (p: Project) => p.keymaps.map((k) => [k.id, k.name, k.defaultLayer, k.layers.map((l) => [l.id, l.name, l.color, l.comboRef])]);
+  check('keymaps', keymapMeta(before), keymapMeta(after));
   check('macros', before.macros, after.macros);
   check('tapDances', before.tapDances, after.tapDances);
   check('combos', before.combos, after.combos);

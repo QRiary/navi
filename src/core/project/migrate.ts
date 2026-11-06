@@ -35,6 +35,8 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
   7: (d) => ({ ...d, schemaVersion: 8, tapHoldActions: Array.isArray(d.tapHoldActions) ? d.tapHoldActions : [] }),
   // 8 → 9: tap dance kinds (TapDance.kind, steps, ownC); all optional, undefined kind = the old slots.
   8: (d) => ({ ...d, schemaVersion: 9 }),
+  // 9 → 10: per-layer combo reference layer (Layer.comboRef), optional: unset = layer 0, as before.
+  9: (d) => ({ ...d, schemaVersion: 10 }),
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {

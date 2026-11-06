@@ -43,6 +43,13 @@ export function hostProject(): Project {
   p = r8.project;
   put(0, 8, r8.keycode);
   put(2, 2, q('KC_V'));
+  // Combos (positions 24…39): layer keys, then the keys of each scenario
+  const combo = (n: number): [number, number] => [Math.floor(n / 10), n % 10];
+  ([[30, 'MO(1)'], [31, 'MO(2)'], [32, 'KC_Q'], [33, 'KC_W'], [34, 'KC_R'], [35, 'KC_T'], [36, 'KC_Y'], [37, 'KC_U'], [38, 'KC_I'], [39, 'KC_O'],
+    [24, 'LSFT_T(KC_A)'], [25, 'KC_K'], [26, 'KC_L'], [27, 'KC_F'], [28, 'KC_H'], [9, 'KC_J'], [29, 'KC_M']] as const).forEach(([n, k]) => put(0, n, q(k)));
+  put(1, 32, q('KC_1'));
+  put(1, 33, q('KC_2'));
+  put(2, 34, q('KC_3')); // 35 stays transparent on layer 2
   p = pruneTapHoldActions(p);
   // Tap dances on rows 1 and 2 (positions 10…23, qmk_host_test.cpp names them).
   const td = (index: number, col: number, d: Partial<TapDance>): TapDance => {
@@ -64,11 +71,14 @@ export function hostProject(): Project {
     td(9, 20, { kind: 'own-c', ownC: { onEachTap: 'host_each' } }),
     td(10, 22, { kind: 'every-tap', steps: [{ none: [{ type: 'tap', keycode: q('KC_A') }] }, { none: [{ type: 'tap', keycode: q('KC_B') }] }] }),
     td(11, 23, { tap: ctrlLayerStandIn, hold: altStandIn }),
+    // Not on the keymap: only the result of the combo on 9 + 29
+    { id: 'td-12', index: 12, name: 'TD_H12', tap: q('C(KC_C)'), hold: q('KC_LSFT'), doubleTap: 0, tapHold: 0 },
   ];
   put(0, 13, q('KC_N'));
   put(1, 13, q('KC_A'));
   put(1, 14, q('KC_B'));
   put(0, 21, q('KC_LSFT'));
+  const refs: Record<number, 'self'> = { 1: 'self', 2: 'self' };
   return {
     ...p,
     tapDances,
@@ -86,10 +96,22 @@ export function hostProject(): Project {
         ].join('\n'),
       },
     },
+    keymaps: p.keymaps.map((k) => (k.id !== id ? k : { ...k, layers: k.layers.map((l, i) => (refs[i] ? { ...l, comboRef: refs[i] } : l)) })),
+    combos: [
+      { id: 'c1', name: 'c1_self', keys: [combo(32), combo(33)], result: q('KC_ESC') },
+      { id: 'c2', name: 'c2_fall', keys: [combo(34), combo(35)], result: q('KC_ENT') },
+      { id: 'c3', name: 'c3_top', keys: [combo(36), combo(37)], result: q('KC_G'), layers: [1] },
+      { id: 'c4a', name: 'c4_base', keys: [combo(38), combo(39)], result: q('KC_X'), layers: [0] },
+      { id: 'c4b', name: 'c4_one', keys: [combo(38), combo(39)], result: q('KC_Y'), layers: [1] },
+      { id: 'c5', name: 'c5_roll', keys: [combo(25), combo(26)], result: q('KC_Z') },
+      { id: 'c6', name: 'c6_dance', keys: [combo(27), combo(28)], result: q('TD(5)') },
+      { id: 'c7', name: 'c7_slots', keys: [combo(9), combo(29)], result: q('TD(12)') },
+    ],
     tapHolds: [
       { id: 'th-p', keycode: q('LSFT_T(KC_P)'), flavor: 'hold-preferred' },
       { id: 'th-alt', keycode: altStandIn, flavor: 'hold-preferred' },
       { id: 'th-d', keycode: q('LCTL_T(KC_D)'), holdOnKeys: [q('KC_C')] },
+      { id: 'th-a', keycode: q('LSFT_T(KC_A)'), holdOnKeys: [q('KC_Z')] },
     ],
   };
 }

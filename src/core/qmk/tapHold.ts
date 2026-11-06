@@ -44,8 +44,10 @@ export const replayTracked = (plan: TapHoldPlan) => plan.holdPress.filter((h) =>
  * pre_process_record (it sees real key events only, before QMK's tapping logic): the key pressed last for hold keys,
  * and the real key order for the replay fix.
  */
-export function preProcessHook(hook: string, opts: { lastPressed: boolean; replay: boolean; interrupters: boolean }): string[] {
+export function preProcessHook(hook: string, opts: { lastPressed: boolean; replay: boolean; interrupters: boolean; comboLayer?: boolean; comboEvents?: boolean }): string[] {
   const out: string[] = [];
+  // Combo results NAVI plays (comboEvents) need where each key's first interrupter sits.
+  const at = opts.interrupters && opts.comboEvents;
   if (opts.lastPressed) {
     out.push('// The key pressed last: "hold when pressed" keys need it, and get_hold_on_other_key_press only gets the tap-hold key.');
     out.push('static uint16_t navi_last_pressed = KC_NO;', '');
@@ -60,7 +62,23 @@ export function preProcessHook(hook: string, opts: { lastPressed: boolean; repla
       'static matrix_row_t navi_interrupted[MATRIX_ROWS]; // another key was pressed while this one was down',
     );
     if (opts.interrupters) out.push('static uint16_t     navi_interrupter[MATRIX_ROWS][MATRIX_COLS]; // the first key pressed while it was down');
+    if (at) out.push('static uint16_t     navi_interrupter_at[MATRIX_ROWS][MATRIX_COLS]; // where that key is: row << 8 | col (0xFFFF: a combo)');
     out.push(
+      '',
+      '// A key pressed: every key down now was interrupted, the first key pressed while it was down is its interrupter.',
+      `static void navi_note_press(uint16_t keycode${at ? ', uint16_t at' : ''}) {`,
+      '    for (uint8_t r = 0; r < MATRIX_ROWS; r++) {',
+    );
+    if (opts.interrupters) {
+      out.push('        matrix_row_t first = navi_down[r] & ~navi_interrupted[r];', '        for (uint8_t c = 0; first && c < MATRIX_COLS; c++) {');
+      if (at) out.push('            if (first & ((matrix_row_t)1 << c)) {', '                navi_interrupter[r][c]    = keycode;', '                navi_interrupter_at[r][c] = at;', '            }');
+      else out.push('            if (first & ((matrix_row_t)1 << c)) navi_interrupter[r][c] = keycode;');
+      out.push('        }');
+    }
+    out.push(
+      '        navi_interrupted[r] |= navi_down[r];',
+      '    }',
+      '}',
       '',
       'static void navi_watch_presses(uint16_t keycode, keyrecord_t *record) {',
       '    if (!IS_KEYEVENT(record->event)) return;',
@@ -72,22 +90,86 @@ export function preProcessHook(hook: string, opts: { lastPressed: boolean; repla
       '        navi_down[row] &= ~bit;',
       '        return;',
       '    }',
-      '    for (uint8_t r = 0; r < MATRIX_ROWS; r++) {',
+      `    navi_note_press(keycode${at ? ', (uint16_t)row << 8 | col' : ''});`,
+      '    navi_down[row] |= bit;',
+      '    navi_interrupted[row] &= ~bit;',
+      '}',
+      '',
     );
-    if (opts.interrupters) {
-      out.push(
-        '        matrix_row_t first = navi_down[r] & ~navi_interrupted[r];',
-        '        for (uint8_t c = 0; first && c < MATRIX_COLS; c++) {',
-        '            if (first & ((matrix_row_t)1 << c)) navi_interrupter[r][c] = keycode;',
-        '        }',
-      );
-    }
-    out.push('        navi_interrupted[r] |= navi_down[r];', '    }', '    navi_down[row] |= bit;', '    navi_interrupted[row] &= ~bit;', '}', '');
+  }
+  if (opts.comboEvents) {
+    out.push(
+      '// The real key press being processed: a combo it completes or ends is played before it (QMK: process_combo).',
+      'static bool     navi_in_press = false;',
+      'static keypos_t navi_press_key;',
+    );
+    if (opts.lastPressed) out.push('static uint16_t navi_press_keycode;');
+    out.push('');
   }
   out.push(`bool ${hook}(uint16_t keycode, keyrecord_t *record) {`);
+  if (opts.comboLayer) out.push('    navi_key_layer = navi_layer_of(record); // for combo_ref_from_layer: pre_process_record runs before combos');
   if (opts.lastPressed) out.push('    if (record->event.pressed) navi_last_pressed = keycode;');
+  if (opts.comboEvents) {
+    out.push('    navi_in_press = IS_KEYEVENT(record->event) && record->event.pressed && record->event.key.row < MATRIX_ROWS && record->event.key.col < MATRIX_COLS;', '    navi_press_key = record->event.key;');
+    if (opts.lastPressed) out.push('    navi_press_keycode = keycode;');
+  }
   if (opts.replay) out.push('    navi_watch_presses(keycode, record);');
   out.push('    return true;', '}', '');
+  return out;
+}
+
+/**
+ * Combo results NAVI plays itself (their QMK result is KC_NO): QMK skips pre_process_record for a combo's result, so
+ * NAVI's tracking above would never see it. process_combo_event builds the record like QMK's own combo code and runs
+ * the tracking for it as another key pressed, with no matrix position. QMK plays a combo before the real key press
+ * that completes or ends it; the combo's own keys were taken by it, so a key they interrupted first was interrupted
+ * by the combo's result.
+ */
+export function comboEventCode(hook: string, combos: { result: string; keys: [number, number][]; name: string }[], opts: { lastPressed: boolean; interrupters: boolean }): string[] {
+  const out = [
+    '// ── Combo results seen by the tap-hold logic like real key presses (their QMK result is KC_NO) ──',
+    '// Is the key at row, col one of the combo\'s keys (row, col pairs)?',
+    'static bool navi_combo_has(const uint8_t *keys, uint8_t count, uint8_t row, uint8_t col) {',
+    '    for (uint8_t i = 0; i < count; i++) {',
+    '        if (keys[2 * i] == row && keys[2 * i + 1] == col) return true;',
+    '    }',
+    '    return false;',
+    '}',
+    '',
+    'static void navi_combo(uint16_t keycode, bool pressed, const uint8_t *keys, uint8_t count) {',
+    '    keyrecord_t record = {',
+    '        .event   = MAKE_COMBOEVENT(pressed),',
+    '        .keycode = keycode,',
+    '    };',
+    '    // The real key press that made the combo fire comes after it',
+    '    bool before = pressed && navi_in_press && !navi_combo_has(keys, count, navi_press_key.row, navi_press_key.col);',
+    '    if (pressed) {',
+    '        uint8_t      r0 = navi_press_key.row;',
+    '        matrix_row_t b0 = before ? (matrix_row_t)1 << navi_press_key.col : 0;',
+    '        if (before) navi_down[r0] &= ~b0; // not down yet in QMK\'s order',
+  ];
+  if (opts.interrupters) {
+    out.push(
+      '        for (uint8_t r = 0; r < MATRIX_ROWS; r++) {',
+      '            for (uint8_t c = 0; c < MATRIX_COLS; c++) {',
+      '                if (!(navi_interrupted[r] & ((matrix_row_t)1 << c))) continue;',
+      '                uint16_t at = navi_interrupter_at[r][c];',
+      '                if (navi_combo_has(keys, count, at >> 8, at & 0xFF) || (before && at == ((uint16_t)r0 << 8 | navi_press_key.col))) navi_interrupter[r][c] = keycode;',
+      '            }',
+      '        }',
+      '        navi_note_press(keycode, 0xFFFF);',
+    );
+  } else out.push('        navi_note_press(keycode);');
+  out.push('        if (before) navi_down[r0] |= b0;');
+  if (opts.lastPressed) out.push('        navi_last_pressed = keycode;');
+  out.push('    }', '#ifndef NO_ACTION_TAPPING', '    action_tapping_process(record);', '#else', '    process_record(&record);', '#endif');
+  if (opts.lastPressed) out.push('    if (before) navi_last_pressed = navi_press_keycode;');
+  out.push('}', '', `void ${hook}(uint16_t combo_index, bool pressed) {`, '    switch (combo_index) {');
+  combos.forEach((c, i) => {
+    if (c.result === 'KC_NO') return;
+    out.push(`        case ${i}: navi_combo(${c.result}, pressed, (const uint8_t[]){${c.keys.flat().join(', ')}}, ${c.keys.length}); break; // ${c.name}`);
+  });
+  out.push('    }', '}', '');
   return out;
 }
 

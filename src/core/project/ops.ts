@@ -209,7 +209,16 @@ function remapAllLayerRefs(p: Project, keymapId: string, spec: KeycodeSpec, mapp
       : {
           ...k,
           defaultLayer: mapping(k.defaultLayer) ?? 0,
-          layers: k.layers.map((l) => ({ ...l, keys: l.keys.map(fix), encoders: l.encoders.map((e) => ({ ccw: fix(e.ccw), cw: fix(e.cw) })) })),
+          layers: k.layers.map((l) => {
+            const layer: Layer = { ...l, keys: l.keys.map(fix), encoders: l.encoders.map((e) => ({ ccw: fix(e.ccw), cw: fix(e.cw) })) };
+            // A combo reference layer follows its layer; a deleted one falls back to layer 0 (unset).
+            if (typeof l.comboRef === 'number') {
+              const n = mapping(l.comboRef);
+              if (n === null) delete layer.comboRef;
+              else layer.comboRef = n;
+            }
+            return layer;
+          }),
         },
   );
   // Tap dance and combos are shared by the project but refer to layer numbers of the active keymap.
@@ -303,6 +312,16 @@ export function setLayerCName(p: Project, keymapId: string, index: number, cName
     updateLayer(k, index, (l) => {
       const { cName: _old, ...rest } = l;
       return value ? { ...rest, cName: value } : rest;
+    }),
+  );
+}
+
+/** Where combos read their keys on a layer: a layer number, 'self', or undefined = layer 0. */
+export function setLayerComboRef(p: Project, keymapId: string, index: number, ref: Layer['comboRef']): Project {
+  return updateKeymap(p, keymapId, (k) =>
+    updateLayer(k, index, (l) => {
+      const { comboRef: _old, ...rest } = l;
+      return ref === undefined || ref === 0 ? rest : { ...rest, comboRef: ref };
     }),
   );
 }
