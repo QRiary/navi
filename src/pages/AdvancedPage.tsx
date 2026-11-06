@@ -8,7 +8,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { checkKeyOverrides } from '../core/features/advanced';
 import { configParams, groupTitle } from '../core/qmk/configParams';
 import { newId } from '../core/layout/geometry';
-import { activeKeymap } from '../core/project/ops';
+import { activeKeymap, deleteCustomKeycode } from '../core/project/ops';
 import type { CustomKeycode, KeyAlias, KeyOverride, Project } from '../core/project/types';
 import { aliasCName, ALIAS_LABEL_MAX, checkKeyAliases, KEY_ALIASES_MAX } from '../core/project/aliases';
 import { layerIdentifiers } from '../core/qmk/generate';
@@ -222,11 +222,14 @@ function CustomTab({ project }: { project: Project }) {
                 className="icon-btn"
                 aria-label={t('Delete', 'Удалить')}
                 onClick={() => {
-                  set(
-                    project.customKeycodes.filter((x) => x.id !== c.id),
-                    t('delete keycode', 'удаление keycode'),
+                  const { cleared } = deleteCustomKeycode(spec, project, c.id);
+                  apply((p) => deleteCustomKeycode(spec, p, c.id).project, t('delete keycode', 'удаление keycode'));
+                  const name = c.name || t('custom keycode', 'свой keycode');
+                  deletedToast(
+                    cleared > 0
+                      ? t(`${name} (${cleared} place${cleared === 1 ? '' : 's'} that used it now empty)`, `${name} (мест, где он был, теперь пусто: ${cleared})`)
+                      : name,
                   );
-                  deletedToast(c.name || t('custom keycode', 'свой keycode'));
                 }}
               >
                 <Trash2 {...ICON} />
