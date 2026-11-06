@@ -13,6 +13,7 @@ import { decode, encode, KeycodeError, toQmk } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
 import { cleanC } from '../qmk/customCode';
 import { activeKeymap } from './ops';
+import { mapTapDanceKeycodes, tapDanceKeycodes } from './tapDances';
 import type { HoldAction, Project, TapHoldAction } from './types';
 
 export const TAP_HOLD_ACTIONS_MAX = 256;
@@ -84,7 +85,7 @@ export function projectKeycodeRefs(project: Project): Set<number> {
       for (const e of l.encoders) refs.add(e.ccw).add(e.cw);
     }
   }
-  for (const t of project.tapDances) refs.add(t.tap).add(t.hold).add(t.doubleTap).add(t.tapHold);
+  for (const t of project.tapDances) for (const v of tapDanceKeycodes(t)) refs.add(v);
   for (const c of project.combos) refs.add(c.result);
   for (const o of project.keyOverrides) refs.add(o.trigger).add(o.replacement);
   for (const c of project.customKeycodes) if (c.action.type === 'tap') refs.add(c.action.keycode);
@@ -135,7 +136,7 @@ export function replaceKeycode(p: Project, from: number, to: number): Project {
   return {
     ...p,
     keymaps: p.keymaps.map((k) => ({ ...k, layers: k.layers.map((l) => ({ ...l, keys: l.keys.map(f), encoders: l.encoders.map((e) => ({ ccw: f(e.ccw), cw: f(e.cw) })) })) })),
-    tapDances: p.tapDances.map((t) => ({ ...t, tap: f(t.tap), hold: f(t.hold), doubleTap: f(t.doubleTap), tapHold: f(t.tapHold) })),
+    tapDances: p.tapDances.map((t) => mapTapDanceKeycodes(t, f)),
     combos: p.combos.map((c) => ({ ...c, result: f(c.result) })),
     keyOverrides: p.keyOverrides.map((o) => ({ ...o, trigger: f(o.trigger), replacement: f(o.replacement) })),
     customKeycodes: p.customKeycodes.map((c) => (c.action.type === 'tap' ? { ...c, action: { ...c.action, keycode: f(c.action.keycode) } } : c)),
@@ -280,7 +281,6 @@ export function checkTapHoldActions(spec: KeycodeSpec, project: Project, ownRefs
   }
   const layers = activeKeymap(project).layers.length;
   const onKeysOnly = new Set<number>();
-  for (const t of project.tapDances) [t.tap, t.hold, t.doubleTap, t.tapHold].forEach((v) => onKeysOnly.add(v));
   for (const c of project.combos) onKeysOnly.add(c.result);
   for (const o of project.keyOverrides) onKeysOnly.add(o.trigger).add(o.replacement);
   for (const c of project.customKeycodes) if (c.action.type === 'tap') onKeysOnly.add(c.action.keycode);
@@ -298,7 +298,7 @@ export function checkTapHoldActions(spec: KeycodeSpec, project: Project, ownRefs
       out.push({ level: 'warning', where, message: { en: `Layer ${a.hold.layer} doesn’t exist in this keymap.`, ru: `Слоя ${a.hold.layer} нет в этой раскладке.` } });
     }
     if (onKeysOnly.has(a.keycode)) {
-      err({ en: 'A tap-hold key with actions works only on keys of the keymap, not in tap dances, combos, overrides or leader / own keycode actions.', ru: 'Тап-холд клавиша с действиями работает только на клавишах раскладки, не в tap dance, комбо, подменах и действиях лидера / своих keycodes.' });
+      err({ en: 'A tap-hold key with actions works only on keys of the keymap and in tap dances, not in combos, overrides or leader / own keycode actions.', ru: 'Тап-холд клавиша с действиями работает только на клавишах раскладки и в tap dance, не в комбо, подменах и действиях лидера / своих keycodes.' });
     }
     const own = ownRefs?.get(standInBase(a.keycode));
     if (own && !problem) {

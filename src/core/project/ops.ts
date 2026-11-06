@@ -10,6 +10,7 @@ import { decode, encode, type Decoded } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
 import { newId } from '../layout/geometry';
 import { KC_NO, KC_TRNS, makeLayer } from './factory';
+import { mapTapDanceKeycodes } from './tapDances';
 import type { EncoderAction, Geometry, HoldAction, KeyGeom, Keymap, Layer, MatrixPos, Project, TapHoldAction } from './types';
 
 // ── Access ────────────────────────────────────────────────────────────
@@ -212,7 +213,7 @@ function remapAllLayerRefs(p: Project, keymapId: string, spec: KeycodeSpec, mapp
         },
   );
   // Tap dance and combos are shared by the project but refer to layer numbers of the active keymap.
-  const tapDances = p.tapDances.map((t) => ({ ...t, tap: fix(t.tap), hold: fix(t.hold), doubleTap: fix(t.doubleTap), tapHold: fix(t.tapHold) }));
+  const tapDances = p.tapDances.map((t) => mapTapDanceKeycodes(t, fix));
   const combos = p.combos.map((c) => ({
     ...c,
     result: fix(c.result),

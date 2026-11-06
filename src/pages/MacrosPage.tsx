@@ -5,8 +5,8 @@
  * only basic keys, pauses up to 9999 ms).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Circle, Plus, Square, Trash2 } from 'lucide-react';
-import { BasicKeySelect } from '../components/keyboard/KeycodeComposer';
+import { Circle, Square } from 'lucide-react';
+import { MacroSteps } from '../components/macros/MacroSteps';
 import { newId } from '../core/layout/geometry';
 import type { Macro, MacroStep } from '../core/project/types';
 import { checkMacroSteps, macroBytesUsed } from '../core/via/macros';
@@ -26,41 +26,6 @@ function patchMacros(macros: Macro[], index: number, fn: (m: Macro) => Macro): M
   const next = fn(base);
   const others = macros.filter((m) => m.index !== index);
   return next.steps.length === 0 && !next.name.trim() ? others : [...others, next].sort((a, b) => a.index - b.index);
-}
-
-function StepEditor({ step, onChange }: { step: MacroStep; onChange: (s: MacroStep) => void }) {
-  const spec = useSpec();
-  const typeSelect = (
-    <select
-      className="select"
-      value={step.type}
-      onChange={(e) => {
-        const type = e.target.value as MacroStep['type'];
-        if (type === 'text') onChange({ type, text: '' });
-        else if (type === 'delay') onChange({ type, ms: 100 });
-        else onChange({ type, keycode: 'keycode' in step ? step.keycode : 0x04 });
-      }}
-      aria-label={t('Step type', 'Тип шага')}
-    >
-      <option value="text">{t('type text', 'набрать текст')}</option>
-      <option value="tap">{t('tap key', 'нажать и отпустить')}</option>
-      <option value="down">{t('hold key', 'зажать клавишу')}</option>
-      <option value="up">{t('release key', 'отпустить клавишу')}</option>
-      <option value="delay">{t('pause', 'пауза')}</option>
-    </select>
-  );
-  return (
-    <div className="field-row" style={{ flex: 1, flexWrap: 'nowrap' }}>
-      {typeSelect}
-      {step.type === 'text' && <input className="input" style={{ flex: 1 }} value={step.text} onChange={(e) => onChange({ type: 'text', text: e.target.value })} placeholder="git status" aria-label={t('Text', 'Текст')} spellCheck={false} />}
-      {(step.type === 'tap' || step.type === 'down' || step.type === 'up') && <BasicKeySelect spec={spec} value={step.keycode} label={t('Key', 'Клавиша')} onChange={(keycode) => onChange({ type: step.type, keycode })} />}
-      {step.type === 'delay' && (
-        <label className="field-hint">
-          <input className="input input--num" type="number" min={1} max={9999} value={step.ms} onChange={(e) => onChange({ type: 'delay', ms: Number(e.target.value) })} /> {t('ms', 'мс')}
-        </label>
-      )}
-    </div>
-  );
 }
 
 export function MacrosPage() {
@@ -180,43 +145,24 @@ export function MacrosPage() {
             </button>
           </div>
           <div className="panel-box-body field">
-            {macro.steps.map((s, i) => (
-              <div key={i} className="field-row" style={{ flexWrap: 'nowrap' }}>
-                <span className="num kicker" style={{ width: 22 }}>
-                  {i + 1}
-                </span>
-                <StepEditor step={s} onChange={(ns) => setSteps(macro.steps.map((x, j) => (j === i ? ns : x)), t('edit step', 'шаг макроса'), `mstep:${selected}:${i}`)} />
-                <button className="icon-btn" disabled={i === 0} aria-label={t('Up', 'Выше')} onClick={() => setSteps(macro.steps.map((x, j) => (j === i - 1 ? macro.steps[i] : j === i ? macro.steps[i - 1] : x)), t('move step', 'перестановка'))}>
-                  <ArrowUp {...ICON} />
-                </button>
-                <button className="icon-btn" disabled={i === macro.steps.length - 1} aria-label={t('Down', 'Ниже')} onClick={() => setSteps(macro.steps.map((x, j) => (j === i + 1 ? macro.steps[i] : j === i ? macro.steps[i + 1] : x)), t('move step', 'перестановка'))}>
-                  <ArrowDown {...ICON} />
-                </button>
-                <button className="icon-btn" aria-label={t('Delete step', 'Удалить шаг')} onClick={() => setSteps(macro.steps.filter((_, j) => j !== i), t('delete step', 'удаление шага'))}>
-                  <Trash2 {...ICON} />
-                </button>
-              </div>
-            ))}
-            {macro.steps.length === 0 && <p className="field-hint">{t('No steps yet.', 'Шагов пока нет.')}</p>}
-            <div className="field-row">
-              <button className="btn" onClick={() => setSteps([...macro.steps, { type: 'text', text: '' }], t('add step', 'новый шаг'))}>
-                <Plus {...ICON} /> {t('text', 'текст')}
-              </button>
-              <button className="btn" onClick={() => setSteps([...macro.steps, { type: 'tap', keycode: 0x28 }], t('add step', 'новый шаг'))}>
-                <Plus {...ICON} /> {t('key', 'клавиша')}
-              </button>
-              <button className="btn" onClick={() => setSteps([...macro.steps, { type: 'delay', ms: 100 }], t('add step', 'новый шаг'))}>
-                <Plus {...ICON} /> {t('pause', 'пауза')}
-              </button>
-              <button className={`btn ${recording ? 'btn--danger' : ''}`} onClick={() => (recording ? finishRecording() : setRecording(true))}>
-                {recording ? <Square {...ICON} /> : <Circle {...ICON} />} {recording ? t('stop recording', 'остановить запись') : t('record keys', 'записать нажатия')}
-              </button>
-              {macro.steps.length > 0 && (
-                <button className="btn btn--ghost" onClick={() => setSteps([], t('clear macro', 'очистить макрос'))}>
-                  {t('clear', 'очистить')}
-                </button>
-              )}
-            </div>
+            <MacroSteps
+              steps={macro.steps}
+              keys="basic"
+              onChange={setSteps}
+              coalesceKey={`mstep:${selected}`}
+              actions={
+                <>
+                  <button className={`btn ${recording ? 'btn--danger' : ''}`} onClick={() => (recording ? finishRecording() : setRecording(true))}>
+                    {recording ? <Square {...ICON} /> : <Circle {...ICON} />} {recording ? t('stop recording', 'остановить запись') : t('record keys', 'записать нажатия')}
+                  </button>
+                  {macro.steps.length > 0 && (
+                    <button className="btn btn--ghost" onClick={() => setSteps([], t('clear macro', 'очистить макрос'))}>
+                      {t('clear', 'очистить')}
+                    </button>
+                  )}
+                </>
+              }
+            />
             {recording && <p className="field-hint">{t('Recording: press keys on your keyboard… (Esc is recorded too — use the button to stop)', 'Идёт запись: нажимайте клавиши… (Esc тоже записывается — остановите кнопкой)')}</p>}
             {issues.map((iss, i) => (
               <div key={i} className="issue">

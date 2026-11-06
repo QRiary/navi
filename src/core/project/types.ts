@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 8;
+export const PROJECT_SCHEMA_VERSION = 9;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -205,16 +205,50 @@ export interface Macro {
   steps: MacroStep[];
 }
 
+/**
+ * How a tap dance works: `slots` — tap / hold / double tap / tap-then-hold, any keycode each; `every-tap` — each tap
+ * plays the next step at once (cycling); `own-c` — the user's own C functions.
+ */
+export type TapDanceKind = 'slots' | 'every-tap' | 'own-c';
+export const TAP_DANCE_KINDS: readonly TapDanceKind[] = ['slots', 'every-tap', 'own-c'];
+export const TAP_DANCE_MAX_STEPS = 4;
+
+/**
+ * One step of an every-tap dance, by the modifiers held at that tap (Shift = either Shift, Ctrl = either Ctrl; real,
+ * weak and one-shot). A set variant plays with Shift and Ctrl removed; undefined = the `none` variant with the mods
+ * kept; [] = nothing.
+ */
+export interface TapDanceStep {
+  none?: MacroStep[];
+  shift?: MacroStep[];
+  ctrl?: MacroStep[];
+  ctrlShift?: MacroStep[];
+}
+export const TAP_DANCE_VARIANTS = ['none', 'shift', 'ctrl', 'ctrlShift'] as const;
+
+/** C functions of the user's own code: void fn(tap_dance_state_t *state, void *user_data). */
+export interface TapDanceOwnC {
+  onEachTap?: string;
+  onFinished?: string;
+  onReset?: string;
+}
+
 /** Tap dance: actions for taps/holds. 0 = nothing. Generated into keymap.c. */
 export interface TapDance {
   id: string;
   index: number;
   /** Name for keymap.c (a C identifier). */
   name: string;
+  /** undefined = 'slots'. The fields of the other kinds are kept (switching back restores them) but not generated. */
+  kind?: TapDanceKind;
   tap: number;
   hold: number;
   doubleTap: number;
   tapHold: number;
+  /** every-tap: 1–4 steps, tap n plays steps[(n - 1) % length]. */
+  steps?: TapDanceStep[];
+  /** own-c: at least one function. */
+  ownC?: TapDanceOwnC;
   /** Own tapping term for this tap dance, ms (otherwise the global one). */
   tappingTerm?: number;
 }

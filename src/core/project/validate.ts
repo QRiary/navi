@@ -42,6 +42,11 @@ import {
   type PinDefinition,
   type Project,
   type TapDance,
+  type TapDanceOwnC,
+  type TapDanceStep,
+  TAP_DANCE_KINDS,
+  TAP_DANCE_MAX_STEPS,
+  TAP_DANCE_VARIANTS,
 } from './types';
 
 export interface ValidationIssue {
@@ -388,6 +393,44 @@ function readMacroStep(r: Reader, v: unknown, path: string): MacroStep | null {
   }
 }
 
+/** Tap dance kind and its fields (every-tap steps, own C functions); undefined ones stay undefined. */
+function readTapDanceKind(r: Reader, to: Record<string, unknown>, p: string): Pick<TapDance, 'kind' | 'steps' | 'ownC'> {
+  const out: Pick<TapDance, 'kind' | 'steps' | 'ownC'> = {};
+  if (to.kind !== undefined) out.kind = r.oneOf(to.kind, `${p}.kind`, TAP_DANCE_KINDS, 'slots');
+  if (to.steps !== undefined) {
+    const steps = r.arr(to.steps, `${p}.steps`, TAP_DANCE_MAX_STEPS).map((s, i) => {
+      const so = r.obj(s, `${p}.steps[${i}]`);
+      const step: TapDanceStep = {};
+      for (const v of TAP_DANCE_VARIANTS) {
+        if (so[v] === undefined) continue;
+        if (!Array.isArray(so[v])) {
+          r.error(`${p}.steps[${i}].${v}`, 'expected an array of macro steps');
+          continue;
+        }
+        step[v] = r
+          .arr(so[v], `${p}.steps[${i}].${v}`, LIMITS.maxMacroSteps)
+          .map((m, j) => readMacroStep(r, m, `${p}.steps[${i}].${v}[${j}]`))
+          .filter((m): m is MacroStep => m !== null);
+      }
+      return step;
+    });
+    if (Array.isArray(to.steps)) out.steps = steps;
+  }
+  if ((out.kind ?? 'slots') === 'every-tap' && !out.steps?.length) r.error(`${p}.steps`, `an every-tap dance needs 1…${TAP_DANCE_MAX_STEPS} steps`);
+  if (to.ownC !== undefined) {
+    const oo = r.obj(to.ownC, `${p}.ownC`);
+    const ownC: TapDanceOwnC = {};
+    for (const f of ['onEachTap', 'onFinished', 'onReset'] as const) {
+      if (oo[f] === undefined) continue;
+      const name = r.str(oo[f], `${p}.ownC.${f}`, '', 64);
+      if (!validCIdentifier(name)) r.error(`${p}.ownC.${f}`, 'must be a C identifier (not a keyword, up to 64 characters)');
+      else ownC[f] = name;
+    }
+    out.ownC = ownC;
+  }
+  return out;
+}
+
 function readLightingState(r: Reader, v: unknown, path: string): LightingState | null {
   if (v === null || v === undefined) return null;
   const o = r.obj(v, path);
@@ -549,6 +592,7 @@ export function validateProject(input: unknown): { project: Project | null; issu
       hold: r.keycode(to.hold, `${p}.hold`),
       doubleTap: r.keycode(to.doubleTap, `${p}.doubleTap`),
       tapHold: r.keycode(to.tapHold, `${p}.tapHold`),
+      ...readTapDanceKind(r, to, p),
       tappingTerm: to.tappingTerm === undefined ? undefined : r.num(to.tappingTerm, `${p}.tappingTerm`, 50, 2000, 200),
     };
   });

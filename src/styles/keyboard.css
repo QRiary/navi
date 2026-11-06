@@ -999,6 +999,16 @@
   border-bottom: 0;
 }
 
+/* A row with its fields under it (tap dance): the line goes under the whole group, not between the row and its fields. */
+.row-group {
+  border-bottom: var(--panel-border-width) solid color-mix(in srgb, var(--border-color) 55%, transparent);
+}
+
+.row-group:last-child,
+.row-group > .row {
+  border-bottom: 0;
+}
+
 .row:hover {
   background: var(--hover-background);
 }
