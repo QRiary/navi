@@ -17,6 +17,8 @@
 //   27 28 F H → the every-tap dance at 16
 // Auto repeat (delay 300 ms, rate 50 ms), on layer 2 (hold 31):
 //   5 MC_0 taps A, repeats   6 REP_KEY types "b", repeats   7 MC_1 taps C, doesn't repeat
+// Caps Word rules (letters shifted; "." shifted only with layer 1 on top; TD at 10 keeps it on; any other key ends it):
+//   layer 1 (hold 30): 18 CW_TOGG   12 KC_DOT      layer 2 (hold 31): 12 KC_DOT
 #include "navi_host.hpp"
 
 // QMK's replay trap: the mod-tap's press and release were held back behind the undecided LT
@@ -282,4 +284,40 @@ TEST_F(NaviHost, releasing_the_older_repeating_key_does_not_stop_the_newer) {
 
 TEST_F(NaviHost, macro_not_ticked_does_not_repeat) {
     EXPECT_EQ(play({"clock", "+31", "+7", "idle:420", "-7", "-31"}), "C -");
+}
+
+// Caps Word key rules. CW_TOGG sits on layer 1 (hold 30); the keys after it are played on layer 0 unless noted.
+// Caps Word's state outlives a test (CW_TOGG would turn a leftover "on" off), so each test ends with it off.
+extern "C" void caps_word_off(void);
+class CapsWordHost : public NaviHost {
+   protected:
+    void TearDown() override {
+        caps_word_off();
+        NaviHost::TearDown();
+    }
+};
+TEST_F(CapsWordHost, caps_word_shifts_a_letter_of_the_letters_rule) {
+    EXPECT_EQ(play({"+30", "+18", "-18", "-30", "+2", "-2"}), "LSFT LSFT+C LSFT");
+}
+
+// The stand-in tap-hold key's tap (KC_A) is played by NAVI before QMK's Caps Word sees the event.
+TEST_F(CapsWordHost, caps_word_shifts_the_tap_of_a_stand_in_tap_hold_key) {
+    EXPECT_EQ(play({"+30", "+18", "-18", "-30", "+5", "-5", "+2", "-2"}), "LSFT LSFT+A LSFT LSFT+C LSFT");
+}
+
+// "." is shifted by the rule only with layer 1 on top; on layer 2 the rule does not count, so the key ends Caps Word.
+TEST_F(CapsWordHost, caps_word_key_in_a_rule_for_another_layer_ends_it) {
+    EXPECT_EQ(play({"+30", "+18", "-18", "-30", "+31", "+12", "-12", "-31", "+2", "-2"}), "0x37 - C -");
+}
+
+TEST_F(CapsWordHost, caps_word_layer_rule_shifts_its_key_on_that_layer_and_keeps_it_on) {
+    EXPECT_EQ(play({"+30", "+18", "-18", "+12", "-12", "-30", "+2", "-2"}), "LSFT LSFT+0x37 LSFT LSFT+C LSFT");
+}
+
+TEST_F(CapsWordHost, caps_word_tap_dance_in_a_keep_rule_keeps_it_on) {
+    EXPECT_EQ(play({"+30", "+18", "-18", "-30", "+11", "-11", "wait", "+2", "-2"}), "LSFT LSFT+Q LSFT LSFT+C LSFT");
+}
+
+TEST_F(CapsWordHost, caps_word_key_in_no_rule_ends_it) {
+    EXPECT_EQ(play({"+30", "+18", "-18", "-30", "+0", "-0", "+2", "-2"}), "0x2C - C -");
 }

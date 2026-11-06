@@ -96,6 +96,7 @@ export function projectKeycodeRefs(project: Project): Set<number> {
     for (const k of s.holdOnKeys ?? []) refs.add(k);
   }
   for (const l of project.keyLists) for (const k of l.keys) refs.add(k);
+  for (const r of project.firmware.capsWordRules ?? []) for (const k of r.keys) refs.add(k);
   return refs;
 }
 
@@ -145,6 +146,7 @@ export function replaceKeycode(p: Project, from: number, to: number): Project {
     keyAliases: p.keyAliases.map((a) => ({ ...a, keycode: f(a.keycode) })),
     tapHolds: p.tapHolds.map((s) => ({ ...s, keycodes: s.keycodes.map(f), ...(s.holdOnKeys ? { holdOnKeys: s.holdOnKeys.map(f) } : {}) })),
     keyLists: p.keyLists.map((l) => ({ ...l, keys: l.keys.map(f) })),
+    firmware: p.firmware.capsWordRules ? { ...p.firmware, capsWordRules: p.firmware.capsWordRules.map((r) => ({ ...r, keys: r.keys.map(f) })) } : p.firmware,
     tapHoldActions: p.tapHoldActions.map((a) => (a.keycode === from ? { ...a, keycode: to } : a)),
   };
 }

@@ -16,6 +16,8 @@ import { FEATURE_BY_ID, type FeatureId } from '../features/registry';
 import { checkCombos, comboRefOf, comboRefsMixed, qmkCombos, checkKeyOverrides, checkLeaderSequences, checkTapDances, checkUnicodeMap, leaderFunction, type AdvancedIssue } from '../features/advanced';
 import { configParams, configValueType } from './configParams';
 import { autoRepeatCode, REPEAT_SYMBOLS, type RepeatCase } from './autoRepeat';
+import { capsWordCode } from './capsWord';
+import { CAPS_WORD_QMK_DEFAULT } from '../project/capsWord';
 import { layerOnTopCallback, layerOnTopState, layerOnTopStubs } from './layerOnTop';
 import { languageDecl, languageEarlyCode, languageKeyName, languagePrototypes, languageRecordLines, languageSwitchCode, languageSymbolCode, languageViaMacroLines, LANGUAGE_SYMBOLS, planLanguages, routedMacroStatements, ROUTE_UNICODE_MODE } from './languages';
 import { checkLanguages, languageCName } from '../project/languages';
@@ -558,6 +560,9 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push(...autoRepeatCode({ delay, rate, cases, fallback: lang?.symbols ? ['navi_send_text(navi_symbol_text);'] : undefined }));
   }
   if (lang?.symbols) c.push(...languageSymbolCode(project, keymap, layerIds));
+  // Caps Word key rules: unset = QMK's own list, no code.
+  const capsRules = project.firmware.capsWordRules;
+  if (capsRules) c.push(...capsWordCode({ rules: capsRules, keyLists: project.keyLists, kc, layerIds, fn: hookName('caps_word_press_user') }));
   const keysInCode = pressCustoms.length > 0 || pressMacros.length > 0;
   const keysHandled = keysInCode || repeatKeys;
   if (tapHoldInCode) {
@@ -632,6 +637,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     combo_ref_from_layer: comboRefs,
     process_combo_event: comboEvents,
     leader_end_user: leaders.length > 0,
+    caps_word_press_user: !!capsRules,
   };
   if (pipeline) {
     // Every *_navi function always exists, so the user's calls keep compiling as the project changes.
@@ -649,6 +655,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       { hook: 'leader_end_user', guard: 'LEADER_ENABLE', lines: ['void leader_end_navi(void) {}'] },
       { hook: 'layer_state_set_user', lines: layerOnTopStubs(!hookUsed.layer_state_set_user) },
       { hook: 'keyboard_post_init_user', lines: ['void keyboard_post_init_navi(void) {}'] },
+      { hook: 'caps_word_press_user', lines: capsWordCode({ rules: CAPS_WORD_QMK_DEFAULT, keyLists: [], kc, layerIds, fn: 'caps_word_press_navi' }).slice(1, -1) },
     ];
     // Languages may write the layer callback without “layer keys on top”: navi_layers_on / navi_layer_off still stubs.
     const stubs = allStubs.filter((s) => (s.hook === 'layer_state_set_user' ? !layersOnTop : !hookUsed[s.hook]));
@@ -679,6 +686,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     h.push('#endif');
     h.push('layer_state_t layer_state_set_navi(layer_state_t state);');
     h.push('void keyboard_post_init_navi(void);');
+    h.push('bool caps_word_press_navi(uint16_t keycode);');
     h.push('layer_state_t navi_layers_on(void); // layers turned on, hidden ones included');
     h.push('void navi_layer_off(uint8_t layer); // also turns off a hidden layer');
     h.push('bool navi_is_stand_in(uint16_t keycode); // a stand-in MT / LT of a tap-hold key with actions: its base key is not its tap');
@@ -700,6 +708,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   rules.VIA_ENABLE = via ? 'yes' : 'no';
   if (hasTd) rules.TAP_DANCE_ENABLE = 'yes';
   if (repeating) rules.DEFERRED_EXEC_ENABLE = 'yes';
+  if (capsRules) rules.CAPS_WORD_ENABLE = 'yes';
   if (hasCombos) rules.COMBO_ENABLE = 'yes';
   if (hasOverrides) rules.KEY_OVERRIDE_ENABLE = 'yes';
   if (hasEncoders) rules.ENCODER_MAP_ENABLE = 'yes';
@@ -806,6 +815,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (!pipeline && leaders.length) generatedSymbols.add('leader_end_user');
   if (!pipeline && hookUsed.layer_state_set_user) generatedSymbols.add('layer_state_set_user');
   if (!pipeline && hookUsed.keyboard_post_init_user) generatedSymbols.add('keyboard_post_init_user');
+  if (!pipeline && capsRules) generatedSymbols.add('caps_word_press_user');
   if (lang) {
     for (const name of [...LANGUAGE_SYMBOLS, 'navi_lang', 'navi_language_key']) generatedSymbols.add(name);
     if (lang.layers) generatedSymbols.add('navi_language_layer');
@@ -886,6 +896,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
         },
       },
       { hook: 'keyboard_post_init_user', call: 'keyboard_post_init_navi();', why: { en: 'the first language’s layer turns on at power-on', ru: 'слой первого языка включается при включении клавиатуры' } },
+      { hook: 'caps_word_press_user', call: 'return caps_word_press_navi(keycode);', why: { en: 'Caps Word key rules', ru: 'правила клавиш Caps Word' } },
     ];
     for (const f of forward) {
       if (!hookUsed[f.hook]) continue;

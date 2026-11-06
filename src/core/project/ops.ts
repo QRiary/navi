@@ -249,6 +249,19 @@ function remapAllLayerRefs(p: Project, keymapId: string, spec: KeycodeSpec, mapp
     }))
     .filter((s) => s.keycodes.length > 0);
   const keyLists = p.keyLists.map((l) => ({ ...l, keys: l.keys.filter((k) => !refsDeleted(k)).map(fix) }));
+  // Caps Word rules: keys like key lists; layers follow their layer, and a layer rule that loses every layer goes away
+  // (it must not turn into an every-layer rule).
+  const firmware = p.firmware.capsWordRules
+    ? {
+        ...p.firmware,
+        capsWordRules: p.firmware.capsWordRules.flatMap((r) => {
+          const keys = holdKeys(r.keys);
+          if (!r.layers?.length) return [{ ...r, keys }];
+          const layers = r.layers.map(mapping).filter((n): n is number => n !== null);
+          return layers.length ? [{ ...r, keys, layers }] : [];
+        }),
+      }
+    : p.firmware;
   // A language's layer follows its layer; a deleted one leaves the language without a layer.
   const languages = p.languages.map((l) => {
     if (l.layer === undefined) return l;
@@ -257,7 +270,7 @@ function remapAllLayerRefs(p: Project, keymapId: string, spec: KeycodeSpec, mapp
     const { layer: _, ...rest } = l;
     return rest;
   });
-  return touch({ ...p, keymaps, tapDances, combos, keyOverrides, keyAliases, tapHolds, keyLists, tapHoldActions, languages });
+  return touch({ ...p, keymaps, tapDances, combos, keyOverrides, keyAliases, tapHolds, keyLists, tapHoldActions, languages, firmware });
 }
 
 /**
@@ -282,6 +295,7 @@ export function mapProjectKeycodes(p: Project, fix: (v: number) => number): Proj
       ...(s.holdOnByLanguage ? { holdOnByLanguage: s.holdOnByLanguage.map((g) => ({ ...g, keys: keep(g.keys) })) } : {}),
     })),
     keyLists: p.keyLists.map((l) => ({ ...l, keys: keep(l.keys) })),
+    firmware: p.firmware.capsWordRules ? { ...p.firmware, capsWordRules: p.firmware.capsWordRules.map((r) => ({ ...r, keys: keep(r.keys) })) } : p.firmware,
     tapHoldActions: p.tapHoldActions.map((a) => ({ ...a, tap: fix(a.tap), hold: a.hold.type === 'key' ? { type: 'key', keycode: fix(a.hold.keycode) } : a.hold })),
     leaderSequences: p.leaderSequences.map((s) => ({ ...s, action: action(s.action) })),
     customKeycodes: p.customKeycodes.map((c) => ({ ...c, action: action(c.action) })),

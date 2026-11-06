@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 13;
+export const PROJECT_SCHEMA_VERSION = 14;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -450,6 +450,24 @@ export interface FirmwareConfig {
   autoRepeat: { delay: number; rate: number };
   /** How text is typed outside a plain-keys language (since format 13; used only with such a language). */
   textRoute: TextRoute;
+  /**
+   * Caps Word key rules (since format 14): which keys keep Caps Word on and which of them it shifts; any other key ends
+   * it. Unset = QMK's own list, NAVI writes no caps-word code.
+   */
+  capsWordRules?: CapsWordRule[];
+}
+
+/**
+ * One Caps Word rule: the keys (and the key lists' keys) it covers, whether Caps Word shifts them (otherwise it only
+ * stays on), and the layers it counts on (unset or empty = every layer; a layer rule wins over an every-layer one).
+ */
+export interface CapsWordRule {
+  id: string;
+  keys: number[];
+  /** KeyList ids. */
+  lists?: string[];
+  shift: boolean;
+  layers?: number[];
 }
 
 // ── Languages ─────────────────────────────────────────────────────────

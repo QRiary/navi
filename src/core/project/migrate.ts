@@ -65,6 +65,8 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
     if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 13, languages }; // validate reports it
     return { ...d, schemaVersion: 13, languages, firmware: { ...(f as Data), textRoute: TEXT_ROUTE_DEFAULT } };
   },
+  // 13 → 14: Caps Word key rules (firmware.capsWordRules) are optional: unset keeps QMK's own list.
+  13: (d) => ({ ...d, schemaVersion: 14 }),
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {
