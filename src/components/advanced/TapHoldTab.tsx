@@ -22,7 +22,7 @@ import {
   TAP_HOLD_TERM_MIN,
   tapHoldUsage,
 } from '../../core/project/tapHolds';
-import type { KeyList, Project, TapHoldSetting } from '../../core/project/types';
+import type { KeyList, LanguageHoldKeys, Project, TapHoldSetting } from '../../core/project/types';
 import { t } from '../../i18n';
 import { findAttr, matchesQuery, useListFilter } from '../../lib/find';
 import { useKeyWords } from '../../lib/keyFind';
@@ -493,6 +493,65 @@ export function TapHoldTab({ project }: { project: Project }) {
                         }
                       />
                     </div>
+                    {project.languages.map((lang) => {
+                      const group = s.holdOnByLanguage?.find((g) => g.language === lang.id);
+                      const gKeys = group?.keys ?? [];
+                      const gLists = group?.lists ?? [];
+                      const gFree = project.keyLists.filter((l) => !gLists.includes(l.id));
+                      const items: KeyChip[] = [...gLists.map((id): KeyChip => ({ kind: 'list', id, name: listName(id) })), ...gKeys.map((value): KeyChip => ({ kind: 'key', value }))];
+                      const setGroup = (keys: number[], ids: string[]) => {
+                        const entry: LanguageHoldKeys = { language: lang.id, keys, ...(ids.length ? { lists: ids } : {}) };
+                        const old = s.holdOnByLanguage ?? [];
+                        const empty = !keys.length && !ids.length;
+                        const next = group ? (empty ? old.filter((g) => g !== group) : old.map((g) => (g === group ? entry : g))) : empty ? old : [...old, entry];
+                        const { holdOnByLanguage: _g, ...rest } = s;
+                        set(
+                          project.tapHolds.map((x) => (x.id === s.id ? { ...rest, ...(next.length ? { holdOnByLanguage: next } : {}) } : x)),
+                          listLabel,
+                        );
+                      };
+                      return (
+                        <div key={lang.id} className="row-sub">
+                          <span className="kicker">
+                            <Hint
+                              tip={t(
+                                `Extra hold keys that count only while ${lang.name || lang.code} is the active language, on top of the keys above.`,
+                                `Дополнительные клавиши удержания, которые действуют только пока активен язык ${lang.name || lang.code}, сверх клавиш выше.`,
+                              )}
+                            >
+                              {t(`hold when pressed · ${lang.name || lang.code}`, `удержание при нажатии · ${lang.name || lang.code}`)}
+                            </Hint>
+                          </span>
+                          <KeyChips
+                            items={items}
+                            label={t(`hold when pressed in ${lang.name || lang.code}`, `удержание при нажатии в языке ${lang.name || lang.code}`)}
+                            full={
+                              gKeys.length >= HOLD_ON_KEYS_MAX &&
+                              t(`At most ${HOLD_ON_KEYS_MAX} hold keys of its own; put more in a key list`, `Не больше ${HOLD_ON_KEYS_MAX} своих клавиш удержания; остальные — в список клавиш`)
+                            }
+                            onAdd={(v) => setGroup([...gKeys, v], gLists)}
+                            onRemove={(i) => (i < gLists.length ? setGroup(gKeys, gLists.filter((_, j) => j !== i)) : setGroup(gKeys.filter((_, j) => j !== i - gLists.length), gLists))}
+                            extra={
+                              gFree.length > 0 && (
+                                <select
+                                  className="select"
+                                  value=""
+                                  aria-label={t('Add a key list', 'Добавить список клавиш')}
+                                  onChange={(e) => e.target.value && setGroup(gKeys, [...gLists, e.target.value])}
+                                >
+                                  <option value="">{t('+ list', '+ список')}</option>
+                                  {gFree.map((l) => (
+                                    <option key={l.id} value={l.id}>
+                                      {l.name || '—'}
+                                    </option>
+                                  ))}
+                                </select>
+                              )
+                            }
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}

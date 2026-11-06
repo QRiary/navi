@@ -23,6 +23,7 @@ import { CombosTab } from '../components/advanced/CombosTab';
 import { TapDanceTab } from '../components/advanced/TapDanceTab';
 import { LeaderTab } from '../components/advanced/LeaderTab';
 import { UnicodeTab } from '../components/advanced/UnicodeTab';
+import { LanguagesTab } from '../components/advanced/LanguagesTab';
 import { LayerKeysOnTopRow } from '../components/advanced/LayerKeysOnTop';
 import { AutoRepeatRows } from '../components/advanced/AutoRepeat';
 import { ModsInput } from '../components/keyboard/KeycodeComposer';
@@ -512,6 +513,8 @@ export function AdvancedPage({ tab }: { tab?: string }) {
         return <LeaderTab project={project} />;
       case 'unicode':
         return <UnicodeTab project={project} />;
+      case 'languages':
+        return <LanguagesTab project={project} />;
       case 'navi':
         return <NaviBehaviorTab project={project} />;
       case 'behavior':

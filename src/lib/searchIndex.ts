@@ -10,6 +10,7 @@ import type { KeycodeSpec } from '../core/keycodes/spec';
 import { sequenceText } from '../core/keycodes/sequence';
 import { comboRefOf } from '../core/features/advanced';
 import { aliasCName } from '../core/project/aliases';
+import { languageKeycodes } from '../core/project/languages';
 import { activeGeometry, activeKeymap } from '../core/project/ops';
 import type { Combo, CustomAction, KeyGeom, MatrixPos, Project, ProjectSummary } from '../core/project/types';
 import { configParams, groupTitle } from '../core/qmk/configParams';
@@ -37,6 +38,7 @@ export type SearchKind =
   | 'override'
   | 'leader'
   | 'unicode'
+  | 'language'
   | 'project';
 
 /** Where Enter goes for a key or an encoder: the Keyboard page on that layer, pointing at it. */
@@ -90,6 +92,8 @@ export function kindLabel(kind: SearchKind): string {
       return t('leader', 'лидер');
     case 'unicode':
       return t('unicode', 'юникод');
+    case 'language':
+      return t('language', 'язык');
     case 'project':
       return t('project', 'проект');
   }
@@ -357,6 +361,20 @@ function projectItems(project: Project, spec: KeycodeSpec, ctx: LabelContext): S
       findId: `unicode:${u.id}`,
     });
   }
+
+  project.languages.forEach((l, i) => {
+    const keys = languageKeycodes(spec, i);
+    const to = kn(keys.to);
+    const toggle = kn(keys.toggle);
+    out.push({
+      kind: 'language',
+      title: l.name || l.code,
+      detail: join(l.code, l.plainKeys && t('plain keys', 'обычные клавиши'), l.layer !== undefined && layerName(l.layer), to.qmk),
+      text: join(l.name, l.code, to.text, to.qmk, toggle.text, toggle.qmk, 'language язык'),
+      route: advanced('languages'),
+      findId: `language:${l.id}`,
+    });
+  });
   return out;
 }
 
@@ -398,6 +416,7 @@ const KIND_ORDER: Record<SearchKind, number> = {
   override: 6,
   leader: 6,
   unicode: 6,
+  language: 6,
   setting: 5,
   key: 4,
   encoder: 3,

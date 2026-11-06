@@ -9,6 +9,7 @@ import { ArrowDown, ArrowUp, Copy, CopyPlus, Eraser, Plus, SquareDashed, Star, T
 import { LayoutPreview } from '../components/keyboard/LayoutPreview';
 import { KeymapManager } from '../components/project/KeymapManager';
 import { LayerKeysOnTopRow } from '../components/advanced/LayerKeysOnTop';
+import { TypingLayerTick } from '../components/advanced/LanguagesTab';
 import { LayerRoutes, useLayerRefs } from '../components/layers/LayerRoutes';
 import { keyLabel } from '../core/keycodes/labels';
 import { KC_NO, KC_TRNS } from '../core/project/factory';
@@ -148,6 +149,11 @@ export function LayersPage() {
                       </button>
                     ))}
                   </div>
+                  {project.languages.length > 0 && (
+                    <div className="field-row">
+                      <TypingLayerTick project={project} keymap={keymap} layer={i} />
+                    </div>
+                  )}
                   <div className="field">
                     <span className="kicker">{t('how to get here', 'как сюда попасть')}</span>
                     <LayerRoutes layer={i} refs={refs} compact />

@@ -6,7 +6,9 @@ import type { CatalogContext } from '../core/keycodes/catalog';
 import type { LabelContext } from '../core/keycodes/labels';
 import type { KeycodeSpec } from '../core/keycodes/spec';
 import { aliasLookup } from '../core/project/aliases';
+import { languageKeycodes, languageKeyOf } from '../core/project/languages';
 import { activeGeometry, activeKeymap } from '../core/project/ops';
+import { languageKeyName as languageKeyCName } from '../core/qmk/languages';
 import { tapHoldActionLookup } from '../core/project/tapHoldActions';
 import type { Project } from '../core/project/types';
 import { useProjectStore, useSpec } from '../store/projectStore';
@@ -37,7 +39,12 @@ export function labelContext(project: Project, spec: KeycodeSpec, settings: { os
       const m = project.macros.find((x) => x.index === i);
       return m?.name ? m.name.slice(0, 8) : undefined;
     },
-    customName: (v) => custom.get(v),
+    customName: (v) => custom.get(v) ?? languageKeyCName(spec, project, v),
+    languageKey: (v) => {
+      const k = languageKeyOf(spec, project, v);
+      const l = k && project.languages[k.index];
+      return k && l ? { name: l.name, code: l.code, toggle: k.toggle } : undefined;
+    },
     alias: (v) => aliases.get(v),
     unicodeEntry: (i) => project.unicodeMap[i]?.codepoint,
     tapHoldAction: (v) => tapHoldActions.get(v),
@@ -52,6 +59,13 @@ export function catalogContext(project: Project, spec: KeycodeSpec, label: Label
     tapDances: project.tapDances.map((t) => ({ index: t.index, name: t.name })),
     macroCount,
     customKeycodes: project.customKeycodes.map((c, i) => ({ value: customKeycodeValue(spec, i), name: c.name, description: c.description })),
+    languageKeys: project.languages.flatMap((l, i) => {
+      const k = languageKeycodes(spec, i);
+      return [
+        { value: k.to, name: l.name, code: l.code, toggle: false },
+        { value: k.toggle, name: l.name, code: l.code, toggle: true },
+      ];
+    }),
     aliases: [...aliasLookup(project.keyAliases)].map(([value, a]) => ({ value, ...a })),
   };
 }

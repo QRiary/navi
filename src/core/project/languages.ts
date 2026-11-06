@@ -141,8 +141,9 @@ export function checkLanguages(project: Project, keymap: Keymap): AdvancedIssue[
       else if (l.layer === keymap.defaultLayer) push('error', where, 'The default layer is always on: pick another layer, or none.', 'Основной слой включён всегда: выберите другой слой или никакой.');
     }
   });
-  if (!usesTextRoute(project)) return out;
-  const route = project.firmware.textRoute;
+  // The route counts only when a language types through it; the OS shortcuts are needed either way, unless the
+  // own program switches the computer's language.
+  const route = usesTextRoute(project) ? project.firmware.textRoute : undefined;
   if (route === 'own-program') {
     push(
       'warning',

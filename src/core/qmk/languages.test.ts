@@ -127,6 +127,9 @@ describe('languages: operations', () => {
     ]);
     const program = project({}, 'own-program');
     expect(checkLanguages(program, activeKeymap(program)).map((i) => i.message.en).join(' ')).toContain('navi_type_text_user');
+    // Only plain-keys languages: no route is used, but the keys still tap the OS shortcut.
+    const plain = project({ languages: [EN, { ...RU, plainKeys: true, osShortcut: undefined }] }, 'own-program');
+    expect(checkLanguages(plain, activeKeymap(plain)).map((i) => i.message.en)).toEqual(['No OS shortcut: its keys switch the keyboard, not the computer.']);
   });
 });
 
