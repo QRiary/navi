@@ -20,12 +20,12 @@ each starting with its header line:
 # navi_tests.txt: written by NAVI from "<project name>". Don't edit: NAVI rewrites it.
 # Format: docs/firmware-tests.md in NAVI.
 [keys]
-key 0 r0c1 KC_Q tap=KC_Q
+key 0 r0c1 KC_Q
 key 0 r1c1 LGUI_T(KC_A) tap=KC_A alias=NV_HOME_A
 combo CM_ESC 0,1 r0c1+r0c2
 dance TD_X r2c4
 [not checked]
-r3c5 on layer 2 (NUM): US_MAGIC, a custom keycode your code handles
+r3c5 on layer 2 (Nav): MY_KEY, a custom keycode your code handles
 [tests]
 # Layer 0 (BASE): every key tapped
 r0c1 => q
@@ -49,7 +49,10 @@ spots included, as `KC_TRNS`), then one per combo and per tap dance.
 
 One line per left-out key, combo or slot, saying why: a custom keycode with no NAVI action (the user's C
 decides it), an own-C tap dance, `QK_BOOT` / `EE_CLR` / `QK_RBT` (they'd end the test), a key typed through a
-language's text route (the tests type in the first language).
+language's text route (the tests type in the first language). Also: a key whose alias C name the user's own C
+names (that code may change what it does), a VIA macro, a layer no key can turn on from power-on, a combo whose
+result is a tap dance, and a scenario whose text holds a word NAVI's file check refuses (`#include`, `incbin`).
+The lines are for people to read; a harness skips the section.
 
 ### `[tests]`: scenarios and their expected output
 
@@ -82,7 +85,8 @@ What the computer would get, decoded as a US QWERTY layout types it:
   LEFT DOWN UP APP NUM P/ P* P- P+ PENT P. P0`-`P9 F1`-`F24`, else the HID code as `0x2A`.
 - A modifier pressed and released with no key while it was held: `⟨LCTL⟩` (`LCTL LSFT LALT LGUI RCTL RSFT
   RALT RGUI`).
-- A consumer key: `⟨MUTE⟩ ⟨VOLU⟩ ⟨VOLD⟩ ⟨MPLY⟩ ⟨MNXT⟩ ⟨MPRV⟩ ⟨MSTP⟩ ⟨BRIU⟩ ⟨BRID⟩`, else `⟨0x00E2⟩` (usage).
+- A consumer key: `⟨MUTE⟩ ⟨VOLU⟩ ⟨VOLD⟩ ⟨MPLY⟩ ⟨MNXT⟩ ⟨MPRV⟩ ⟨MSTP⟩ ⟨BRIU⟩ ⟨BRID⟩`, else `⟨0x00E2⟩` (usage); a system key
+  (power, sleep, wake) the same way, by its usage: `⟨0x0082⟩`.
 - The mouse, written only when what it does changes: `⟨BTN:1⟩` (button bits), `⟨MS:1,0⟩` (x, y direction),
   `⟨WH:1,0⟩` (vertical, horizontal direction).
 - Nothing typed at all: `∅`.

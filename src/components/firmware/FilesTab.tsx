@@ -9,6 +9,7 @@ import { diffLines, diffStats } from '../../core/qmk/textDiff';
 import { generateFiles } from '../../lib/firmwareFiles';
 import { navi } from '../../desktop/bridge';
 import { saveTextFile } from '../../lib/files';
+import { findAttr } from '../../lib/find';
 import { whyDisabled } from '../../lib/whyDisabled';
 import { Hint } from '../InfoTip';
 import { useProjectStore, useSpec } from '../../store/projectStore';
@@ -150,6 +151,21 @@ export function FilesTab() {
               {t('own pipeline', 'свой pipeline')}
             </Hint>{' '}
             {!pipelineOn && <span className="kicker">{t('off', 'выкл.')}</span>}
+          </label>
+          <label className="checkbox" style={{ whiteSpace: 'nowrap' }} {...findAttr('setting:firmware.tests')}>
+            <input
+              type="checkbox"
+              checked={project.firmware.tests}
+              onChange={(e) => apply((p) => ({ ...p, firmware: { ...p.firmware, tests: e.target.checked } }), t('firmware tests', 'тесты прошивки'))}
+            />{' '}
+            <Hint
+              tip={t(
+                'NAVI also writes navi_tests.txt: key presses and what the firmware must type for each, worked out from this project. NAVI rewrites it on every write, so it follows your changes. A test harness in QMK (or NAVI’s test run) plays it on the built firmware.',
+                'NAVI пишет ещё и navi_tests.txt: нажатия клавиш и что прошивка должна напечатать на каждое, по этому проекту. NAVI переписывает его при каждой записи, так что он следует за вашими изменениями. Его проигрывает тестовый стенд в QMK (или тестовый прогон NAVI) на собранной прошивке.',
+              )}
+            >
+              {t('write firmware tests', 'писать тесты прошивки')}
+            </Hint>
           </label>
           {pipelineOn && (
             <span className="kicker" style={{ flexBasis: '100%' }}>

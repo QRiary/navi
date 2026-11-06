@@ -18,7 +18,7 @@ import { bothLanguages, t } from '../i18n';
 import { customKeycodeValue } from './projectContext';
 import type { Route } from './router';
 import { SECTIONS, tabRoute, type Section } from './sections';
-import { SETTING_ITEMS } from './settingsIndex';
+import { PROJECT_SETTING_ITEMS, SETTING_ITEMS } from './settingsIndex';
 import { normalize } from './find';
 
 export type SearchKind =
@@ -138,12 +138,12 @@ function pageItems(): SearchItem[] {
 
 function settingItems(): SearchItem[] {
   const settings = SECTIONS.find((s) => s.id === 'settings')!.title();
-  return SETTING_ITEMS.map((s) => ({
+  return [...SETTING_ITEMS, ...PROJECT_SETTING_ITEMS].map((s) => ({
     kind: 'setting' as const,
     title: s.label(),
-    detail: `${settings} › ${s.section()}`,
+    detail: s.route ? s.section() : `${settings} › ${s.section()}`,
     text: join(bothLanguages(s.label), bothLanguages(s.section), s.hint && bothLanguages(s.hint), s.keywords, s.key),
-    route: { section: 'settings' as Section },
+    route: s.route ?? { section: 'settings' as Section },
     findId: `setting:${s.key}`,
   }));
 }
