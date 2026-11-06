@@ -28,6 +28,7 @@ function sample(): Project {
       { id: 'al1', label: 'Cee', keycode: C },
       { id: 'al2', label: 'Aye', keycode: A },
     ],
+    macros: [{ id: 'm1', index: 0, name: 'M_ONE', steps: [{ type: 'tap', keycode: C }, { type: 'text', text: 'x' }, { type: 'down', keycode: A }] }],
   };
 }
 
@@ -43,7 +44,8 @@ describe('deleteCustomKeycode', () => {
     expect(project.tapDances[0].hold).toBe(0);
     expect(project.keyAliases).toEqual([{ id: 'al1', label: 'Cee', keycode: 0x7e41 }]);
     expect(project.languages).toEqual(p.languages);
-    expect(cleared).toBe(3); // one key, one tap dance slot, one alias
+    expect(project.macros[0].steps).toEqual([{ type: 'tap', keycode: 0x7e41 }, { type: 'text', text: 'x' }, { type: 'down', keycode: 0 }]);
+    expect(cleared).toBe(4); // one key, one tap dance slot, one alias, one macro step
   });
 
   it('deleting the last one moves nothing', () => {
@@ -52,7 +54,7 @@ describe('deleteCustomKeycode', () => {
     expect(project.combos[0].result).toBe(0);
     expect(project.tapDances[0].tap).toBe(0);
     expect(project.keyAliases.map((a) => a.id)).toEqual(['al2']);
-    expect(cleared).toBe(4); // key, combo result, tap dance slot, alias
+    expect(cleared).toBe(5); // key, combo result, tap dance slot, alias, macro step
   });
 
   it('an unknown id changes nothing', () => {
