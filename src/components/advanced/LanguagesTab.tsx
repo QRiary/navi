@@ -31,7 +31,7 @@ import { KeyName } from '../KeyName';
 import { IssueList, KeycodeField } from './common';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
-const COLS = 'minmax(0,1fr) 100px 120px 170px 32px 32px 32px';
+const COLS = 'minmax(0,1fr) 100px 170px 170px 32px 32px 32px'; // “обычные клавиши ?” needs the 170px
 const ROUTE_COLS = '24px minmax(150px, 0.5fr) minmax(0, 1.5fr)';
 
 const ROUTES: Record<TextRoute, { title: string; en: string; ru: string }> = {
@@ -99,8 +99,8 @@ export function LanguagesTab({ project }: { project: Project }) {
   const routeTip = (
     <InfoTip label={t('text route', 'способ ввода текста')}>
       {t(
-        'How text that plain keys cannot type reaches the computer (macros, custom keycodes, leader strings, and symbol keys outside a plain-keys language). One route for the whole firmware:\n- My own program: a program on your computer types it (needs your C: navi_type_text_user, navi_switch_language_user).\n- WinCompose: Unicode input through the WinCompose app on Windows.\n- Alt codes: Windows Alt codes; unreliable.\n- Linux: Ctrl+Shift+U (IBus, GTK).\nThe Unicode routes are not confirmed to work on non-Latin layouts: QMK types the hex digits A-F as letter keys, which a Russian layout turns into other letters. Not checked.',
-        'Как текст, который не набрать обычными клавишами, попадает на компьютер (макросы, свои keycodes, строки лидера и клавиши знаков вне языка с обычными клавишами). Один способ на всю прошивку:\n- Своя программа: текст печатает программа на вашем компьютере (нужен ваш C: navi_type_text_user, navi_switch_language_user).\n- WinCompose: ввод Юникода через WinCompose в Windows.\n- Alt-коды: Alt-коды Windows; ненадёжно.\n- Linux: Ctrl+Shift+U (IBus, GTK).\nНе подтверждено, что способы через Юникод работают в нелатинских раскладках: QMK печатает шестнадцатеричные цифры A-F буквенными клавишами, которые русская раскладка превращает в другие буквы. Не проверялось.',
+        'How text that plain keys cannot type reaches the computer (macros, custom keycodes, leader strings, and symbol keys outside a plain-keys language). Used only while a language without plain keys is on. One route for the whole firmware:\n- My own program: a program on your computer types it (needs your C: navi_type_text_user, navi_switch_language_user).\n- WinCompose: Unicode input through the WinCompose app on Windows.\n- Alt codes: Windows Alt codes; unreliable.\n- Linux: Ctrl+Shift+U (IBus, GTK).\nThe Unicode routes are not confirmed to work on non-Latin layouts: QMK types the hex digits A-F as letter keys, which a Russian layout turns into other letters. Not checked.',
+        'Как текст, который не набрать обычными клавишами, попадает на компьютер (макросы, свои keycodes, строки лидера и клавиши знаков вне языка с обычными клавишами). Работает, только когда включён язык без обычных клавиш. Один способ на всю прошивку:\n- Своя программа: текст печатает программа на вашем компьютере (нужен ваш C: navi_type_text_user, navi_switch_language_user).\n- WinCompose: ввод Юникода через WinCompose в Windows.\n- Alt-коды: Alt-коды Windows; ненадёжно.\n- Linux: Ctrl+Shift+U (IBus, GTK).\nНе подтверждено, что способы через Юникод работают в нелатинских раскладках: QMK печатает шестнадцатеричные цифры A-F буквенными клавишами, которые русская раскладка превращает в другие буквы. Не проверялось.',
       )}
     </InfoTip>
   );
@@ -132,15 +132,7 @@ export function LanguagesTab({ project }: { project: Project }) {
       <section className="section">
         <div className="section-head">
           <h2>
-            <Hint
-              tip={t(
-                'How text that plain keys cannot type is sent to the computer. Used only while a language that does not type with plain keys is on.',
-                'Как текст, который не набрать обычными клавишами, отправляется на компьютер. Работает, только когда включён язык без обычных клавиш.',
-              )}
-            >
-              {t('text route', 'способ ввода текста')}
-            </Hint>{' '}
-            {routeTip}
+            {t('text route', 'способ ввода текста')} {routeTip}
           </h2>
           <span className="kicker">firmware.textRoute</span>
         </div>
