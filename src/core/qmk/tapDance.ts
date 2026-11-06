@@ -139,11 +139,13 @@ export function tapDanceCode(tds: TapDance[], kc: (v: number) => string, cString
   if (needSend) {
     sym('navi_td_keys', 'navi_td_send');
     c.push(
-      '// Slots and steps are played as key events at the dance key\'s position (navi_send), like keys of the keymap.',
-      `static keypos_t navi_td_keys[${maxIndex + 1}]; // where each tap dance key was pressed last (process_record_user)`,
+      '// Slots and steps are played at the dance key\'s position (navi_send), like keys of the keymap: as key events, or',
+      '// as combo events for a dance that is a combo\'s result (QMK gives those position 0, 0), as QMK plays its combos.',
+      `static keyevent_t navi_td_keys[${maxIndex + 1}]; // each tap dance key's last press (process_record_user)`,
       '',
       'static void navi_td_send(uint8_t index, uint16_t keycode, bool pressed, uint8_t taps) {',
-      '    keyrecord_t record = {.event = MAKE_KEYEVENT(navi_td_keys[index].row, navi_td_keys[index].col, pressed)};',
+      '    keyevent_t  at     = navi_td_keys[index];',
+      '    keyrecord_t record = {.event = MAKE_EVENT(at.key.row, at.key.col, pressed, IS_COMBOEVENT(at) ? COMBO_EVENT : KEY_EVENT)};',
       '    navi_send(keycode, &record, pressed, taps);',
       '}',
       '',

@@ -40,7 +40,7 @@ export function CombosTab({ project, active: tabActive = true }: { project: Proj
   const spec = useSpec();
   const labelCtx = useLabelContext();
   const active = useActive();
-  const issues = useMemo(() => checkCombos(project, project.combos), [project]);
+  const issues = useMemo(() => checkCombos(project, project.combos, spec), [project, spec]);
   const [current, setCurrent] = useState<string | null>(project.combos[0]?.id ?? null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [keyFilter, setKeyFilter] = useState<string | null>(null);

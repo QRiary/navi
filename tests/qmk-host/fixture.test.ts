@@ -96,7 +96,10 @@ export function hostProject(): Project {
   put(1, 16, q('QK_USER_3'));
   put(1, 17, q('QK_MACRO_2')); // a macro: text, then a key
   put(0, 21, q('KC_LSFT'));
-  const refs: Record<number, 'self'> = { 1: 'self', 2: 'self' };
+  // Layer 3, reached by MO(3) on layer 1 (hold 30, then 20): 2 is KC_8, 13 transparent (layer 1's KC_A shows through).
+  put(1, 20, q('MO(3)'));
+  put(3, 2, q('KC_8'));
+  const refs: Record<number, 'self'> = { 1: 'self', 2: 'self', 3: 'self' };
   return {
     ...p,
     tapDances,
@@ -121,8 +124,15 @@ export function hostProject(): Project {
       ],
       custom: {
         'keymap.c': [
+          '// What the user\'s C sees of the C(KC_C) the tap dances play: its event type and position.',
+          'uint8_t host_probe_type = 0xFF, host_probe_row = 0xFF, host_probe_col = 0xFF;',
           'void post_process_record_user(uint16_t keycode, keyrecord_t *record) {',
           '    if (keycode == HOST_KEY && record->event.pressed) tap_code(KC_Z);',
+          '    if (keycode == C(KC_C) && record->event.pressed) {',
+          '        host_probe_type = record->event.type;',
+          '        host_probe_row  = record->event.key.row;',
+          '        host_probe_col  = record->event.key.col;',
+          '    }',
           '}',
           'void host_each(tap_dance_state_t *state, void *user_data) {',
           '    if (state->count == 2) tap_code(KC_X);',
@@ -140,6 +150,7 @@ export function hostProject(): Project {
       { id: 'c5', name: 'c5_roll', keys: [combo(25), combo(26)], result: q('KC_Z') },
       { id: 'c6', name: 'c6_dance', keys: [combo(27), combo(28)], result: q('TD(5)') },
       { id: 'c7', name: 'c7_slots', keys: [combo(9), combo(29)], result: q('TD(12)') },
+      { id: 'c8', name: 'c8_over', keys: [combo(13), combo(2)], result: q('KC_9'), layers: [3] },
     ],
     tapHolds: [
       { id: 'th-p', keycodes: [q('LSFT_T(KC_P)')], flavor: 'hold-preferred' },

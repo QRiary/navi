@@ -47,7 +47,8 @@ describe('tap dance kinds: generator', () => {
     expect(c).toContain('[TD_A] = { LCTL(KC_C), LM(L_LAYER_1, MOD_LSFT), KC_NO, KC_NO },');
     expect(c).toContain('.on_each_release = navi_td_each_release');
     expect(c).toMatch(/static void navi_send\(uint16_t keycode, keyrecord_t \*record, bool pressed, uint8_t taps\)/);
-    expect(c).toContain('navi_td_keys[QK_TAP_DANCE_GET_INDEX(keycode)] = record->event.key;');
+    expect(c).toContain('navi_td_keys[QK_TAP_DANCE_GET_INDEX(keycode)] = record->event;');
+    expect(c).toContain('MAKE_EVENT(at.key.row, at.key.col, pressed, IS_COMBOEVENT(at) ? COMBO_EVENT : KEY_EVENT)');
     expect(c).not.toContain('navi_td_every_tap');
     expect(c).not.toContain('navi_td_mods');
     // no tap-only dance (one with a double tap): no on_each_release helper

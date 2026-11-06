@@ -9,13 +9,14 @@
 //   16 every tap: "!" (Shift: "->"), "="   17 every tap: "a"   18 every tap: "a" (Shift: nothing)
 //   19 every tap: HOST_KEY (the own lines tap KC_Z)   20 own C: host_each taps KC_X on the second tap   21 KC_LSFT
 //   22 every tap: tap KC_A, tap KC_B   23 tap: the stand-in at 3 / hold: the stand-in at 4
-//   layer 3 (on with 30 + 19, TG(3)): 10 tap KC_T / double tap TG(3)   6 KC_NO
-// Combos (layers 1 and 2 read combo keys from themselves, layer 0 and 3 from layer 0):
-//   30 MO(1)   31 MO(2)
+//   layer 3 (on with 30 + 19, TG(3), or 30 + 20, MO(3)): 10 tap KC_T / double tap TG(3)   6 KC_NO
+// Combos (layers 1, 2 and 3 read combo keys from themselves, layer 0 from layer 0):
+//   30 MO(1)   31 MO(2)   20 on layer 1: MO(3)
 //   32 33 Q W (layer 1: 1 2) → ESC   34 35 R T (layer 2: 3, transparent) → ENTER
 //   36 37 Y U → G, only with layer 1 on top   38 39 I O → X on layer 0, Y on layer 1
 //   24 LSFT_T(KC_A) holds when KC_Z is pressed   25 26 K L → Z
 //   27 28 F H → the every-tap dance at 16
+//   13 2 on layer 3 (13 transparent there, 2 KC_8) → 9, only with layer 3 on top
 // Auto repeat (delay 300 ms, rate 50 ms), on layer 2 (hold 31):
 //   5 MC_0 taps A, repeats   6 REP_KEY types "b", repeats   7 MC_1 taps C, doesn't repeat
 // Caps Word rules (letters shifted; "." shifted only with layer 1 on top; TD at 10 keeps it on; any other key ends it):
@@ -205,6 +206,16 @@ TEST_F(NaviHost, combo_with_a_transparent_key_fires_on_a_layer_reading_itself) {
     EXPECT_EQ(play({"+31", "+34", "+35", "-34", "-35", "-31"}), "0x28 -");
 }
 
+// C8: on layer 3 (held from layer 1) 13 is transparent: QMK matches the key it falls through to, layer 1's KC_A
+TEST_F(NaviHost, combo_with_a_transparent_key_fires_by_the_key_of_the_layer_under_it) {
+    EXPECT_EQ(play({"+30", "+20", "+13", "+2", "-13", "-2", "-20", "-30"}), "9 -");
+}
+
+// Layer 1's key let go while layer 3 stays held: 13 falls through to layer 0's KC_N
+TEST_F(NaviHost, combo_with_a_transparent_key_fires_by_the_base_key_once_the_layer_under_it_is_off) {
+    EXPECT_EQ(play({"+30", "+20", "-30", "+13", "+2", "-13", "-2", "-20"}), "9 -");
+}
+
 // C3: limited to layer 1, which must be the highest active layer
 TEST_F(NaviHost, combo_limited_to_layer_1_does_not_fire_under_layer_2) {
     EXPECT_EQ(play({"+30", "+31", "+36", "+37", "-36", "-37", "-31", "-30"}), "Y Y+U U -");
@@ -266,6 +277,25 @@ TEST_F(NaviHost, combo_slots_dance_held_while_the_key_at_0_0_holds_its_layer) {
 
 TEST_F(NaviHost, combo_slots_dance_tapped_on_the_layer_of_the_key_at_0_0) {
     EXPECT_EQ(play({"+0", "wait", "+9", "+29", "-9", "-29", "-0", "+32", "-32"}), "LCTL LCTL+C LCTL - Q -");
+}
+
+// The user's C (post_process_record_user in the own lines) sees the dance's C(KC_C) as the combo's: a COMBO_EVENT at
+// the position QMK gave the combo, not the key at matrix 0, 0. A dance on a real key plays at that key.
+extern "C" uint8_t host_probe_type, host_probe_row, host_probe_col;
+TEST_F(NaviHost, combo_slots_dance_plays_its_key_as_a_combo_event) {
+    host_probe_type = host_probe_row = host_probe_col = 0xFF;
+    EXPECT_EQ(play({"+9", "+29", "-9", "-29"}), "LCTL LCTL+C LCTL -");
+    EXPECT_EQ(host_probe_type, COMBO_EVENT);
+    EXPECT_EQ(host_probe_row, 0);
+    EXPECT_EQ(host_probe_col, 0);
+}
+
+TEST_F(NaviHost, dance_on_a_key_plays_its_key_as_a_key_event_at_that_key) {
+    host_probe_type = host_probe_row = host_probe_col = 0xFF;
+    EXPECT_EQ(play({"+10", "-10"}), "LCTL LCTL+C LCTL -");
+    EXPECT_EQ(host_probe_type, KEY_EVENT);
+    EXPECT_EQ(host_probe_row, 1);
+    EXPECT_EQ(host_probe_col, 0);
 }
 
 TEST_F(NaviHost, key_at_0_0_taps_normally_after_a_combo_slots_dance_hold) {

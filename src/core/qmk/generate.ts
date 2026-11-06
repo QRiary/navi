@@ -13,7 +13,7 @@
 import { modsToConstExpr, toQmk, type NameContext } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
 import { FEATURE_BY_ID, type FeatureId } from '../features/registry';
-import { checkCombos, comboRefOf, comboRefsMixed, qmkCombos, checkKeyOverrides, checkLeaderSequences, checkTapDances, checkUnicodeMap, leaderFunction, type AdvancedIssue } from '../features/advanced';
+import { checkCombos, comboRefOf, comboRefsMixed, comboStacks, qmkCombos, checkKeyOverrides, checkLeaderSequences, checkTapDances, checkUnicodeMap, leaderFunction, type AdvancedIssue } from '../features/advanced';
 import { configParams, configValueType } from './configParams';
 import { autoRepeatCode, REPEAT_SYMBOLS, type RepeatCase } from './autoRepeat';
 import { capsWordCode } from './capsWord';
@@ -249,7 +249,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const tdReserved = tapDanceReservedNames(project, keymap, [...tdC.symbols, 'navi_send', 'navi_sending', ...standInName.values()]);
   const issues: AdvancedIssue[] = [
     ...checkTapDances(spec, project.tapDances, tdReserved),
-    ...checkCombos(project, project.combos),
+    ...checkCombos(project, project.combos, spec),
     ...checkKeyOverrides(project.keyOverrides),
     ...checkLeaderSequences(spec, project),
     ...checkUnicodeMap(spec, project),
@@ -295,7 +295,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const hasEncoders = encCount > 0;
   const tdTerms = tdSorted.filter((t) => t.tappingTerm);
   // One combo can be several QMK combos (reference layers): hooks get QMK's combo index.
-  const qmkComboList = project.combos.flatMap((combo) => qmkCombos(keymap, cols, combo));
+  const comboStackList = comboStacks(project, spec, keymap);
+  const qmkComboList = project.combos.flatMap((combo) => qmkCombos(keymap, cols, combo, comboStackList));
   const comboRefs = hasCombos && comboRefsMixed(keymap);
   const comboTerms = qmkComboList.filter((q) => q.combo.term);
   const comboLayers = qmkComboList.filter((q) => q.layers);
@@ -613,9 +614,10 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     if (layersOnTop) c.push('    navi_layer_keys(keycode, record); // layer keys bring their layer to the top');
     if (tdC.keys) {
       c.push(
-        '    // Tap dances play their keys at the dance key\'s position (QMK runs the dance after this hook).',
+        '    // Tap dances play their keys as the dance key\'s event: its position, and COMBO_EVENT for a combo\'s',
+        '    // (QMK runs the dance after this hook).',
         '    if (IS_QK_TAP_DANCE(keycode) && record->event.pressed && QK_TAP_DANCE_GET_INDEX(keycode) < ARRAY_SIZE(navi_td_keys)) {',
-        '        navi_td_keys[QK_TAP_DANCE_GET_INDEX(keycode)] = record->event.key;',
+        '        navi_td_keys[QK_TAP_DANCE_GET_INDEX(keycode)] = record->event;',
         '    }',
       );
     }

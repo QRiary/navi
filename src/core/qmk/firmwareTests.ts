@@ -9,7 +9,7 @@
  */
 import { decode, toQmk, type NameContext } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
-import { comboRefsMixed, qmkCombos } from '../features/advanced';
+import { comboKeyOn, comboRefsMixed, comboStacks, qmkCombos } from '../features/advanced';
 import { aliasLookup } from '../project/aliases';
 import { CAPS_WORD_QMK_DEFAULT, capsWordEveryLayer, capsWordRuleKeys } from '../project/capsWord';
 import { languageKeyOf } from '../project/languages';
@@ -615,7 +615,8 @@ export function firmwareTestsFile(project: Project, spec: KeycodeSpec, ownCode?:
   }
 
   // Combos: tapped on every layer they work on.
-  const qmk = project.combos.flatMap((cb) => qmkCombos(keymap, cols, cb));
+  const stacks = comboStacks(project, spec, keymap);
+  const qmk = project.combos.flatMap((cb) => qmkCombos(keymap, cols, cb, stacks));
   for (const cb of project.combos) {
     const result = behaviorOf(cb.result);
     if (isWhy(result.tap) || result.oneShot) {
@@ -664,10 +665,12 @@ const TESTS_WORD_RE = /incbin|__has_include|__has_embed/gi;
 const testsLineProblem = (line: string): boolean => TESTS_DIRECTIVE_RE.test(line) || new RegExp(TESTS_WORD_RE.source, 'i').test(line);
 const defuse = (line: string): string => (TESTS_DIRECTIVE_RE.test(line) ? `# ${line}` : line).replace(TESTS_WORD_RE, (w) => `${w.slice(0, 3)} ${w.slice(3)}`);
 
-/** The keycodes the combo's keys show on this state are the ones a QMK combo for that layer matches. */
+/** The keycodes QMK matches for the combo's keys on this state (comboKeyOn) are those of a QMK combo for that layer. */
 function comboKeysMatch(c: Ctx, s: LayerState, keys: MatrixPos[], qs: ReturnType<typeof qmkCombos>, top: number): boolean {
   if (!comboRefsMixed(c.keymap)) return true;
-  return qs.some((q) => (q.layers === null || q.layers.includes(top)) && q.keys.length === keys.length) && keys.every((pos) => keyAt(c, s, pos).value !== 0);
+  const stack = visibleLayers(c, s);
+  const matched = keys.map((pos) => comboKeyOn(c.keymap, c.cols, stack, pos));
+  return qs.some((q) => (q.layers === null || q.layers.includes(top)) && q.keys.length === matched.length && q.keys.every((v, i) => v === matched[i])) && keys.every((pos) => keyAt(c, s, pos).value !== 0);
 }
 
 /** Routes to every layer: from the power-on state, a key held (or tapped) there, then one more from that state. */
