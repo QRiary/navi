@@ -111,7 +111,16 @@ function unsafeSource(name, text) {
     }
     return null;
   }
-  if (/\.(c|h)$/.test(name)) {
+  // navi_tests.txt is data for a test harness, but a C file could still #include it: no line may work as a directive
+  // and no incbin / __has_include word may appear anywhere (raw text, before the C check below sees it with comments
+  // stripped). A copy of TESTS_DIRECTIVE_RE / TESTS_WORD_RE in src/core/qmk/firmwareTests.ts.
+  if (name.endsWith('.txt')) {
+    for (const line of text.split(/\r?\n/)) {
+      if (/^[ \t]*(?:#|%:)[ \t]*(?:include|include_next|import|embed)\b/i.test(line)) return `directive line: ${line.slice(0, 40)}`;
+      if (/incbin|__has_include|__has_embed/i.test(line)) return '.incbin / __has_include';
+    }
+  }
+  if (/\.(c|h|txt)$/.test(name)) {
     const clean = cleanC(text);
     if (/\b(incbin|__has_include|__has_include_next|__has_embed)\b/i.test(clean)) return '.incbin / __has_include';
     for (const m of clean.matchAll(/^[ \t]*(?:#|%:)[ \t]*(include|include_next|import|embed)\b(.*)$/gm)) {

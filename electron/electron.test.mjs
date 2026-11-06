@@ -120,6 +120,13 @@ describe('sources before writing to qmk_firmware', () => {
     }
   });
 
+  it('navi_tests.txt: data that never works as a C include', () => {
+    expect(unsafeSource('navi_tests.txt', '# Layer 0: every key tapped\n[tests]\nr0c0 => a\nr0c1 => #\nr0c2 => \\\n')).toBeNull();
+    for (const bad of ['#include "x.h"', '  # include <x>', '%:import x', '#/**/include "/x.h"', '#inc\\\nlude "/x.h"', 'r0c0 => incbin', 'x __has_include(y)', 'a\0b']) {
+      expect(unsafeSource('navi_tests.txt', bad), bad).not.toBeNull();
+    }
+  });
+
   it('qmk compile -e: only flags and drivers', () => {
     expect(allowedBuildOption('CONSOLE_ENABLE', 'yes')).toBe(true);
     expect(allowedBuildOption('CONVERT_TO', 'rp2040_ce')).toBe(true);

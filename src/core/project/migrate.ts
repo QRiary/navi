@@ -73,6 +73,12 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
     if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 15 }; // validate reports it
     return { ...d, schemaVersion: 15, firmware: { ...(f as Data), bootloaderReboot: false } };
   },
+  // 15 → 16: NAVI writes firmware tests (firmware.tests, navi_tests.txt), off for older files.
+  15: (d) => {
+    const f = d.firmware;
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 16 }; // validate reports it
+    return { ...d, schemaVersion: 16, firmware: { ...(f as Data), tests: false } };
+  },
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {

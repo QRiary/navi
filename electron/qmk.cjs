@@ -18,7 +18,8 @@ const { createKeymapWrites } = require('./keymapWrites.cjs');
 const KB_RE = /^[a-z0-9_][a-z0-9_/.+-]{0,150}$/i;
 const KM_RE = /^[a-z0-9_][a-z0-9_-]{0,60}$/i;
 // navi.h / navi_rules.mk / navi_config.h: the "own pipeline" mode writes these beside the user's own rules.mk/config.h.
-const KEYMAP_FILES = new Set(['keymap.c', 'keymap.json', 'rules.mk', 'config.h', 'readme.md', 'navi.h', 'navi_rules.mk', 'navi_config.h']);
+// navi_tests.txt: firmware tests (firmware.tests), checked as data that can't work as a C include (safety.cjs).
+const KEYMAP_FILES = new Set(['keymap.c', 'keymap.json', 'rules.mk', 'config.h', 'readme.md', 'navi.h', 'navi_rules.mk', 'navi_config.h', 'navi_tests.txt']);
 const KEYBOARD_FILES = new Set(['keyboard.json', 'info.json', 'rules.mk', 'config.h', 'readme.md', 'halconf.h', 'mcuconf.h']);
 const MAX_SOURCE = 2 * 1024 * 1024;
 

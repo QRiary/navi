@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 15;
+export const PROJECT_SCHEMA_VERSION = 16;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -448,6 +448,11 @@ export interface FirmwareConfig {
    * needs no key press. NAVI's own C code in keymap.c, not a define.
    */
   bootloaderReboot: boolean;
+  /**
+   * Write firmware tests (since format 16): navi_tests.txt beside keymap.c, key-press scenarios and the output the
+   * project says each must give (core/qmk/firmwareTests.ts, docs/firmware-tests.md).
+   */
+  tests: boolean;
   /**
    * Auto repeat of keys ticked “repeat while held” (macros, custom keycodes): ms before the first repeat and ms between
    * repeats. NAVI's own C code in keymap.c, not a define.

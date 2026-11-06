@@ -22,6 +22,9 @@ export const LAYER_KEYS_ON_TOP_DEFAULT = false;
 /** New projects: NAVI may not restart the keyboard into its bootloader (firmware.bootloaderReboot). */
 export const BOOTLOADER_REBOOT_DEFAULT = false;
 
+/** New projects: no firmware tests file (firmware.tests). */
+export const FIRMWARE_TESTS_DEFAULT = false;
+
 /** New projects: auto repeat delay and rate in ms (firmware.autoRepeat) and the limits the file and the UI accept. */
 export const AUTO_REPEAT_DEFAULT = { delay: 500, rate: 33 }; // Windows defaults (delay 1, speed 31): measured 500 ms, 33 ms
 export const AUTO_REPEAT_LIMITS = { delay: { min: 1, max: 10000 }, rate: { min: 1, max: 1000 } };
@@ -115,6 +118,7 @@ export function createProject({ name, hardware, geometry, layers = 4, encoderCou
       buildConfig: {},
       layerKeysOnTop: LAYER_KEYS_ON_TOP_DEFAULT,
       bootloaderReboot: BOOTLOADER_REBOOT_DEFAULT,
+      tests: FIRMWARE_TESTS_DEFAULT,
       autoRepeat: { ...AUTO_REPEAT_DEFAULT },
       textRoute: TEXT_ROUTE_DEFAULT,
     },
