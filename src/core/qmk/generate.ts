@@ -17,6 +17,8 @@ import { checkCombos, comboRefOf, comboRefsMixed, qmkCombos, checkKeyOverrides, 
 import { configParams, configValueType } from './configParams';
 import { autoRepeatCode, REPEAT_SYMBOLS, type RepeatCase } from './autoRepeat';
 import { layerOnTopCallback, layerOnTopState, layerOnTopStubs } from './layerOnTop';
+import { languageDecl, languageEarlyCode, languageKeyName, languagePrototypes, languageRecordLines, languageSwitchCode, languageSymbolCode, languageViaMacroLines, LANGUAGE_SYMBOLS, planLanguages, routedMacroStatements, ROUTE_UNICODE_MODE } from './languages';
+import { checkLanguages, languageCName } from '../project/languages';
 import { checkCustom, customBlock, CUSTOM_FILES, GENERATED_SYMBOLS, hasCustomCode, NAVI_HOOKS, PIPELINE_MAX_HEADERS, PIPELINE_SYMBOLS, safeHeaderName, unsafeDefineValue, validCIdentifier, type CustomFile } from './customCode';
 import { requiredFeatures } from '../features/required';
 import { RGB_MATRIX_EFFECTS } from '../lighting/effects';
@@ -144,7 +146,11 @@ function modsToMask(mods: number): string {
 
 /** Macro steps → C statements (send_string / tap_code / register_code / wait_ms). */
 function macroStatements(steps: MacroStep[]): string[] {
-  return steps.map((s) => {
+  return steps.map(macroStatement);
+}
+
+function macroStatement(s: MacroStep): string {
+  {
     switch (s.type) {
       case 'text':
         return `send_string(${cString(s.text)});`;
@@ -157,7 +163,7 @@ function macroStatements(steps: MacroStep[]): string[] {
       case 'up':
         return `unregister_code(0x${s.keycode.toString(16).toUpperCase().padStart(2, '0')});`;
     }
-  });
+  }
 }
 
 /**
@@ -188,7 +194,11 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const tdSorted = [...project.tapDances].sort((a, b) => a.index - b.index);
   const customs = project.customKeycodes;
   const customStart = spec.rangeByDefine.get('QK_USER')?.start ?? 0x7e40;
-  const customName = (v: number) => (v >= customStart && v < customStart + customs.length ? customs[v - customStart].name : undefined);
+  const customName = (v: number) => (v >= customStart && v < customStart + customs.length ? customs[v - customStart].name : languageKeyName(spec, project, v));
+  // Languages: their state, keys and text route (null: no languages, the output is as before).
+  const lang = planLanguages(project);
+  const macroBody = (steps: MacroStep[]) => (lang ? routedMacroStatements(steps, lang, macroStatement, cString) : macroStatements(steps));
+  const sendText = (text: string) => (lang ? `navi_send_text(${cString(text)});` : `SEND_STRING(${cString(text)});`);
   // Tap-hold keys with actions: their stand-in MT / LT keycodes get the names NAVI_TH_n (#define'd below).
   const thActions = effectiveTapHoldActions(spec, project);
   const standInName = new Map(thActions.map((a, i) => [a.keycode, `NAVI_TH_${i}`]));
@@ -221,7 +231,9 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   issues.push(...aliases.issues);
   issues.push(...checkTapHolds(spec, project));
   issues.push(...checkTapHoldActions(spec, project, projectOwnCodeRefs(spec, project, ownCode)));
-  const tapHold = planTapHolds(effectiveTapHolds(spec, project), kc, project.keyLists);
+  issues.push(...checkLanguages(project, keymap));
+  const langNames = new Map(project.languages.map((l) => [l.id, `NAVI_LANG_${languageCName(l)}`]));
+  const tapHold = planTapHolds(effectiveTapHolds(spec, project), kc, project.keyLists, (id) => langNames.get(id));
   const tracked = replayTracked(tapHold);
   const replay = tracked.length > 0;
   const tapHoldInCode = thActions.length > 0 || replay;
@@ -329,6 +341,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     decl.push('};');
     decl.push('');
   }
+  if (lang) decl.push(...languageDecl(spec, project, commentText));
   if (unicodeTable.length) {
     decl.push('// Unicode map: UM(i) / UP(i, j) refer to these entries by index.');
     decl.push(`enum ${pipeline ? 'navi_unicode_names' : 'unicode_names'} {`);
@@ -387,6 +400,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push('#endif');
     c.push('');
   }
+
+  if (lang) c.push(...languageEarlyCode({ project, keymap, plan: lang, layerIds, via, prototypes: !pipeline }));
 
   if (hasTd) {
     if (tdC.sends) c.push(...naviSendCode({ flag: sendingFlag, guard: false }));
@@ -504,7 +519,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push(`void ${hookName('leader_end_user')}(void) {`);
     leaders.forEach((s, i) => {
       c.push(`    ${i === 0 ? 'if' : '} else if'} (${leaderFunction(s.keys.length)}(${s.keys.map(kc).join(', ')})) {`);
-      if (s.action.type === 'send-string') c.push(`        SEND_STRING(${cString(s.action.text)});`);
+      if (s.action.type === 'send-string') c.push(`        ${sendText(s.action.text)}`);
       else if (s.action.type === 'tap') c.push(`        tap_code16(${kc(s.action.keycode)});`);
     });
     c.push('    }');
@@ -516,12 +531,15 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const layersOnTop = project.firmware.layerKeysOnTop === true;
   if (layersOnTop) {
     c.push(...layerOnTopState());
-    c.push(...layerOnTopCallback(hookName('layer_state_set_user')));
+    c.push(...layerOnTopCallback(hookName('layer_state_set_user'), !!lang?.layers));
   }
+  if (lang) c.push(...languageSwitchCode({ project, plan: lang, kc, layersOnTop, layerHook: hookName('layer_state_set_user'), postInit: hookName('keyboard_post_init_user'), spec }));
   // Keys ticked “repeat while held”: one switch on press and release; the rest keep the press-only switch.
   const repeatMacros = macros.filter((m) => m.repeat === true);
   const repeatCustoms = sendStringCustoms.filter((ck) => ck.repeat === true);
-  const repeating = repeatMacros.length > 0 || repeatCustoms.length > 0;
+  const repeatKeys = repeatMacros.length > 0 || repeatCustoms.length > 0;
+  // Languages' symbol keys repeat through the same code (the default branch).
+  const repeating = repeatKeys || !!lang?.symbols;
   const pressCustoms = sendStringCustoms.filter((ck) => ck.repeat !== true);
   const pressMacros = macroHandledInCode ? macros.filter((m) => m.repeat !== true) : [];
   if (repeating) {
@@ -530,17 +548,18 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       ...repeatMacros.map((m) => ({
         label: `QK_MACRO_${m.index}`,
         comment: commentText(m.name),
-        body: via ? [`dynamic_keymap_macro_send(${m.index});`] : macroStatements(m.steps),
+        body: via ? [lang?.routed ? `navi_send_via_macro(${m.index});` : `dynamic_keymap_macro_send(${m.index});`] : macroBody(m.steps),
       })),
       ...repeatCustoms.map((ck) => ({
         label: ck.name,
-        body: [ck.action.type === 'send-string' ? `SEND_STRING(${cString(ck.action.text)});` : ck.action.type === 'tap' ? `tap_code16(${kc(ck.action.keycode)});` : ''],
+        body: [ck.action.type === 'send-string' ? sendText(ck.action.text) : ck.action.type === 'tap' ? `tap_code16(${kc(ck.action.keycode)});` : ''],
       })),
     ];
-    c.push(...autoRepeatCode({ delay, rate, cases }));
+    c.push(...autoRepeatCode({ delay, rate, cases, fallback: lang?.symbols ? ['navi_send_text(navi_symbol_text);'] : undefined }));
   }
+  if (lang?.symbols) c.push(...languageSymbolCode(project, keymap, layerIds));
   const keysInCode = pressCustoms.length > 0 || pressMacros.length > 0;
-  const keysHandled = keysInCode || repeating;
+  const keysHandled = keysInCode || repeatKeys;
   if (tapHoldInCode) {
     const standIns: StandIn[] = thActions.map((a) => ({
       name: standInName.get(a.keycode)!,
@@ -553,7 +572,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   // For the user's own C: which MT / LT values are NAVI's stand-ins (their base key isn't what they tap).
   const standInCheck = pipeline || thActions.length > 0;
   if (standInCheck) c.push(...standInCheckCode([...standInName.values()]));
-  const recordHook = keysHandled || layersOnTop || tapHoldInCode || tdC.keys;
+  const recordHook = keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang;
   if (recordHook) {
     c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
     if (layersOnTop) c.push('    navi_layer_keys(keycode, record); // layer keys bring their layer to the top');
@@ -566,25 +585,27 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       );
     }
     if (tapHoldInCode) c.push('    if (!navi_tap_holds(keycode, record)) return false; // tap-hold keys: actions and the replay fix');
+    if (lang) c.push(...languageRecordLines(lang));
   }
-  if (repeating) {
+  if (repeatKeys) {
     c.push('    switch (keycode) {');
     for (const m of repeatMacros) c.push(`        case QK_MACRO_${m.index}:`);
     for (const ck of repeatCustoms) c.push(`        case ${ck.name}:`);
     c.push('            navi_repeat(keycode, record);', '            return false;', '    }');
   }
+  if (lang) c.push(...languageViaMacroLines(lang, via));
   if (keysInCode) {
     c.push('    if (!record->event.pressed) return true;');
     c.push('    switch (keycode) {');
     pressCustoms.forEach((ck) => {
-      if (ck.action.type === 'send-string') c.push(`        case ${ck.name}: SEND_STRING(${cString(ck.action.text)}); return false;`);
+      if (ck.action.type === 'send-string') c.push(`        case ${ck.name}: ${sendText(ck.action.text)} return false;`);
       else if (ck.action.type === 'tap') c.push(`        case ${ck.name}: tap_code16(${kc(ck.action.keycode)}); return false;`);
     });
     if (pressMacros.length > 0) {
       c.push('        // Macros MC_n compiled into the firmware (no VIA in this build).');
       pressMacros.forEach((m) => {
         c.push(`        case QK_MACRO_${m.index}: // ${commentText(m.name)}`);
-        for (const st of macroStatements(m.steps)) c.push(`            ${st}`);
+        for (const st of macroBody(m.steps)) c.push(`            ${st}`);
         c.push('            return false;');
       });
     }
@@ -599,7 +620,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   // Which hooks the project fills (in both modes the same conditions as above).
   const hookUsed: Record<keyof typeof NAVI_HOOKS, boolean> = {
     process_record_user: recordHook,
-    layer_state_set_user: layersOnTop,
+    layer_state_set_user: layersOnTop || !!lang?.layers,
+    keyboard_post_init_user: !!lang?.layers,
     get_tapping_term: tappingTerms,
     get_quick_tap_term: quickTap,
     get_hold_on_other_key_press: holdPress,
@@ -625,9 +647,11 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       { hook: 'combo_ref_from_layer', guard: 'COMBO_ENABLE', lines: ['uint8_t combo_ref_from_layer_navi(uint8_t layer) {', '    return layer;', '}'] },
       { hook: 'process_combo_event', guard: 'COMBO_ENABLE', lines: ['void process_combo_event_navi(uint16_t combo_index, bool pressed) {}'] },
       { hook: 'leader_end_user', guard: 'LEADER_ENABLE', lines: ['void leader_end_navi(void) {}'] },
-      { hook: 'layer_state_set_user', lines: layerOnTopStubs() },
+      { hook: 'layer_state_set_user', lines: layerOnTopStubs(!hookUsed.layer_state_set_user) },
+      { hook: 'keyboard_post_init_user', lines: ['void keyboard_post_init_navi(void) {}'] },
     ];
-    const stubs = allStubs.filter((s) => !hookUsed[s.hook]);
+    // Languages may write the layer callback without “layer keys on top”: navi_layers_on / navi_layer_off still stubs.
+    const stubs = allStubs.filter((s) => (s.hook === 'layer_state_set_user' ? !layersOnTop : !hookUsed[s.hook]));
     if (stubs.length) {
       c.push('// ── NAVI hooks the project does not use yet (they exist so your calls to them always compile) ──');
       for (const s of stubs) {
@@ -654,9 +678,11 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     h.push('void leader_end_navi(void);');
     h.push('#endif');
     h.push('layer_state_t layer_state_set_navi(layer_state_t state);');
+    h.push('void keyboard_post_init_navi(void);');
     h.push('layer_state_t navi_layers_on(void); // layers turned on, hidden ones included');
     h.push('void navi_layer_off(uint8_t layer); // also turns off a hidden layer');
     h.push('bool navi_is_stand_in(uint16_t keycode); // a stand-in MT / LT of a tap-hold key with actions: its base key is not its tap');
+    if (lang) h.push(...languagePrototypes(lang));
     h.push('');
     if (tdC.prototypes.length) h.push('// Your own tap dance functions (tap dances of the “own C” kind): define them in your code.', '#ifdef TAP_DANCE_ENABLE', ...tdC.prototypes, '#endif', '');
   }
@@ -679,6 +705,9 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (hasEncoders) rules.ENCODER_MAP_ENABLE = 'yes';
   if (leaders.length) rules.LEADER_ENABLE = 'yes';
   if (unicodeTable.length) rules.UNICODEMAP_ENABLE = 'yes';
+  // A Unicode text route needs QMK's Unicode input (UNICODEMAP brings it too).
+  const routeMode = lang?.routed ? ROUTE_UNICODE_MODE[lang.route] : undefined;
+  if (routeMode && !unicodeTable.length) rules.UNICODE_ENABLE = 'yes';
   // Own pipeline: rules.mk / config.h are the user's and include these files (the line to add is in the comment).
   // $(dir $(lastword $(MAKEFILE_LIST))) is the folder of the makefile being read — the keymap folder, wherever it is.
   const rulesHint = pipeline ? ['# Your rules.mk includes this file; add as its first line:', '#   include $(dir $(lastword $(MAKEFILE_LIST)))navi_rules.mk'] : [];
@@ -692,6 +721,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   // is a warning in GCC, and QMK builds with -Werror. So #undef first.
   const define = (name: string, value?: string | number) => cfg.push(`#undef ${name}`, value === undefined || value === '' ? `#define ${name}` : `#define ${name} ${value}`);
   for (const [name, value] of Object.entries(project.firmware.buildConfig)) {
+    if (routeMode && name === 'UNICODE_SELECTED_MODES') continue; // set by the text route below
     const type = params.get(name)?.type ?? configValueType(name);
     if (!/^[A-Z][A-Z0-9_]{0,63}$/.test(name) || (typeof value === 'string' && (unsafeDefineValue(value) || /[\r\n]/.test(value)))) {
       issues.push({ level: 'error', where: `config.h: ${name}`, message: { en: 'Value is not allowed (code blocks, ; \\ # asm).', ru: 'Недопустимое значение (блоки кода, ; \\ # asm).' } });
@@ -730,6 +760,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (quickTap) define('QUICK_TAP_TERM_PER_KEY');
   if (holdPress) define('HOLD_ON_OTHER_KEY_PRESS_PER_KEY');
   if (permissive) define('PERMISSIVE_HOLD_PER_KEY');
+  if (routeMode) define('UNICODE_SELECTED_MODES', routeMode);
   if (via && keymap.layers.length !== 4 && !('DYNAMIC_KEYMAP_LAYER_COUNT' in project.firmware.buildConfig)) define('DYNAMIC_KEYMAP_LAYER_COUNT', keymap.layers.length);
   cfg.push('');
 
@@ -773,7 +804,15 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (standInCheck) generatedSymbols.add('navi_is_stand_in');
   if (thActions.length) for (const name of ['navi_send', ...standInName.values()]) generatedSymbols.add(name);
   if (!pipeline && leaders.length) generatedSymbols.add('leader_end_user');
-  if (!pipeline && layersOnTop) generatedSymbols.add('layer_state_set_user');
+  if (!pipeline && hookUsed.layer_state_set_user) generatedSymbols.add('layer_state_set_user');
+  if (!pipeline && hookUsed.keyboard_post_init_user) generatedSymbols.add('keyboard_post_init_user');
+  if (lang) {
+    for (const name of [...LANGUAGE_SYMBOLS, 'navi_lang', 'navi_language_key']) generatedSymbols.add(name);
+    if (lang.layers) generatedSymbols.add('navi_language_layer');
+    if (lang.routed) for (const name of ['navi_typing_plain', 'navi_route_text']) generatedSymbols.add(name);
+    if (lang.routed && via) generatedSymbols.add('navi_send_via_macro');
+    if (lang.symbols) for (const name of ['navi_symbol_key', 'navi_symbol_text', 'navi_typing_layer', 'navi_us_plain', 'navi_us_shift']) generatedSymbols.add(name);
+  }
   if (pipeline || layersOnTop) for (const name of ['navi_layers_on', 'navi_layer_off']) generatedSymbols.add(name);
   if (unicodeTable.length) generatedSymbols.add('unicode_map');
   // Own pipeline: every *_navi function is defined (the QMK hooks are the user's).
@@ -838,7 +877,15 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       { hook: 'combo_ref_from_layer', call: 'return combo_ref_from_layer_navi(layer);', why: { en: 'combo reference layers — without it the build still passes, but combos read keys of the highest active layer', ru: 'опорные слои комбо — без неё сборка пройдёт, но комбо будут читать клавиши самого верхнего активного слоя' } },
       { hook: 'process_combo_event', call: 'process_combo_event_navi(combo_index, pressed);', why: { en: 'combo results go through the tap-hold logic — without it the build still passes, but combos do nothing', ru: 'результаты комбо проходят через логику тап-холд — без неё сборка пройдёт, но комбо ничего не будут делать' } },
       { hook: 'leader_end_user', call: 'leader_end_navi();', why: { en: 'leader sequences', ru: 'последовательности leader' } },
-      { hook: 'layer_state_set_user', call: 'return layer_state_set_navi(state);', why: { en: 'layer keys bring their layer to the top', ru: 'клавиши слоёв поднимают свой слой наверх' } },
+      {
+        hook: 'layer_state_set_user',
+        call: 'return layer_state_set_navi(state);',
+        why: {
+          en: [layersOnTop && 'layer keys bring their layer to the top', lang?.layers && 'the current language’s layer stays on'].filter(Boolean).join('; '),
+          ru: [layersOnTop && 'клавиши слоёв поднимают свой слой наверх', lang?.layers && 'слой текущего языка остаётся включённым'].filter(Boolean).join('; '),
+        },
+      },
+      { hook: 'keyboard_post_init_user', call: 'keyboard_post_init_navi();', why: { en: 'the first language’s layer turns on at power-on', ru: 'слой первого языка включается при включении клавиатуры' } },
     ];
     for (const f of forward) {
       if (!hookUsed[f.hook]) continue;

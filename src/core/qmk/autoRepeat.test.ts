@@ -162,8 +162,8 @@ describe('auto repeat: project file', () => {
     const raw = JSON.parse(serializeProject(untick(project())));
     raw.schemaVersion = 11;
     delete raw.firmware.autoRepeat;
-    expect(PROJECT_SCHEMA_VERSION).toBe(12);
-    expect(migrateProject(raw)).toMatchObject({ from: 11, data: { schemaVersion: 12, firmware: { autoRepeat: AUTO_REPEAT_DEFAULT } } });
+    expect(PROJECT_SCHEMA_VERSION).toBeGreaterThanOrEqual(12);
+    expect(migrateProject(raw)).toMatchObject({ from: 11, data: { schemaVersion: PROJECT_SCHEMA_VERSION, firmware: { autoRepeat: AUTO_REPEAT_DEFAULT } } });
     const { project: loaded, issues } = validateProject(raw);
     expect(issues.filter((i) => i.level === 'error')).toEqual([]);
     expect(loaded!.firmware.autoRepeat).toEqual(AUTO_REPEAT_DEFAULT);

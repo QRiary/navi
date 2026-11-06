@@ -48,6 +48,12 @@ export const SECTIONS: readonly SectionDef[] = [
       { id: 'aliases', title: () => t('Aliases', 'Псевдонимы'), group: codes },
       { id: 'unicode', title: () => t('Unicode', 'Юникод'), group: codes },
       {
+        id: 'languages',
+        title: () => t('Languages', 'Языки'),
+        group: behavior,
+        tip: () => t('The languages the keyboard types in, their keys and how text outside plain keys is typed', 'Языки, на которых печатает клавиатура, их клавиши и способ печати текста вне обычных клавиш'),
+      },
+      {
         id: 'behavior',
         title: () => t('QMK settings', 'Настройки QMK'),
         group: behavior,

@@ -139,7 +139,23 @@ export function layerOnTopState(): string[] {
 }
 
 /** The layer callback: layer_state_set_user (pure QMK) or layer_state_set_navi (own pipeline). */
-export function layerOnTopCallback(name: string): string[] {
+export function layerOnTopCallback(name: string, languageLayer = false): string[] {
+  // Languages: the current language's layer stays on, at the bottom of navi_order, so it never covers a held layer.
+  const keep = languageLayer
+    ? [
+        '    // The current language’s layer stays on, under the others (Languages).',
+        '    uint8_t keep = navi_language_layer();',
+        '    // The default layer turned on by a key (TO) is under everything anyway: it must not hide the language’s layer.',
+        '    uint8_t base = get_highest_layer(default_layer_state);',
+        '    if (keep < MAX_LAYER && keep != base && (navi_wanted & ((layer_state_t)1 << base))) navi_forget(base);',
+        '    if (keep < MAX_LAYER && !(navi_wanted & ((layer_state_t)1 << keep))) {',
+        '        for (uint8_t i = navi_count; i > 0; i--) navi_order[i] = navi_order[i - 1];',
+        '        navi_order[0] = keep;',
+        '        navi_count++;',
+        '        navi_wanted |= (layer_state_t)1 << keep;',
+        '    }',
+      ]
+    : [];
   return [
     `layer_state_t ${name}(layer_state_t state) {`,
     '    layer_state_t turned_on  = state & ~layer_state;',
@@ -174,18 +190,20 @@ export function layerOnTopCallback(name: string): string[] {
     '        navi_oneshot = 0;',
     '    }',
     '#endif',
+    ...keep,
     '    return navi_visible();',
     '}',
     '',
   ];
 }
 
-/** Own pipeline with the setting off: the same functions, plain QMK behavior, so the user's calls always compile. */
-export function layerOnTopStubs(): string[] {
+/**
+ * Own pipeline with the setting off: the same functions, plain QMK behavior, so the user's calls always compile.
+ * `callback`: also the layer callback (not when languages write their own).
+ */
+export function layerOnTopStubs(callback = true): string[] {
   return [
-    'layer_state_t layer_state_set_navi(layer_state_t state) {',
-    '    return state;',
-    '}',
+    ...(callback ? ['layer_state_t layer_state_set_navi(layer_state_t state) {', '    return state;', '}'] : []),
     'layer_state_t navi_layers_on(void) {',
     '    return layer_state;',
     '}',

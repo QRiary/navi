@@ -11,7 +11,8 @@ import { allowedMakeVar, checkCustom, CUSTOM_FILES, CUSTOM_MAX, MAKE_VALUE_RE, P
 import { ALIAS_LABEL_MAX, KEY_ALIASES_MAX } from './aliases';
 import { HOLD_ON_KEYS_MAX, KEY_LIST_KEYS_MAX, KEY_LIST_NAME_MAX, KEY_LISTS_MAX, TAP_HOLD_FLAVORS, TAP_HOLD_KEYCODES_MAX, TAP_HOLD_MAX, TAP_HOLD_TERM_MAX, TAP_HOLD_TERM_MIN } from './tapHolds';
 import { TAP_HOLD_ACTIONS_MAX } from './tapHoldActions';
-import { AUTO_REPEAT_DEFAULT, AUTO_REPEAT_LIMITS } from './factory';
+import { AUTO_REPEAT_DEFAULT, AUTO_REPEAT_LIMITS, TEXT_ROUTE_DEFAULT } from './factory';
+import { LANGUAGE_CODE_RE, LANGUAGE_NAME_MAX, LANGUAGES_MAX } from './languages';
 import { migrateProject } from './migrate';
 import {
   PROJECT_FORMAT,
@@ -23,6 +24,9 @@ import {
   type KeyAlias,
   type TapHoldSetting,
   type KeyList,
+  type Language,
+  type LanguageHoldKeys,
+  TEXT_ROUTES,
   type HoldAction,
   type TapHoldAction,
   type LeaderSequence,
@@ -366,6 +370,7 @@ function readKeymap(r: Reader, v: unknown, path: string, rows: number, cols: num
       name: r.str(lo.name, `${p}.name`, `Layer ${i}`, 40),
       ...(cName ? { cName } : {}),
       ...(comboRef !== undefined ? { comboRef } : {}),
+      ...(lo.typing === undefined ? {} : { typing: r.bool(lo.typing, `${p}.typing`, false) }),
       color: color && HEX_COLOR.test(color) ? color : undefined,
       keys,
       encoders,
@@ -549,6 +554,7 @@ function readFirmware(r: Reader, v: unknown): FirmwareConfig {
       delay: r.num(ar.delay, 'firmware.autoRepeat.delay', AUTO_REPEAT_LIMITS.delay.min, AUTO_REPEAT_LIMITS.delay.max, AUTO_REPEAT_DEFAULT.delay),
       rate: r.num(ar.rate, 'firmware.autoRepeat.rate', AUTO_REPEAT_LIMITS.rate.min, AUTO_REPEAT_LIMITS.rate.max, AUTO_REPEAT_DEFAULT.rate),
     },
+    textRoute: r.oneOf(o.textRoute, 'firmware.textRoute', TEXT_ROUTES, TEXT_ROUTE_DEFAULT),
     keyboard: keyboard || null,
     keymap,
     keycodeSpec,
@@ -670,6 +676,18 @@ export function validateProject(input: unknown): { project: Project | null; issu
     return { id: r.id(lo.id, `${p}.id`, 'kl'), name: r.str(lo.name, `${p}.name`, '', KEY_LIST_NAME_MAX), keys: r.arr(lo.keys ?? [], `${p}.keys`, KEY_LIST_KEYS_MAX).map((k, j) => r.keycode(k, `${p}.keys[${j}]`)) };
   });
   const listIds = new Set(keyLists.map((l) => l.id));
+  // Languages: codes are checked again by checkLanguages (repeats, C names); a layer beyond the keymap is dropped there too.
+  const languages: Language[] = r.arr(o.languages ?? [], 'languages', LANGUAGES_MAX).map((x, i) => {
+    const p = `languages[${i}]`;
+    const lo = r.obj(x, p);
+    const code = r.str(lo.code, `${p}.code`, `l${i + 1}`, 16);
+    if (!LANGUAGE_CODE_RE.test(code)) r.error(`${p}.code`, 'code must be lower-case letters and digits, starting with a letter, up to 8 characters');
+    const out: Language = { id: r.id(lo.id, `${p}.id`, 'lang'), name: r.str(lo.name, `${p}.name`, '', LANGUAGE_NAME_MAX), code, plainKeys: r.bool(lo.plainKeys, `${p}.plainKeys`, false) };
+    if (lo.layer !== undefined && lo.layer !== null) out.layer = r.num(lo.layer, `${p}.layer`, 0, LIMITS.maxLayers - 1, 0);
+    if (lo.osShortcut !== undefined && lo.osShortcut !== null) out.osShortcut = r.keycode(lo.osShortcut, `${p}.osShortcut`);
+    return out;
+  });
+  const languageIds = new Set(languages.map((l) => l.id));
   const tapHolds: TapHoldSetting[] = r.arr(o.tapHolds ?? [], 'tapHolds', TAP_HOLD_MAX).map((x, i) => {
     const p = `tapHolds[${i}]`;
     const to = r.obj(x, p);
@@ -688,6 +706,24 @@ export function validateProject(input: unknown): { project: Project | null; issu
         return false;
       }) as string[];
       if (ids.length) out.holdOnLists = ids;
+    }
+    if (to.holdOnByLanguage !== undefined && to.holdOnByLanguage !== null) {
+      const groups = r.arr(to.holdOnByLanguage, `${p}.holdOnByLanguage`, LANGUAGES_MAX).flatMap((g, j): LanguageHoldKeys[] => {
+        const gp = `${p}.holdOnByLanguage[${j}]`;
+        const go = r.obj(g, gp);
+        if (typeof go.language !== 'string' || !languageIds.has(go.language)) {
+          r.warn(`${gp}.language`, 'unknown language, these hold keys are dropped');
+          return [];
+        }
+        const keys = r.arr(go.keys ?? [], `${gp}.keys`, HOLD_ON_KEYS_MAX).map((k, n) => r.keycode(k, `${gp}.keys[${n}]`));
+        const lists = r.arr(go.lists ?? [], `${gp}.lists`, KEY_LISTS_MAX).filter((id, n) => {
+          if (typeof id === 'string' && listIds.has(id)) return true;
+          r.warn(`${gp}.lists[${n}]`, 'unknown key list, dropped');
+          return false;
+        }) as string[];
+        return [{ language: go.language, keys, ...(lists.length ? { lists } : {}) }];
+      });
+      if (groups.length) out.holdOnByLanguage = groups;
     }
     return out;
   });
@@ -764,6 +800,7 @@ export function validateProject(input: unknown): { project: Project | null; issu
     tapHoldActions,
     leaderSequences,
     unicodeMap,
+    languages,
     lighting,
     firmware: readFirmware(r, o.firmware),
     device: dev ? { vid: r.num(dev.vid, 'device.vid', 0, 0xffff, 0), pid: r.num(dev.pid, 'device.pid', 0, 0xffff, 0), product: dev.product === undefined ? undefined : r.str(dev.product, 'device.product') } : null,

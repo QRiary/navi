@@ -14,6 +14,8 @@ export interface HoldPress {
   /** Single hold keys, then the C arrays of the key lists. */
   holdKeys: string[];
   holdLists: string[];
+  /** Hold keys that count only in one language: its NAVI_LANG_* name, keys and key list arrays. */
+  byLanguage?: { lang: string; keys: string[]; lists: string[] }[];
 }
 
 export interface TapHoldPlan {
@@ -27,7 +29,7 @@ export interface TapHoldPlan {
   lists: { name: string; keys: string[] }[];
 }
 
-export function planTapHolds(settings: TapHoldSetting[], kc: (v: number) => string, keyLists: KeyList[] = []): TapHoldPlan {
+export function planTapHolds(settings: TapHoldSetting[], kc: (v: number) => string, keyLists: KeyList[] = [], languageName: (id: string) => string | undefined = () => undefined): TapHoldPlan {
   const plan: TapHoldPlan = {
     terms: [],
     quick: [],
@@ -46,7 +48,18 @@ export function planTapHolds(settings: TapHoldSetting[], kc: (v: number) => stri
     const lists = (s.holdOnLists ?? []).filter((id) => keyLists.some((l) => l.id === id && l.keys.some((k) => k > 1)));
     lists.forEach((id) => usedLists.add(id));
     const holdLists = lists.map((id) => cNames.get(id)!);
-    if (s.flavor !== undefined || holdKeys.length || holdLists.length) plan.holdPress.push({ codes, flavor: s.flavor, holdKeys, holdLists });
+    const byLanguage: NonNullable<HoldPress['byLanguage']> = [];
+    for (const g of s.holdOnByLanguage ?? []) {
+      const lang = languageName(g.language);
+      if (!lang) continue;
+      const gLists = (g.lists ?? []).filter((id) => keyLists.some((l) => l.id === id && l.keys.some((k) => k > 1)));
+      gLists.forEach((id) => usedLists.add(id));
+      const keys = g.keys.filter((k) => k > 1).map(kc);
+      if (keys.length || gLists.length) byLanguage.push({ lang, keys, lists: gLists.map((id) => cNames.get(id)!) });
+    }
+    if (s.flavor !== undefined || holdKeys.length || holdLists.length || byLanguage.length) {
+      plan.holdPress.push({ codes, flavor: s.flavor, holdKeys, holdLists, ...(byLanguage.length ? { byLanguage } : {}) });
+    }
     if (s.flavor !== undefined) plan.permissive.push({ codes, value: s.flavor === 'balanced' });
   }
   for (const l of keyLists)
@@ -58,12 +71,14 @@ export function planTapHolds(settings: TapHoldSetting[], kc: (v: number) => stri
   return plan;
 }
 
-const holdsOn = (h: HoldPress) => h.holdKeys.length > 0 || h.holdLists.length > 0;
+const holdsOn = (h: HoldPress) => h.holdKeys.length > 0 || h.holdLists.length > 0 || !!h.byLanguage?.length;
 export const hasHoldKeys = (plan: TapHoldPlan) => plan.holdPress.some(holdsOn);
 export const anyHoldsOn = (tracked: HoldPress[]) => tracked.some(holdsOn);
 
 /** The C test "v is one of the hold keys". */
-const holdTest = (h: HoldPress, v: string) => [...h.holdKeys.map((k) => `${v} == ${k}`), ...h.holdLists.map((l) => `NAVI_IN_KEYS(${l}, ${v})`)].join(' || ');
+const anyOf = (keys: string[], lists: string[], v: string) => [...keys.map((k) => `${v} == ${k}`), ...lists.map((l) => `NAVI_IN_KEYS(${l}, ${v})`)];
+const holdTest = (h: HoldPress, v: string) =>
+  [...anyOf(h.holdKeys, h.holdLists, v), ...(h.byLanguage ?? []).map((g) => `(navi_lang == ${g.lang} && (${anyOf(g.keys, g.lists, v).join(' || ')}))`)].join(' || ');
 
 /** `case A:` lines for every code, the last one followed by `tail` (if any) on the same line. */
 export function caseLines(codes: string[], tail?: string, indent = '        '): string[] {

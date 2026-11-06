@@ -8,6 +8,7 @@ import { it } from 'vitest';
 import { parseQmk } from '../../src/core/keycodes/codec';
 import { loadSpec } from '../../src/core/keycodes/spec';
 import { createBlankProject } from '../../src/core/project/factory';
+import { languageKeycodes } from '../../src/core/project/languages';
 import { activeKeymap, setKeycodes } from '../../src/core/project/ops';
 import { ensureTapHold, pruneTapHoldActions } from '../../src/core/project/tapHoldActions';
 import type { HoldAction, MacroStep, Project, TapDance } from '../../src/core/project/types';
@@ -128,11 +129,86 @@ export function hostProject(): Project {
   };
 }
 
-it.skipIf(!out)('writes the generated keymap files for the QMK host tests', () => {
-  const p = hostProject();
+/**
+ * The languages suite (languages/languages_test.cpp names the positions): English (plain keys) and Russian (through
+ * the own-program route, layer 3), “layer keys on top” on. The own lines record what reaches the “program”.
+ */
+export function languageHostProject(): Project {
+  let p = createBlankProject('qmk host languages', 4, 10, false);
+  const id = activeKeymap(p).id;
+  const put = (layer: number, n: number, v: number) => (p = setKeycodes(p, id, layer, [[Math.floor(n / 10), n % 10]], v));
+  const ru = languageKeycodes(spec, 1);
+  const en = languageKeycodes(spec, 0);
+  put(0, 0, ru.to);
+  put(0, 1, ru.toggle);
+  put(0, 2, en.to);
+  put(0, 3, q('MO(2)'));
+  put(0, 4, q('KC_A'));
+  put(0, 5, q('LSFT_T(KC_F)'));
+  put(0, 6, q('KC_J'));
+  put(0, 7, q('KC_P'));
+  put(0, 8, q('KC_LSFT'));
+  put(0, 9, q('KC_SCLN'));
+  put(0, 20, q('QK_MACRO_0'));
+  put(0, 21, q('QK_USER_0'));
+  put(0, 22, q('TO(0)'));
+  put(3, 4, q('KC_B')); // the Russian layer
+  put(2, 4, q('KC_C')); // the symbols layer, under the Russian one by number
+  put(2, 10, q('S(KC_1)'));
+  put(2, 11, q('KC_SCLN'));
+  put(2, 12, q('KC_1'));
+  put(2, 13, q('C(KC_1)'));
+  put(2, 14, q('KC_A'));
+  return {
+    ...p,
+    languages: [
+      { id: 'en', name: 'English', code: 'en', plainKeys: true },
+      { id: 'ru', name: 'Russian', code: 'ru', plainKeys: false, layer: 3 },
+    ],
+    macros: [{ id: 'mc-0', index: 0, name: 'text', steps: [{ type: 'tap', keycode: q('KC_A') }, { type: 'text', text: 'hi' }, { type: 'tap', keycode: q('KC_B') }] }],
+    customKeycodes: [{ id: 'ck', name: 'HELLO', description: '', action: { type: 'send-string', text: 'ok' } }],
+    tapHolds: [
+      {
+        id: 'th',
+        keycodes: [q('LSFT_T(KC_F)')],
+        holdOnByLanguage: [
+          { language: 'en', keys: [q('KC_J')] },
+          { language: 'ru', keys: [q('KC_P')] },
+        ],
+      },
+    ],
+    firmware: {
+      ...p.firmware,
+      textRoute: 'own-program',
+      layerKeysOnTop: true,
+      autoRepeat: { delay: 300, rate: 50 },
+      custom: {
+        'keymap.c': [
+          '// The “program”: what it was asked to type, and the languages it was asked to switch to.',
+          'char    host_text[256];',
+          'char    host_switches[16];',
+          'void navi_type_text_user(const char *text) {',
+          '    strncat(host_text, text, sizeof host_text - strlen(host_text) - 1);',
+          '}',
+          'void navi_switch_language_user(uint8_t language) {',
+          "    char s[2] = {(char)('0' + language), 0};",
+          '    strncat(host_switches, s, sizeof host_switches - strlen(host_switches) - 1);',
+          '}',
+        ].join('\n'),
+      },
+    },
+  };
+}
+
+const write = (dir: string, p: Project) => {
   const res = generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: false, encoderCount: 0 });
   const errors = res.issues.filter((i) => i.level === 'error');
   if (errors.length) throw new Error(JSON.stringify(errors));
-  mkdirSync(out!, { recursive: true });
-  for (const f of res.files) writeFileSync(join(out!, f.name), f.text);
+  mkdirSync(dir, { recursive: true });
+  for (const f of res.files) writeFileSync(join(dir, f.name), f.text);
+};
+
+it.skipIf(!out)('writes the generated keymap files for the QMK host tests', () => {
+  write(out!, hostProject());
+  write(join(out!, 'languages'), languageHostProject());
 });

@@ -4,7 +4,7 @@
  * The raw QMK expression comes along for a tooltip or a secondary line (people writing C need it).
  */
 import { decode } from './codec';
-import { keyLabel, modsLabel, type LabelContext } from './labels';
+import { keyLabel, languageKeyName, modsLabel, type LabelContext } from './labels';
 import type { KeycodeSpec } from './spec';
 import type { HoldAction } from '../project/types';
 import { t } from '../../i18n';
@@ -49,6 +49,8 @@ function friendlyText(spec: KeycodeSpec, v: number, ctx: LabelContext): string |
   if (th) return withHold(th.tap === 0 ? '' : friendlyName(spec, th.tap, inner).text, holdText(spec, th.hold, inner));
   const d = decode(spec, v, ctx);
   if (d.kind === 'tap-dance') return ctx.tapDanceName?.(d.index) ?? `TD ${d.index}`;
+  const lk = ctx.languageKey?.(v);
+  if (lk) return languageKeyName(lk);
   const custom = ctx.customName?.(v);
   if (custom) return custom;
   switch (d.kind) {

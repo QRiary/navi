@@ -6,7 +6,9 @@ import { useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { checkUnicodeMap } from '../../core/features/advanced';
 import { newId } from '../../core/layout/geometry';
+import { usesTextRoute } from '../../core/project/languages';
 import type { Project, UnicodeEntry } from '../../core/project/types';
+import { ROUTE_UNICODE_MODE } from '../../core/qmk/languages';
 import { useProjectStore, useSpec } from '../../store/projectStore';
 import { CharInput, FeatureNote, IssueList } from './common';
 import { getLanguage, t } from '../../i18n';
@@ -75,10 +77,14 @@ export function UnicodeTab({ project }: { project: Project }) {
   const issues = useMemo(() => checkUnicodeMap(spec, project), [spec, project]);
   const mode = project.firmware.unicode;
   const highKeys = useMemo(() => project.keymaps.reduce((n, km) => n + km.layers.reduce((m, l) => m + l.keys.filter((v) => v >= 0x8000).length, 0), 0), [project.keymaps]);
-  const selected = String(project.firmware.buildConfig.UNICODE_SELECTED_MODES ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  // A Unicode text route (Advanced → Languages) sets the input mode itself.
+  const routeMode = usesTextRoute(project) ? ROUTE_UNICODE_MODE[project.firmware.textRoute] : undefined;
+  const selected = routeMode
+    ? [routeMode]
+    : String(project.firmware.buildConfig.UNICODE_SELECTED_MODES ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
 
   const setMode = (next: Project['firmware']['unicode']) => {
     if (next === mode) return;
@@ -204,7 +210,12 @@ export function UnicodeTab({ project }: { project: Project }) {
             const on = selected.includes(m.id);
             return (
               <label key={m.id} className="row" style={{ ['--row-cols' as string]: ROW_COLS }}>
-                <input type="checkbox" checked={on} onChange={() => setInputModes(on ? selected.filter((x) => x !== m.id) : [...selected, m.id])} />
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={() => setInputModes(on ? selected.filter((x) => x !== m.id) : [...selected, m.id])}
+                  {...whyDisabled(routeMode && t('Set by the text route in Advanced → Languages', 'Задано способом ввода текста в «Расширенное → Языки»'))}
+                />
                 <strong>{m.title}</strong>
                 <span className="field-hint">{lang === 'ru' ? m.ru : m.en}</span>
                 <span className="kicker">{on ? `#${selected.indexOf(m.id) + 1}` : ''}</span>
