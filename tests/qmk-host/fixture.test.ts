@@ -193,6 +193,13 @@ export function languageHostProject(): Project {
   put(2, 12, q('KC_1'));
   put(2, 13, q('C(KC_1)'));
   put(2, 14, q('KC_A'));
+  // Per-language actions: APOS types "'s" in English and "'" in the rest (Russian); a tap-hold key taps it and holds
+  // layer 2. DASH taps X, in Russian nothing.
+  const th = ensureTapHold(spec, p, q('QK_USER_1'), { type: 'layer', layer: 2, mods: 0 });
+  p = th.project;
+  put(0, 25, th.keycode);
+  put(0, 26, q('QK_USER_1'));
+  put(0, 27, q('QK_USER_2'));
   return {
     ...p,
     languages: [
@@ -200,7 +207,11 @@ export function languageHostProject(): Project {
       { id: 'ru', name: 'Russian', code: 'ru', plainKeys: false, layer: 3 },
     ],
     macros: [{ id: 'mc-0', index: 0, name: 'text', steps: [{ type: 'tap', keycode: q('KC_A') }, { type: 'text', text: 'hi' }, { type: 'tap', keycode: q('KC_B') }] }],
-    customKeycodes: [{ id: 'ck', name: 'HELLO', description: '', action: { type: 'send-string', text: 'ok' } }],
+    customKeycodes: [
+      { id: 'ck', name: 'HELLO', description: '', action: { type: 'send-string', text: 'ok' } },
+      { id: 'ck-apos', name: 'APOS', description: '', action: { type: 'by-language', byLanguage: [{ language: 'en', action: { type: 'send-string', text: "'s" } }], other: { type: 'send-string', text: "'" } } },
+      { id: 'ck-dash', name: 'DASH', description: '', action: { type: 'by-language', byLanguage: [{ language: 'ru', action: { type: 'none' } }], other: { type: 'tap', keycode: q('KC_X') } } },
+    ],
     tapDances: [
       {
         id: 'td-0',

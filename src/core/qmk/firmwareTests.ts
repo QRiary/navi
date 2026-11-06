@@ -13,6 +13,7 @@ import { comboKeyOn, comboRefsMixed, comboStacks, qmkCombos } from '../features/
 import { aliasLookup } from '../project/aliases';
 import { CAPS_WORD_QMK_DEFAULT, capsWordEveryLayer, capsWordRuleKeys } from '../project/capsWord';
 import { languageKeyOf } from '../project/languages';
+import { firstLanguageAction } from '../project/languageActions';
 import { layerRefs, type LayerRef } from '../project/layerRefs';
 import { activeKeymap } from '../project/ops';
 import { effectiveTapHolds } from '../project/tapHolds';
@@ -369,11 +370,14 @@ function namedBehavior(c: Ctx, v: number, key: string): Behavior {
     const index = v - spec.rangeByDefine.get('QK_USER')!.start;
     const ck = project.customKeycodes[index];
     if (!ck || ck.action.type === 'none') return why(`${c.kc(v)}, a custom keycode your code handles`);
-    if (ck.action.type === 'send-string') {
-      const ops = textOps(ck.action.text);
-      return isWhy(ops) ? why(`${c.kc(v)}: ${ops.why}`) : { tap: { down: lifted(ops, liftOf(project, ck.action.heldMods)), up: [] }, term: 0 };
+    // A per-language key: the tests type in the first language, so its action there.
+    const action = firstLanguageAction(project, ck.action);
+    if (action.type === 'none') return { tap: NOTHING, term: 0 };
+    if (action.type === 'send-string') {
+      const ops = textOps(action.text);
+      return isWhy(ops) ? why(`${c.kc(v)}: ${ops.why}`) : { tap: { down: lifted(ops, liftOf(project, action.heldMods)), up: [] }, term: 0 };
     }
-    const p = plainPress(c, ck.action.keycode);
+    const p = plainPress(c, action.keycode);
     return isWhy(p) ? why(`${c.kc(v)} taps ${p.why}`) : { tap: { down: tapOps(p), up: [] }, term: 0 };
   }
   if (range('QK_LIGHTING')) return { tap: NOTHING, term: 0 };

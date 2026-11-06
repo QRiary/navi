@@ -27,6 +27,8 @@ import {
   type TapHoldSetting,
   type KeyList,
   type Language,
+  type CustomKeycodeAction,
+  type LanguageActionEntry,
   type LanguageHoldKeys,
   TEXT_ROUTES,
   type HoldAction,
@@ -710,20 +712,6 @@ export function validateProject(input: unknown): { project: Project | null; issu
       layers: ko.layers === undefined ? undefined : r.arr(ko.layers, `${p}.layers`, 32).map((l, j) => r.num(l, `${p}.layers[${j}]`, 0, 31, 0)),
     };
   });
-  const customKeycodes: CustomKeycode[] = r.arr(o.customKeycodes, 'customKeycodes', 64).map((c, i) => {
-    const p = `customKeycodes[${i}]`;
-    const co = r.obj(c, p);
-    const name = r.str(co.name, `${p}.name`, `CUSTOM_${i}`, 64);
-    if (!/^[A-Z_][A-Z0-9_]*$/.test(name)) r.error(`${p}.name`, 'name must be an UPPER_CASE C identifier');
-    const ao = r.obj(co.action ?? { type: 'none' }, `${p}.action`);
-    const action =
-      ao.type === 'send-string'
-        ? { type: 'send-string' as const, text: r.str(ao.text, `${p}.action.text`, '', 1000), ...readHeldMods(r, ao.heldMods, `${p}.action.heldMods`) }
-        : ao.type === 'tap'
-          ? { type: 'tap' as const, keycode: r.keycode(ao.keycode, `${p}.action.keycode`) }
-          : { type: 'none' as const };
-    return { id: r.id(co.id, `${p}.id`, 'ck'), name, description: r.str(co.description, `${p}.description`, '', 300), action, ...(co.repeat === true ? { repeat: true } : {}) };
-  });
   const keyAliases: KeyAlias[] = r.arr(o.keyAliases ?? [], 'keyAliases', KEY_ALIASES_MAX).map((a, i) => {
     const p = `keyAliases[${i}]`;
     const ao = r.obj(a, p);
@@ -748,6 +736,36 @@ export function validateProject(input: unknown): { project: Project | null; issu
     return out;
   });
   const languageIds = new Set(languages.map((l) => l.id));
+  // An own keycode's action; a per-language one keeps only entries of languages in the list (one each).
+  const readOwnAction = (v: unknown, p: string): CustomAction => {
+    const ao = r.obj(v ?? { type: 'none' }, p);
+    if (ao.type === 'send-string') return { type: 'send-string', text: r.str(ao.text, `${p}.text`, '', 1000), ...readHeldMods(r, ao.heldMods, `${p}.heldMods`) };
+    if (ao.type === 'tap') return { type: 'tap', keycode: r.keycode(ao.keycode, `${p}.keycode`) };
+    return { type: 'none' };
+  };
+  const customKeycodes: CustomKeycode[] = r.arr(o.customKeycodes, 'customKeycodes', 64).map((c, i) => {
+    const p = `customKeycodes[${i}]`;
+    const co = r.obj(c, p);
+    const name = r.str(co.name, `${p}.name`, `CUSTOM_${i}`, 64);
+    if (!/^[A-Z_][A-Z0-9_]*$/.test(name)) r.error(`${p}.name`, 'name must be an UPPER_CASE C identifier');
+    const ao = r.obj(co.action ?? { type: 'none' }, `${p}.action`);
+    let action: CustomKeycodeAction;
+    if (ao.type === 'by-language') {
+      const seen = new Set<string>();
+      const byLanguage = r.arr(ao.byLanguage ?? [], `${p}.action.byLanguage`, LANGUAGES_MAX).flatMap((e, j): LanguageActionEntry[] => {
+        const ep = `${p}.action.byLanguage[${j}]`;
+        const eo = r.obj(e, ep);
+        if (typeof eo.language !== 'string' || !languageIds.has(eo.language) || seen.has(eo.language)) {
+          r.warn(`${ep}.language`, 'unknown or repeated language, this action is dropped');
+          return [];
+        }
+        seen.add(eo.language);
+        return [{ language: eo.language, action: readOwnAction(eo.action, `${ep}.action`) }];
+      });
+      action = { type: 'by-language', byLanguage, other: readOwnAction(ao.other, `${p}.action.other`) };
+    } else action = readOwnAction(ao, `${p}.action`);
+    return { id: r.id(co.id, `${p}.id`, 'ck'), name, description: r.str(co.description, `${p}.description`, '', 300), action, ...(co.repeat === true ? { repeat: true } : {}) };
+  });
   const tapHolds: TapHoldSetting[] = r.arr(o.tapHolds ?? [], 'tapHolds', TAP_HOLD_MAX).map((x, i) => {
     const p = `tapHolds[${i}]`;
     const to = r.obj(x, p);

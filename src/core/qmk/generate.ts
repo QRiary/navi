@@ -23,11 +23,12 @@ import { LIFT_HELPERS_C, LIFT_SYMBOLS, liftedBlock, liftedLine, liftOf, liftSett
 import { layerOnTopCallback, layerOnTopState, layerOnTopStubs } from './layerOnTop';
 import { languageDecl, languageEarlyCode, languageKeyName, languagePrototypes, languageRecordLines, languageSwitchCode, languageSymbolCode, languageViaMacroLines, LANGUAGE_SYMBOLS, planLanguages, routedMacroStatements, ROUTE_UNICODE_MODE } from './languages';
 import { checkLanguages, languageCName } from '../project/languages';
+import { checkLanguageActions, ownActionDoesSomething } from '../project/languageActions';
 import { checkCustom, customBlock, CUSTOM_FILES, GENERATED_SYMBOLS, hasCustomCode, NAVI_HOOKS, PIPELINE_MAX_HEADERS, PIPELINE_SYMBOLS, safeHeaderName, unsafeDefineValue, validCIdentifier, type CustomFile } from './customCode';
 import { requiredFeatures } from '../features/required';
 import { RGB_MATRIX_EFFECTS } from '../lighting/effects';
 import { effectiveMaxBrightness, rgbTargetDefaults } from '../lighting/buildDefaults';
-import type { HeldMods, HoldAction, Keymap, Macro, MacroStep, Project } from '../project/types';
+import type { CustomAction, CustomKeycodeAction, HeldMods, HoldAction, Keymap, Macro, MacroStep, Project } from '../project/types';
 import { activeGeometry } from '../project/ops';
 import { checkKeyAliases } from '../project/aliases';
 import { checkTapHolds, effectiveTapHolds } from '../project/tapHolds';
@@ -245,6 +246,24 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const aliasOf = new Map<number, string>();
   aliases.defines.forEach((a) => aliasOf.has(a.keycode) || aliasOf.set(a.keycode, a.cName));
   const kc = (v: number) => aliasOf.get(v) ?? qmkExpr(v);
+  // An own keycode's action as C statements; a per-language one picks by navi_language() (without languages: `other`).
+  const basicActionLines = (a: CustomAction): string[] =>
+    a.type === 'send-string' ? [sendText(a.text, a.heldMods)] : a.type === 'tap' ? [`tap_code16(${kc(a.keycode)});`] : [];
+  const ownActionLines = (a: CustomKeycodeAction): string[] => {
+    if (a.type !== 'by-language') return basicActionLines(a);
+    const entries = project.languages.flatMap((l) => {
+      const e = a.byLanguage.find((x) => x.language === l.id);
+      return e ? [{ name: `NAVI_LANG_${languageCName(l)}`, lines: basicActionLines(e.action) }] : [];
+    });
+    if (!lang || !entries.length) return basicActionLines(a.other);
+    const branch = (lines: string[]) => [...lines.map((l) => `        ${l}`), '        break;'];
+    return [
+      'switch (navi_language()) { // per-language action',
+      ...entries.flatMap((e) => [`    case ${e.name}:`, ...branch(e.lines)]),
+      ...(entries.length < project.languages.length ? ['    default: // other languages', ...branch(basicActionLines(a.other))] : []),
+      '}',
+    ];
+  };
   const tdC = tapDanceCode(tdSorted, kc, cString, lang, globalLift);
   const tdReserved = tapDanceReservedNames(project, keymap, [...tdC.symbols, 'navi_send', 'navi_sending', ...standInName.values()]);
   const issues: AdvancedIssue[] = [
@@ -259,6 +278,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   issues.push(...checkTapHolds(spec, project));
   issues.push(...checkTapHoldActions(spec, project, projectOwnCodeRefs(spec, project, ownCode)));
   issues.push(...checkLanguages(project, keymap));
+  issues.push(...checkLanguageActions(project));
   issues.push(...tdC.issues);
   const langNames = new Map(project.languages.map((l) => [l.id, `NAVI_LANG_${languageCName(l)}`]));
   const tapHold = planTapHolds(effectiveTapHolds(spec, project), kc, project.keyLists, (id) => langNames.get(id));
@@ -304,7 +324,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   // NAVI's tracking needs combo results as key presses: they become KC_NO, process_combo_event plays them.
   const comboEvents = replay && qmkComboList.some((q) => q.combo.result !== 0);
   const macros = project.macros.filter((m) => m.steps.length > 0);
-  const sendStringCustoms = customs.filter((c) => c.action.type !== 'none');
+  const sendStringCustoms = customs.filter((c) => ownActionDoesSomething(c.action));
 
   // ── keymap.c ────────────────────────────────────────────────────────
   const c: string[] = [];
@@ -585,7 +605,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       })),
       ...repeatCustoms.map((ck) => ({
         label: ck.name,
-        body: [ck.action.type === 'send-string' ? sendText(ck.action.text, ck.action.heldMods) : ck.action.type === 'tap' ? `tap_code16(${kc(ck.action.keycode)});` : ''],
+        body: ownActionLines(ck.action),
       })),
     ];
     c.push(...autoRepeatCode({ delay, rate, cases, fallback: lang?.symbols ? ['navi_send_text(navi_symbol_text);'] : undefined }));
@@ -648,8 +668,9 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push('    if (!record->event.pressed) return true;');
     c.push('    switch (keycode) {');
     pressCustoms.forEach((ck) => {
-      if (ck.action.type === 'send-string') c.push(`        case ${ck.name}: ${sendText(ck.action.text, ck.action.heldMods)} return false;`);
-      else if (ck.action.type === 'tap') c.push(`        case ${ck.name}: tap_code16(${kc(ck.action.keycode)}); return false;`);
+      const lines = ownActionLines(ck.action);
+      if (lines.length === 1) c.push(`        case ${ck.name}: ${lines[0]} return false;`);
+      else c.push(`        case ${ck.name}:`, ...lines.map((l) => `            ${l}`), '            return false;');
     });
     if (pressMacros.length > 0) {
       c.push('        // Macros MC_n compiled into the firmware (no VIA in this build).');
