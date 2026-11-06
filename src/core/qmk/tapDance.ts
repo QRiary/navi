@@ -41,7 +41,7 @@ const VARIANT_COND = {
 const hasText = (list: MacroStep[]) => list.some((s) => s.type === 'text');
 
 /** The cases of navi_td_every_tap's switch (state->index): each dance's steps by tap count and Shift / Ctrl. */
-function everyTapBody(everyTap: TapDance[], kc: (v: number) => string, cString: (s: string) => string, lang: LanguagePlan | null, issues: AdvancedIssue[]): string[] {
+function everyTapBody(everyTap: TapDance[], kc: (v: number) => string, cString: (s: string) => string, lang: LanguagePlan | null, issues: AdvancedIssue[], lift: boolean): string[] {
   const c: string[] = [];
   const key = (s: MacroStep): string => {
     switch (s.type) {
@@ -80,9 +80,10 @@ function everyTapBody(everyTap: TapDance[], kc: (v: number) => string, cString: 
           c.push('                        navi_td_mods_on(held);', '                        break;', '                    }');
         }
         const none = st.none ?? [];
-        // Shift / Ctrl held without a version of their own still apply to it (H7); GUI and Alt never do
+        // Shift / Ctrl held without a version of their own still apply to it (H7); GUI and Alt never do. Text lifts them
+        // too (firmware.liftHeldMods) so a held Shift doesn't change the characters.
         if (hasText(none)) {
-          c.push('                    {', '                        navi_td_held_t held = navi_td_mods_off(MOD_MASK_AG);');
+          c.push('                    {', `                        navi_td_held_t held = navi_td_mods_off(${lift ? 'MOD_MASK_CSAG' : 'MOD_MASK_AG'});`);
           c.push(...play(none, '                        '));
           c.push('                        navi_td_mods_on(held);', '                    }');
         } else c.push(...play(none, '                    '));
@@ -109,15 +110,16 @@ function everyTapBody(everyTap: TapDance[], kc: (v: number) => string, cString: 
 /**
  * `lang`: the languages' plan (null: none). With a text route, every-tap text steps type in the current language
  * like macros' (routedMacroStatements); in the own-program route the keys after the text join the program's stream.
+ * `lift` (firmware.liftHeldMods): a step with text lets go of Shift / Ctrl too, also when no version was picked.
  */
-export function tapDanceCode(tds: TapDance[], kc: (v: number) => string, cString: (s: string) => string, lang: LanguagePlan | null = null): TapDanceC {
+export function tapDanceCode(tds: TapDance[], kc: (v: number) => string, cString: (s: string) => string, lang: LanguagePlan | null = null, lift = false): TapDanceC {
   const out: TapDanceC = { lines: [], actions: [], prototypes: [], keys: false, sends: false, symbols: [], issues: [] };
   if (!tds.length) return out;
   const slots = tds.filter((t) => tapDanceKind(t) === 'slots');
   const everyTap = tds.filter((t) => tapDanceKind(t) === 'every-tap');
   const ownC = tds.filter((t) => tapDanceKind(t) === 'own-c');
   const tapOnly = slots.filter(tapOnlyDance);
-  const everyBody = everyTap.length ? everyTapBody(everyTap, kc, cString, lang, out.issues) : [];
+  const everyBody = everyTap.length ? everyTapBody(everyTap, kc, cString, lang, out.issues, lift) : [];
   // What the every-tap C really plays as key events (keys streamed to the own program don't count).
   const bodyText = everyBody.join('\n');
   const everyTaps = bodyText.includes('navi_td_tap(');
@@ -137,11 +139,13 @@ export function tapDanceCode(tds: TapDance[], kc: (v: number) => string, cString
   if (needSend) {
     sym('navi_td_keys', 'navi_td_send');
     c.push(
-      '// Slots and steps are played as key events at the dance key\'s position (navi_send), like keys of the keymap.',
-      `static keypos_t navi_td_keys[${maxIndex + 1}]; // where each tap dance key was pressed last (process_record_user)`,
+      '// Slots and steps are played at the dance key\'s position (navi_send), like keys of the keymap: as key events, or',
+      '// as combo events for a dance that is a combo\'s result (QMK gives those position 0, 0), as QMK plays its combos.',
+      `static keyevent_t navi_td_keys[${maxIndex + 1}]; // each tap dance key's last press (process_record_user)`,
       '',
       'static void navi_td_send(uint8_t index, uint16_t keycode, bool pressed, uint8_t taps) {',
-      '    keyrecord_t record = {.event = MAKE_KEYEVENT(navi_td_keys[index].row, navi_td_keys[index].col, pressed)};',
+      '    keyevent_t  at     = navi_td_keys[index];',
+      '    keyrecord_t record = {.event = MAKE_EVENT(at.key.row, at.key.col, pressed, IS_COMBOEVENT(at) ? COMBO_EVENT : KEY_EVENT)};',
       '    navi_send(keycode, &record, pressed, taps);',
       '}',
       '',

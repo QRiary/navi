@@ -114,8 +114,8 @@ export function keyListsCode(lists: TapHoldPlan['lists']): string[] {
 export const replayTracked = (plan: TapHoldPlan) => plan.holdPress.filter((h) => h.flavor === 'hold-preferred' || holdsOn(h));
 
 /**
- * pre_process_record (it sees real key events only, before QMK's tapping logic): the key pressed last for hold keys,
- * and the real key order for the replay fix.
+ * pre_process_record (it sees real key events only, before QMK's tapping logic): the end of a tap dance another key
+ * interrupts, the key pressed last for hold keys, and the real key order for the replay fix.
  */
 export function preProcessHook(
   hook: string,
@@ -125,6 +125,8 @@ export function preProcessHook(
     interrupters: boolean;
     comboLayer?: boolean;
     comboEvents?: boolean;
+    /** End the active tap dance on another key's press before QMK's tapping code (any dance: QMK's own semantics). */
+    tapDance?: boolean;
   },
 ): string[] {
   const out: string[] = [];
@@ -189,6 +191,14 @@ export function preProcessHook(
     out.push('');
   }
   out.push(`bool ${hook}(uint16_t keycode, keyrecord_t *record) {`);
+  if (opts.tapDance) {
+    out.push(
+      '    // A press of another key ends the active tap dance. QMK does that in process_record, after its tap-hold code',
+      "    // judged this key by the layers before the dance's action (a layer change could make a mod-tap hold instead of",
+      '    // tap). Ended here, the same way and before that code; QMK finds no active dance later. The key is looked up again.',
+      '    if (preprocess_tap_dance(keycode, record)) keycode = get_record_keycode(record, true);',
+    );
+  }
   if (opts.comboLayer) out.push('    navi_key_layer = navi_layer_of(record); // for combo_ref_from_layer: pre_process_record runs before combos');
   if (opts.lastPressed) out.push('    if (record->event.pressed) navi_last_pressed = keycode;');
   if (opts.comboEvents) {

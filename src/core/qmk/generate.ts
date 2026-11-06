@@ -13,12 +13,13 @@
 import { modsToConstExpr, toQmk, type NameContext } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
 import { FEATURE_BY_ID, type FeatureId } from '../features/registry';
-import { checkCombos, comboRefOf, comboRefsMixed, qmkCombos, checkKeyOverrides, checkLeaderSequences, checkTapDances, checkUnicodeMap, leaderFunction, type AdvancedIssue } from '../features/advanced';
+import { checkCombos, comboRefOf, comboRefsMixed, comboStacks, qmkCombos, checkKeyOverrides, checkLeaderSequences, checkTapDances, checkUnicodeMap, leaderFunction, type AdvancedIssue } from '../features/advanced';
 import { configParams, configValueType } from './configParams';
 import { autoRepeatCode, REPEAT_SYMBOLS, type RepeatCase } from './autoRepeat';
 import { capsWordCode } from './capsWord';
 import { CAPS_WORD_QMK_DEFAULT } from '../project/capsWord';
 import { BOOTLOADER_HELPER_C, bootloaderHookC, bootloaderPipelineHookC } from './bootloaderReboot';
+import { LIFT_HELPERS_C, LIFT_SYMBOLS, liftedBlock, liftedLine, liftOf, liftSetting } from './heldMods';
 import { layerOnTopCallback, layerOnTopState, layerOnTopStubs } from './layerOnTop';
 import { languageDecl, languageEarlyCode, languageKeyName, languagePrototypes, languageRecordLines, languageSwitchCode, languageSymbolCode, languageViaMacroLines, LANGUAGE_SYMBOLS, planLanguages, routedMacroStatements, ROUTE_UNICODE_MODE } from './languages';
 import { checkLanguages, languageCName } from '../project/languages';
@@ -26,7 +27,7 @@ import { checkCustom, customBlock, CUSTOM_FILES, GENERATED_SYMBOLS, hasCustomCod
 import { requiredFeatures } from '../features/required';
 import { RGB_MATRIX_EFFECTS } from '../lighting/effects';
 import { effectiveMaxBrightness, rgbTargetDefaults } from '../lighting/buildDefaults';
-import type { HoldAction, Keymap, MacroStep, Project } from '../project/types';
+import type { HeldMods, HoldAction, Keymap, Macro, MacroStep, Project } from '../project/types';
 import { activeGeometry } from '../project/ops';
 import { checkKeyAliases } from '../project/aliases';
 import { checkTapHolds, effectiveTapHolds } from '../project/tapHolds';
@@ -201,8 +202,30 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const customName = (v: number) => (v >= customStart && v < customStart + customs.length ? customs[v - customStart].name : languageKeyName(spec, project, v));
   // Languages: their state, keys and text route (null: no languages, the output is as before).
   const lang = planLanguages(project);
-  const macroBody = (steps: MacroStep[]) => (lang ? routedMacroStatements(steps, lang, macroStatement, cString) : macroStatements(steps));
-  const sendText = (text: string) => (lang ? `navi_send_text(${cString(text)});` : `SEND_STRING(${cString(text)});`);
+  // Held modifiers while text is typed (heldMods.ts): helpers are emitted (at liftAt) only when something uses them.
+  const globalLift = liftSetting(project);
+  let liftUsed = !!lang && (lang.routed || globalLift); // navi_type_text / navi_send_text lift by themselves
+  const lifts = (own: HeldMods | undefined) => {
+    const on = liftOf(project, own);
+    if (on) liftUsed = true;
+    return on;
+  };
+  // A macro's text steps type through navi_type_text (the macro's own lift decides the mods, not navi_send_text's).
+  // The own-program route is left alone: its text lifts only where the keyboard types it (plain keys), per text.
+  const macroBody = (m: Macro) => {
+    const lift = lifts(m.heldMods);
+    if (!lang) return liftedBlock(macroStatements(m.steps), lift);
+    if (lang.program && m.steps.some((s) => s.type === 'text')) {
+      return routedMacroStatements(m.steps, lang, macroStatement, cString, undefined, (arg) => `navi_type_text(${arg}, ${lift});`);
+    }
+    return liftedBlock(routedMacroStatements(m.steps, lang, macroStatement, cString, undefined, (arg) => `navi_type_text(${arg}, false);`), lift);
+  };
+  const sendText = (text: string, own?: HeldMods) => {
+    const lift = lifts(own);
+    return lang?.routed ? `navi_type_text(${cString(text)}, ${lift});` : liftedLine(`SEND_STRING(${cString(text)});`, lift);
+  };
+  // VIA macros are played by VIA's code: lift around them where NAVI's own code doesn't already (the language route does).
+  const viaLift = via && globalLift && project.macros.some((m) => m.steps.length > 0) && !lang?.routed;
   // Tap-hold keys with actions: their stand-in MT / LT keycodes get the names NAVI_TH_n (#define'd below).
   const thActions = effectiveTapHoldActions(spec, project);
   const standInName = new Map(thActions.map((a, i) => [a.keycode, `NAVI_TH_${i}`]));
@@ -222,11 +245,11 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const aliasOf = new Map<number, string>();
   aliases.defines.forEach((a) => aliasOf.has(a.keycode) || aliasOf.set(a.keycode, a.cName));
   const kc = (v: number) => aliasOf.get(v) ?? qmkExpr(v);
-  const tdC = tapDanceCode(tdSorted, kc, cString, lang);
+  const tdC = tapDanceCode(tdSorted, kc, cString, lang, globalLift);
   const tdReserved = tapDanceReservedNames(project, keymap, [...tdC.symbols, 'navi_send', 'navi_sending', ...standInName.values()]);
   const issues: AdvancedIssue[] = [
     ...checkTapDances(spec, project.tapDances, tdReserved),
-    ...checkCombos(project, project.combos),
+    ...checkCombos(project, project.combos, spec),
     ...checkKeyOverrides(project.keyOverrides),
     ...checkLeaderSequences(spec, project),
     ...checkUnicodeMap(spec, project),
@@ -272,7 +295,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const hasEncoders = encCount > 0;
   const tdTerms = tdSorted.filter((t) => t.tappingTerm);
   // One combo can be several QMK combos (reference layers): hooks get QMK's combo index.
-  const qmkComboList = project.combos.flatMap((combo) => qmkCombos(keymap, cols, combo));
+  const comboStackList = comboStacks(project, spec, keymap);
+  const qmkComboList = project.combos.flatMap((combo) => qmkCombos(keymap, cols, combo, comboStackList));
   const comboRefs = hasCombos && comboRefsMixed(keymap);
   const comboTerms = qmkComboList.filter((q) => q.combo.term);
   const comboLayers = qmkComboList.filter((q) => q.layers);
@@ -409,7 +433,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push('');
   }
 
-  if (lang) c.push(...languageEarlyCode({ project, keymap, plan: lang, layerIds, via, prototypes: !pipeline }));
+  const liftAt = c.length;
+  if (lang) c.push(...languageEarlyCode({ project, keymap, plan: lang, layerIds, via, prototypes: !pipeline, lift: globalLift }));
 
   if (hasTd) {
     if (tdC.sends) c.push(...naviSendCode({ flag: sendingFlag, guard: false }));
@@ -510,10 +535,10 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const quickTap = tapHold.quick.length > 0;
   const holdPress = tapHold.holdPress.length > 0;
   const permissive = tapHold.permissive.length > 0;
-  const preProcess = holdKeys || replay || comboRefs;
+  const preProcess = holdKeys || replay || comboRefs || hasTd;
   const interrupters = holdKeys && anyHoldsOn(tracked);
   c.push(...keyListsCode(tapHold.lists));
-  if (preProcess) c.push(...preProcessHook(hookName('pre_process_record_user'), { lastPressed: holdKeys, replay, interrupters, comboLayer: comboRefs, comboEvents }));
+  if (preProcess) c.push(...preProcessHook(hookName('pre_process_record_user'), { lastPressed: holdKeys, replay, interrupters, comboLayer: comboRefs, comboEvents, tapDance: hasTd }));
   if (comboEvents) {
     const played = qmkComboList.map((q) => ({ result: kc(q.combo.result), keys: q.combo.keys, name: q.name }));
     c.push(...comboEventCode(hookName('process_combo_event'), played, { lastPressed: holdKeys, interrupters }));
@@ -527,7 +552,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push(`void ${hookName('leader_end_user')}(void) {`);
     leaders.forEach((s, i) => {
       c.push(`    ${i === 0 ? 'if' : '} else if'} (${leaderFunction(s.keys.length)}(${s.keys.map(kc).join(', ')})) {`);
-      if (s.action.type === 'send-string') c.push(`        ${sendText(s.action.text)}`);
+      if (s.action.type === 'send-string') c.push(`        ${sendText(s.action.text, s.action.heldMods)}`);
       else if (s.action.type === 'tap') c.push(`        tap_code16(${kc(s.action.keycode)});`);
     });
     c.push('    }');
@@ -556,11 +581,11 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       ...repeatMacros.map((m) => ({
         label: `QK_MACRO_${m.index}`,
         comment: commentText(m.name),
-        body: via ? [lang?.routed ? `navi_send_via_macro(${m.index});` : `dynamic_keymap_macro_send(${m.index});`] : macroBody(m.steps),
+        body: via ? (lang?.routed ? [`navi_send_via_macro(${m.index});`] : liftedBlock([`dynamic_keymap_macro_send(${m.index});`], lifts(undefined))) : macroBody(m),
       })),
       ...repeatCustoms.map((ck) => ({
         label: ck.name,
-        body: [ck.action.type === 'send-string' ? sendText(ck.action.text) : ck.action.type === 'tap' ? `tap_code16(${kc(ck.action.keycode)});` : ''],
+        body: [ck.action.type === 'send-string' ? sendText(ck.action.text, ck.action.heldMods) : ck.action.type === 'tap' ? `tap_code16(${kc(ck.action.keycode)});` : ''],
       })),
     ];
     c.push(...autoRepeatCode({ delay, rate, cases, fallback: lang?.symbols ? ['navi_send_text(navi_symbol_text);'] : undefined }));
@@ -583,15 +608,16 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   // For the user's own C: which MT / LT values are NAVI's stand-ins (their base key isn't what they tap).
   const standInCheck = pipeline || thActions.length > 0;
   if (standInCheck) c.push(...standInCheckCode([...standInName.values()]));
-  const recordHook = keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang;
+  const recordHook = keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang || viaLift;
   if (recordHook) {
     c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
     if (layersOnTop) c.push('    navi_layer_keys(keycode, record); // layer keys bring their layer to the top');
     if (tdC.keys) {
       c.push(
-        '    // Tap dances play their keys at the dance key\'s position (QMK runs the dance after this hook).',
+        '    // Tap dances play their keys as the dance key\'s event: its position, and COMBO_EVENT for a combo\'s',
+        '    // (QMK runs the dance after this hook).',
         '    if (IS_QK_TAP_DANCE(keycode) && record->event.pressed && QK_TAP_DANCE_GET_INDEX(keycode) < ARRAY_SIZE(navi_td_keys)) {',
-        '        navi_td_keys[QK_TAP_DANCE_GET_INDEX(keycode)] = record->event.key;',
+        '        navi_td_keys[QK_TAP_DANCE_GET_INDEX(keycode)] = record->event;',
         '    }',
       );
     }
@@ -605,18 +631,31 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push('            navi_repeat(keycode, record);', '            return false;', '    }');
   }
   if (lang) c.push(...languageViaMacroLines(lang, via));
+  if (viaLift) {
+    liftUsed = true;
+    c.push(
+      '#ifdef VIA_ENABLE',
+      '    if (record->event.pressed && keycode >= QK_MACRO && keycode <= QK_MACRO_MAX) { // VIA macros: held modifiers let go while they type',
+      '        uint8_t navi_held = navi_lift_mods();',
+      '        dynamic_keymap_macro_send((uint8_t)(keycode - QK_MACRO));',
+      '        navi_lower_mods(navi_held);',
+      '        return false;',
+      '    }',
+      '#endif',
+    );
+  }
   if (keysInCode) {
     c.push('    if (!record->event.pressed) return true;');
     c.push('    switch (keycode) {');
     pressCustoms.forEach((ck) => {
-      if (ck.action.type === 'send-string') c.push(`        case ${ck.name}: ${sendText(ck.action.text)} return false;`);
+      if (ck.action.type === 'send-string') c.push(`        case ${ck.name}: ${sendText(ck.action.text, ck.action.heldMods)} return false;`);
       else if (ck.action.type === 'tap') c.push(`        case ${ck.name}: tap_code16(${kc(ck.action.keycode)}); return false;`);
     });
     if (pressMacros.length > 0) {
       c.push('        // Macros MC_n compiled into the firmware (no VIA in this build).');
       pressMacros.forEach((m) => {
         c.push(`        case QK_MACRO_${m.index}: // ${commentText(m.name)}`);
-        for (const st of macroBody(m.steps)) c.push(`            ${st}`);
+        for (const st of macroBody(m)) c.push(`            ${st}`);
         c.push('            return false;');
       });
     }
@@ -627,6 +666,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push('}');
     c.push('');
   }
+
+  if (liftUsed) c.splice(liftAt, 0, ...LIFT_HELPERS_C);
 
   if (rebootOn) {
     c.push(...BOOTLOADER_HELPER_C);
@@ -825,6 +866,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (tapHold.lists.length) for (const sym of ['navi_in_keys', 'NAVI_IN_KEYS', ...tapHold.lists.map((l) => l.name)]) generatedSymbols.add(sym);
   if (replay) for (const name of ['navi_down', 'navi_interrupted', 'navi_interrupter', 'navi_note_press', 'navi_watch_presses', 'navi_held_tap', 'navi_forces_hold', 'navi_hold']) generatedSymbols.add(name);
   if (repeating) for (const name of REPEAT_SYMBOLS) generatedSymbols.add(name);
+  if (liftUsed) for (const name of LIFT_SYMBOLS.filter((n) => n !== 'navi_type_text')) generatedSymbols.add(name);
+  if (lang?.routed) generatedSymbols.add('navi_type_text');
   if (tapHoldInCode) generatedSymbols.add('navi_tap_holds');
   if (standInCheck) generatedSymbols.add('navi_is_stand_in');
   if (thActions.length) for (const name of ['navi_send', ...standInName.values()]) generatedSymbols.add(name);
@@ -897,8 +940,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
         hook: 'pre_process_record_user',
         call: 'return pre_process_record_navi(keycode, record);',
         why: {
-          en: [(holdKeys || replay) && 'tap-hold keys set to hold when another key is pressed need the real order of key presses', comboRefs && 'combo reference layers need the layer of each pressed key'].filter(Boolean).join('; '),
-          ru: [(holdKeys || replay) && 'тап-холд клавишам, которые удерживаются при нажатии другой клавиши, нужен настоящий порядок нажатий', comboRefs && 'опорным слоям комбо нужен слой каждой нажатой клавиши'].filter(Boolean).join('; '),
+          en: [hasTd && 'a key that ends a tap dance must act on the layers the dance leaves on (a mod-tap would hold instead of tap)', (holdKeys || replay) && 'tap-hold keys set to hold when another key is pressed need the real order of key presses', comboRefs && 'combo reference layers need the layer of each pressed key'].filter(Boolean).join('; '),
+          ru: [hasTd && 'клавиша, завершившая tap dance, должна работать на слоях, оставленных им (иначе мод-тап удержится вместо нажатия)', (holdKeys || replay) && 'тап-холд клавишам, которые удерживаются при нажатии другой клавиши, нужен настоящий порядок нажатий', comboRefs && 'опорным слоям комбо нужен слой каждой нажатой клавиши'].filter(Boolean).join('; '),
         },
       },
       { hook: 'get_combo_term', call: 'return get_combo_term_navi(combo_index, combo);', why: { en: 'COMBO_TERM_PER_COMBO is on — without it the build fails', ru: 'включён COMBO_TERM_PER_COMBO — без неё сборка не пройдёт' } },

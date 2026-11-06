@@ -8,7 +8,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { checkKeyOverrides } from '../core/features/advanced';
 import { configParams, groupTitle } from '../core/qmk/configParams';
 import { newId } from '../core/layout/geometry';
-import { activeKeymap } from '../core/project/ops';
+import { activeKeymap, deleteCustomKeycode } from '../core/project/ops';
 import type { CustomKeycode, KeyAlias, KeyOverride, Project } from '../core/project/types';
 import { aliasCName, ALIAS_LABEL_MAX, checkKeyAliases, KEY_ALIASES_MAX } from '../core/project/aliases';
 import { layerIdentifiers } from '../core/qmk/generate';
@@ -25,6 +25,7 @@ import { LeaderTab } from '../components/advanced/LeaderTab';
 import { UnicodeTab } from '../components/advanced/UnicodeTab';
 import { LanguagesTab } from '../components/advanced/LanguagesTab';
 import { LayerKeysOnTopRow } from '../components/advanced/LayerKeysOnTop';
+import { HeldModsSelect, LiftHeldModsRow } from '../components/advanced/HeldModsControls';
 import { AutoRepeatRows } from '../components/advanced/AutoRepeat';
 import { CapsWordRules } from '../components/advanced/CapsWordRules';
 import { ModsInput } from '../components/keyboard/KeycodeComposer';
@@ -195,7 +196,7 @@ function CustomTab({ project }: { project: Project }) {
       {shownCustom.length > 0 && (
         <div className="panel-box rows">
           {shownCustom.map(({ c, i }) => (
-            <div key={c.id} {...findAttr('custom:' + c.id)} className="row" style={{ ['--row-cols' as string]: '72px minmax(96px,0.8fr) minmax(96px,1fr) 128px minmax(96px,1.2fr) auto auto' }}>
+            <div key={c.id} {...findAttr('custom:' + c.id)} className="row" style={{ ['--row-cols' as string]: '72px minmax(96px,0.8fr) minmax(96px,1fr) 128px minmax(96px,1.2fr) auto auto auto' }}>
               <span className="kicker">0x{customKeycodeValue(spec, i).toString(16).toUpperCase()}</span>
               <input
                 className="input"
@@ -210,6 +211,16 @@ function CustomTab({ project }: { project: Project }) {
                 onChange={(e) => patch(c.id, { description: e.target.value }, t('description', 'описание'), `ckdesc:${c.id}`)}
               />
               <ActionEditor action={c.action} coalesceKey={`ck:${c.id}`} onChange={(action, coalesce) => patch(c.id, { action }, t('custom action', 'действие keycode'), coalesce)} />
+              {c.action.type === 'send-string' ? (
+                <HeldModsSelect
+                  showLabel={false}
+                  value={c.action.heldMods}
+                  global={project.firmware.liftHeldMods}
+                  onChange={(heldMods) => patch(c.id, { action: { type: 'send-string', text: c.action.type === 'send-string' ? c.action.text : '', ...(heldMods ? { heldMods } : {}) } }, t('held modifiers', 'удерживаемые модификаторы'))}
+                />
+              ) : (
+                <span />
+              )}
               <label className="checkbox" {...whyDisabled(c.action.type === 'none' && t('Pick an action first', 'Сначала выберите действие'))}>
                 <input
                   type="checkbox"
@@ -222,11 +233,14 @@ function CustomTab({ project }: { project: Project }) {
                 className="icon-btn"
                 aria-label={t('Delete', 'Удалить')}
                 onClick={() => {
-                  set(
-                    project.customKeycodes.filter((x) => x.id !== c.id),
-                    t('delete keycode', 'удаление keycode'),
+                  const { cleared } = deleteCustomKeycode(spec, project, c.id);
+                  apply((p) => deleteCustomKeycode(spec, p, c.id).project, t('delete keycode', 'удаление keycode'));
+                  const name = c.name || t('custom keycode', 'свой keycode');
+                  deletedToast(
+                    cleared > 0
+                      ? t(`${name} (${cleared} place${cleared === 1 ? '' : 's'} that used it now empty)`, `${name} (мест, где он был, теперь пусто: ${cleared})`)
+                      : name,
                   );
-                  deletedToast(c.name || t('custom keycode', 'свой keycode'));
                 }}
               >
                 <Trash2 {...ICON} />
@@ -377,6 +391,14 @@ function NaviBehaviorTab({ project }: { project: Project }) {
         </div>
         <div className="panel-box rows">
           <LayerKeysOnTopRow project={project} />
+        </div>
+      </section>
+      <section className="section">
+        <div className="section-head">
+          <h2>{t('Typed text', 'Печатаемый текст')}</h2>
+        </div>
+        <div className="panel-box rows">
+          <LiftHeldModsRow project={project} />
         </div>
       </section>
       <section className="section">

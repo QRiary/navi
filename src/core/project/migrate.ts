@@ -85,6 +85,13 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
     if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 17 }; // validate reports it
     return { ...d, schemaVersion: 17, firmware: { ...(f as Data), runTests: false } };
   },
+  // 17 → 18: typed text lets go of held modifiers (firmware.liftHeldMods), on for older files; `heldMods` on a macro /
+  // send-string key is optional.
+  17: (d) => {
+    const f = d.firmware;
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 18 }; // validate reports it
+    return { ...d, schemaVersion: 18, firmware: { ...(f as Data), liftHeldMods: true } };
+  },
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {

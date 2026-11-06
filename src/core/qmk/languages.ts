@@ -104,7 +104,7 @@ export function languagePrototypes(plan: LanguagePlan): string[] {
 }
 
 /** State, tables and text sending: emitted early (hold-key tests and leader / macros use them). */
-export function languageEarlyCode(o: { project: Project; keymap: Keymap; plan: LanguagePlan; layerIds: string[]; via: boolean; prototypes: boolean }): string[] {
+export function languageEarlyCode(o: { project: Project; keymap: Keymap; plan: LanguagePlan; layerIds: string[]; via: boolean; prototypes: boolean; lift: boolean }): string[] {
   const { project, plan } = o;
   const list = project.languages;
   const out: string[] = ['// ── Languages: what the keyboard believes the computer types in ──'];
@@ -123,7 +123,7 @@ export function languageEarlyCode(o: { project: Project; keymap: Keymap; plan: L
     );
   }
   if (!plan.routed) {
-    out.push('void navi_send_text(const char *text) {', '    send_string(text);', '}', '');
+    out.push('void navi_send_text(const char *text) {', ...(o.lift ? ['    uint8_t held = navi_lift_mods();', '    send_string(text);', '    navi_lower_mods(held);'] : ['    send_string(text);']), '}', '');
     return out;
   }
   out.push(
@@ -179,26 +179,35 @@ export function languageEarlyCode(o: { project: Project; keymap: Keymap; plan: L
   }
   out.push(
     '// Plain keys type ASCII text as it is; anything else goes through the text route. SS_TAP / SS_DOWN / SS_UP codes',
-    '// are skipped whole: their keycode byte may be 0x80 or more (KC_LCTL is 0xE0).',
-    'void navi_send_text(const char *text) {',
+    '// are skipped whole: their keycode byte may be 0x80 or more (KC_LCTL is 0xE0). lift: the held modifiers are let go',
+    `// while the keyboard types the text itself${plan.program ? ' (text the program types is left alone)' : ''}.`,
+    'static void navi_type_text(const char *text, bool lift) {',
+    '    bool plain = false;',
     '    if (navi_typing_plain()) {',
     '        const char *s = text;',
     '        while (*s) {',
     '            if ((uint8_t)*s == SS_QMK_PREFIX) {',
     '                s++;                                // the code',
-    '                if (*s && *s != SS_DELAY_CODE) s++; // the keycode (a delay\'s digits are ASCII)',
+    "                if (*s && *s != SS_DELAY_CODE) s++; // the keycode (a delay's digits are ASCII)",
     '                if (*s) s++;',
     '                continue;',
     '            }',
     '            if ((uint8_t)*s >= 0x80) break;',
     '            s++;',
     '        }',
-    '        if (!*s) {',
-    '            send_string(text);',
-    '            return;',
-    '        }',
+    '        plain = !*s;',
     '    }',
-    '    navi_route_text(text);',
+    `    uint8_t held = ${plan.program ? 'lift && plain' : 'lift'} ? navi_lift_mods() : 0;`,
+    '    if (plain) {',
+    '        send_string(text);',
+    '    } else {',
+    '        navi_route_text(text);',
+    '    }',
+    '    navi_lower_mods(held);',
+    '}',
+    '',
+    'void navi_send_text(const char *text) {',
+    `    navi_type_text(text, ${o.lift});`,
     '}',
     '',
   );
@@ -467,14 +476,16 @@ export function routedMacroStatements(
   normal: (s: MacroStep) => string,
   cString: (s: string) => string,
   unstreamed?: (s: MacroStep) => void,
+  /** The C statement that types a text argument (default navi_send_text). */
+  textCall: (arg: string) => string = (arg) => `navi_send_text(${arg});`,
 ): string[] {
   if (!plan.routed || !steps.some((s) => s.type === 'text')) return steps.map(normal);
-  if (!plan.program) return steps.map((s) => (s.type === 'text' ? `navi_send_text(${cString(s.text)});` : normal(s)));
+  if (!plan.program) return steps.map((s) => (s.type === 'text' ? textCall(cString(s.text)) : normal(s)));
   const out: string[] = [];
   let stream: string[] = [];
   let started = false;
   const flush = () => {
-    if (stream.length) out.push(`navi_send_text(${stream.join(' ')});`);
+    if (stream.length) out.push(textCall(stream.join(' ')));
     stream = [];
   };
   for (const s of steps) {

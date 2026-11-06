@@ -324,7 +324,7 @@ export function ActionEditor({ action, onChange, coalesceKey }: { action: Custom
         <input
           className="input"
           value={action.text}
-          onChange={(e) => onChange({ type: 'send-string', text: e.target.value }, `${coalesceKey}:text`)}
+          onChange={(e) => onChange({ ...action, text: e.target.value }, `${coalesceKey}:text`)}
           placeholder="hello"
           spellCheck={false}
           aria-label={t('Text', 'Текст')}

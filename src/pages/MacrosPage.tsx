@@ -22,6 +22,7 @@ import { getLanguage, t } from '../i18n';
 import { deletedToast } from '../lib/undoToast';
 import { ListFilter } from '../components/ListFilter';
 import { EmptyState } from '../components/EmptyState';
+import { HeldModsSelect } from '../components/advanced/HeldModsControls';
 import { findAttr, matchesQuery, useFindJump, useListFilter } from '../lib/find';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
@@ -191,6 +192,7 @@ export function MacrosPage() {
                 )}
               </InfoTip>
             </label>
+            <HeldModsSelect value={macro.heldMods} global={project.firmware.liftHeldMods} onChange={(heldMods) => update((x) => ({ ...x, heldMods }), t('macro held modifiers', 'модификаторы макроса'))} />
             <button
               className="btn"
               onClick={() => {

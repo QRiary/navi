@@ -4,10 +4,11 @@
  * in your own firmware build; here is what can be checked in advance.
  */
 import { decode } from '../keycodes/codec';
-import type { KeycodeSpec } from '../keycodes/spec';
+import { loadSpec, type KeycodeSpec } from '../keycodes/spec';
 import { KC_TRNS } from '../project/factory';
 import type { Combo, Keymap, KeyOverride, MatrixPos, Project, TapDance } from '../project/types';
 import { TAP_DANCE_MAX_STEPS, TAP_DANCE_VARIANTS } from '../project/types';
+import { layerStacks } from '../project/layerRefs';
 import { tapDanceKind } from '../project/tapDances';
 import { validCIdentifier } from '../qmk/customCode';
 import type { Text } from './registry';
@@ -126,12 +127,28 @@ export interface QmkCombo {
 }
 
 /**
- * The QMK combos of a combo. All layers reading from layer 0: one, by layer 0's keycodes (COMBO_ONLY_FROM_LAYER 0).
- * Otherwise, for each layer L the combo works on, a key reads the reference layer of L, or of the default layer when
- * the key is transparent on L (a static stand-in for the layer it falls through to); one QMK combo per distinct set
- * of keycodes, limited to the layers that give it.
+ * The keycode QMK's process_combo matches for the key at `pos` while `stack` (the layers on, highest first) is shown,
+ * with NAVI's combo_ref_from_layer (by the layer serving the key): the serving layer's reference layer's keycode, or
+ * the key as it resolves when that reference is the highest layer (QMK keeps its own keycode then).
  */
-export function qmkCombos(keymap: Keymap, cols: number, combo: Combo): QmkCombo[] {
+export function comboKeyOn(keymap: Keymap, cols: number, stack: readonly number[], [r, c]: MatrixPos): number {
+  const at = (layer: number) => keymap.layers[layer]?.keys[r * cols + c] ?? 0;
+  const serving = stack.find((l) => at(l) !== KC_TRNS) ?? 0;
+  const ref = comboRefOf(keymap, serving);
+  return ref === stack[0] ? at(serving) : at(ref);
+}
+
+/** The layer stacks combos are matched on (layerStacks), needed only when some layer reads another reference layer. */
+export const comboStacks = (project: Project, spec: KeycodeSpec, keymap: Keymap): number[][] | null => (comboRefsMixed(keymap) ? layerStacks(project, spec, keymap) : null);
+
+/**
+ * The QMK combos of a combo. All layers reading from layer 0: one, by layer 0's keycodes (COMBO_ONLY_FROM_LAYER 0).
+ * Otherwise, for each layer L the combo works on, the keycodes QMK matches with L the highest layer on (comboKeyOn):
+ * a key transparent on L falls through, so every stack of `stacks` topped by L counts (none, e.g. no stacks given:
+ * L over the default layer; `stacks` null: any layer under L may serve the key). One QMK combo per distinct set of keycodes,
+ * limited to the layers that give it.
+ */
+export function qmkCombos(keymap: Keymap, cols: number, combo: Combo, stacks: readonly number[][] | null = []): QmkCombo[] {
   const at = (layer: number, [r, c]: MatrixPos) => keymap.layers[layer]?.keys[r * cols + c] ?? 0;
   const limit = combo.layers?.length ? combo.layers : null;
   if (!comboRefsMixed(keymap)) return [{ combo, name: combo.name, keys: combo.keys.map((pos) => at(0, pos)), layers: limit }];
@@ -140,12 +157,53 @@ export function qmkCombos(keymap: Keymap, cols: number, combo: Combo): QmkCombo[
   if (!on.length) return [{ combo, name: combo.name, keys: combo.keys.map((pos) => at(comboRefOf(keymap, 0), pos)), layers: limit }];
   const groups = new Map<string, { keys: number[]; layers: number[] }>();
   for (const layer of on) {
-    const keys = combo.keys.map((pos) => at(comboRefOf(keymap, at(layer, pos) === KC_TRNS ? keymap.defaultLayer : layer), pos));
-    const group = groups.get(keys.join(','));
-    if (group) group.layers.push(layer);
-    else groups.set(keys.join(','), { keys, layers: [layer] });
+    for (const keys of keySetsOn(keymap, cols, combo.keys, layer, stacks)) {
+      const group = groups.get(keys.join(','));
+      if (!group) groups.set(keys.join(','), { keys, layers: [layer] });
+      else if (!group.layers.includes(layer)) group.layers.push(layer);
+    }
   }
   return [...groups.values()].map((g, i) => ({ combo, name: i === 0 ? combo.name : `${combo.name}_${i + 1}`, keys: g.keys, layers: !limit && g.layers.length === count ? null : g.layers }));
+}
+
+/** The distinct keycode sets QMK can match for these keys with `top` the highest layer on, highest stacks first. */
+function keySetsOn(keymap: Keymap, cols: number, keys: readonly MatrixPos[], top: number, stacks: readonly number[][] | null): number[][] {
+  const at = (layer: number, [r, c]: MatrixPos) => keymap.layers[layer]?.keys[r * cols + c] ?? 0;
+  if (!keys.some((pos) => at(top, pos) === KC_TRNS)) return [keys.map((pos) => comboKeyOn(keymap, cols, [top], pos))];
+  let tops: (readonly number[])[];
+  if (stacks) {
+    tops = stacks.filter((s) => s[0] === top).sort((a, b) => cmpStacks(a, b));
+    if (!tops.length) tops = [[...new Set([top, keymap.defaultLayer])].sort((a, b) => b - a)];
+  } else {
+    // Too many states to walk: each key may be served by any layer under the top (all the ones above it off).
+    const per = keys.map((pos) => {
+      if (at(top, pos) !== KC_TRNS) return [comboKeyOn(keymap, cols, [top], pos)];
+      const under = keymap.layers.map((_, l) => l).filter((l) => l < top && at(l, pos) !== KC_TRNS);
+      return [...new Set((under.length ? under.reverse() : [0]).map((l) => comboKeyOn(keymap, cols, [top, l], pos)))];
+    });
+    const out = new Map<string, number[]>();
+    const walk = (i: number, acc: number[]) => {
+      if (i === keys.length) {
+        out.set(acc.join(','), acc);
+        return;
+      }
+      for (const v of per[i]) walk(i + 1, [...acc, v]);
+    };
+    walk(0, []);
+    return [...out.values()];
+  }
+  const out = new Map<string, number[]>();
+  for (const s of tops) {
+    const set = keys.map((pos) => comboKeyOn(keymap, cols, s, pos));
+    out.set(set.join(','), set);
+  }
+  return [...out.values()];
+}
+
+/** Stacks compared layer by layer from the top, higher layers first ([2, 1, 0] before [2, 0]). */
+function cmpStacks(a: readonly number[], b: readonly number[]): number {
+  for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return b[i] - a[i];
+  return b.length - a.length;
 }
 
 /**
@@ -177,11 +235,12 @@ export function comboAutoName(keyParts: string[], resultPart: string | null, tak
 /** Names NAVI gave by default before CM_… (combo_0, combo_1…): they follow the keys like an auto name. */
 export const isOldDefaultComboName = (name: string) => /^combo_\d+$/.test(name);
 
-export function checkCombos(project: Project, combos: Combo[]): AdvancedIssue[] {
+export function checkCombos(project: Project, combos: Combo[], spec: KeycodeSpec = loadSpec(project.firmware.keycodeSpec)): AdvancedIssue[] {
   const out: AdvancedIssue[] = [];
   const km = project.keymaps.find((k) => k.id === project.activeKeymapId) ?? project.keymaps[0];
   const cols = project.hardware.matrix.cols;
   const mixed = comboRefsMixed(km);
+  const stacks = comboStacks(project, spec, km);
   const allLayers = km.layers.map((_, i) => i);
   // Combos on the same keys: allowed when their layers don't overlap (no layers = every layer).
   const byKeys = new Map<string, { name: string; layers: Set<number> | null }[]>();
@@ -196,7 +255,7 @@ export function checkCombos(project: Project, combos: Combo[]): AdvancedIssue[] 
     if (combo.keys.length < 2) out.push({ level: 'error', where, message: { en: 'A combo needs at least 2 keys.', ru: 'В комбо нужно минимум 2 клавиши.' } });
     if (!combo.result) out.push({ level: 'warning', where, message: { en: 'No result keycode.', ru: 'Не задан результат.' } });
     // QMK matches combos by keycodes of the reference layer: empty/transparent and identical ones do not work.
-    for (const [i, q] of qmkCombos(km, cols, combo).entries()) {
+    for (const [i, q] of qmkCombos(km, cols, combo, stacks).entries()) {
       const on = mixed ? (q.layers ?? allLayers).join(', ') : '0';
       if (q.keys.some((v) => v === 0 || v === 1)) {
         out.push({

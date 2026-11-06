@@ -82,22 +82,37 @@ export function hostProject(): Project {
     td(11, 23, { tap: ctrlLayerStandIn, hold: altStandIn }),
     // Not on the keymap: only the result of the combo on 9 + 29
     { id: 'td-12', index: 12, name: 'TD_H12', tap: q('C(KC_C)'), hold: q('KC_LSFT'), doubleTap: 0, tapHold: 0 },
+    // On layer 3 (TG(3) at 19 on layer 1): a double tap turns layer 3 off; 6 is KC_NO there, LCTL_T(KC_D) below
+    { id: 'td-13', index: 13, name: 'TD_H13', tap: q('KC_T'), hold: 0, doubleTap: q('TG(3)'), tapHold: 0 },
   ];
+  put(1, 19, q('TG(3)'));
+  put(3, 10, q('TD(13)'));
+  put(3, 6, q('KC_NO'));
   put(0, 13, q('KC_N'));
   put(1, 13, q('KC_A'));
   put(1, 14, q('KC_B'));
+  // Typed text with a Shift held (layer 1): SEMI types ";" (default: held mods lifted), SEMI_KEEP the same with "keep"
+  put(1, 15, q('QK_USER_2'));
+  put(1, 16, q('QK_USER_3'));
+  put(1, 17, q('QK_MACRO_2')); // a macro: text, then a key
   put(0, 21, q('KC_LSFT'));
-  const refs: Record<number, 'self'> = { 1: 'self', 2: 'self' };
+  // Layer 3, reached by MO(3) on layer 1 (hold 30, then 20): 2 is KC_8, 13 transparent (layer 1's KC_A shows through).
+  put(1, 20, q('MO(3)'));
+  put(3, 2, q('KC_8'));
+  const refs: Record<number, 'self'> = { 1: 'self', 2: 'self', 3: 'self' };
   return {
     ...p,
     tapDances,
     customKeycodes: [
       { id: 'ck-host', name: 'HOST_KEY', description: 'handled by the own lines', action: { type: 'none' } },
       { id: 'ck-rep', name: 'REP_KEY', description: 'repeats', action: { type: 'send-string', text: 'b' }, repeat: true },
+      { id: 'ck-semi', name: 'SEMI', description: 'types ;', action: { type: 'send-string', text: ';' } },
+      { id: 'ck-keep', name: 'SEMI_KEEP', description: 'types ; with the held mods kept', action: { type: 'send-string', text: ';', heldMods: 'keep' } },
     ],
     macros: [
       { id: 'mc-0', index: 0, name: 'repeats', steps: [{ type: 'tap', keycode: q('KC_A') }], repeat: true },
       { id: 'mc-1', index: 1, name: 'once', steps: [{ type: 'tap', keycode: q('KC_C') }] },
+      { id: 'mc-2', index: 2, name: 'text and key', steps: [{ type: 'text', text: ';' }, { type: 'tap', keycode: q('KC_A') }] },
     ],
     firmware: {
       ...p.firmware,
@@ -109,8 +124,15 @@ export function hostProject(): Project {
       ],
       custom: {
         'keymap.c': [
+          '// What the user\'s C sees of the C(KC_C) the tap dances play: its event type and position.',
+          'uint8_t host_probe_type = 0xFF, host_probe_row = 0xFF, host_probe_col = 0xFF;',
           'void post_process_record_user(uint16_t keycode, keyrecord_t *record) {',
           '    if (keycode == HOST_KEY && record->event.pressed) tap_code(KC_Z);',
+          '    if (keycode == C(KC_C) && record->event.pressed) {',
+          '        host_probe_type = record->event.type;',
+          '        host_probe_row  = record->event.key.row;',
+          '        host_probe_col  = record->event.key.col;',
+          '    }',
           '}',
           'void host_each(tap_dance_state_t *state, void *user_data) {',
           '    if (state->count == 2) tap_code(KC_X);',
@@ -128,6 +150,7 @@ export function hostProject(): Project {
       { id: 'c5', name: 'c5_roll', keys: [combo(25), combo(26)], result: q('KC_Z') },
       { id: 'c6', name: 'c6_dance', keys: [combo(27), combo(28)], result: q('TD(5)') },
       { id: 'c7', name: 'c7_slots', keys: [combo(9), combo(29)], result: q('TD(12)') },
+      { id: 'c8', name: 'c8_over', keys: [combo(13), combo(2)], result: q('KC_9'), layers: [3] },
     ],
     tapHolds: [
       { id: 'th-p', keycodes: [q('LSFT_T(KC_P)')], flavor: 'hold-preferred' },

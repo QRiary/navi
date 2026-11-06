@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 17;
+export const PROJECT_SCHEMA_VERSION = 18;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -207,6 +207,10 @@ export type MacroStep =
   | { type: 'up'; keycode: number }
   | { type: 'delay'; ms: number };
 
+/** Held real modifiers while NAVI types text: let go for the text (`lift`) or left as they are (`keep`). */
+export type HeldMods = 'lift' | 'keep';
+export const HELD_MODS: readonly HeldMods[] = ['lift', 'keep'];
+
 export interface Macro {
   id: string;
   /** Macro slot: QK_MACRO_n (MC_n) and the slot in the keyboard memory (VIA). */
@@ -215,6 +219,8 @@ export interface Macro {
   steps: MacroStep[];
   /** Repeat while held (firmware.autoRepeat sets the delay and rate). */
   repeat?: boolean;
+  /** Held modifiers while it types: lifted or kept. Unset: firmware.liftHeldMods. */
+  heldMods?: HeldMods;
 }
 
 /**
@@ -287,7 +293,7 @@ export interface KeyOverride {
   layers?: number[];
 }
 
-export type CustomAction = { type: 'none' } | { type: 'send-string'; text: string } | { type: 'tap'; keycode: number };
+export type CustomAction = { type: 'none' } | { type: 'send-string'; text: string; heldMods?: HeldMods } | { type: 'tap'; keycode: number };
 
 /** Leader key sequence: QK_LEAD, then 1–5 keys → action. */
 export interface LeaderSequence {
@@ -443,6 +449,12 @@ export interface FirmwareConfig {
    * is hidden while it is on. NAVI's own setting (generated layer_state_set_user / layer_state_set_navi), not a define.
    */
   layerKeysOnTop: boolean;
+  /**
+   * Text NAVI types (macros, send-string keys, VIA macros, every-tap dance text, navi_send_text) lets go of the
+   * modifiers you hold and puts them back after, so a held Shift doesn't change the characters. A macro or
+   * send-string key can say otherwise (`heldMods`).
+   */
+  liftHeldMods: boolean;
   /**
    * Let NAVI restart the keyboard into its bootloader (Raw HID packet, then reset_keyboard()), so “build + flash”
    * needs no key press. NAVI's own C code in keymap.c, not a define.
