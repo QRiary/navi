@@ -1,5 +1,5 @@
 import type { KeycodeSpec } from '../core/keycodes/spec';
-import { tryParseQmk } from '../core/keycodes/codec';
+import { tryParseQmk, type ParseContext } from '../core/keycodes/codec';
 
 /**
  * What leaving the encoder's inline expression field (blur) does: a valid expression is committed, the text
@@ -8,8 +8,8 @@ import { tryParseQmk } from '../core/keycodes/codec';
  */
 export type BlurResult = { action: 'commit'; value: number } | { action: 'close' } | { action: 'error'; error: string };
 
-export function resolveBlur(spec: KeycodeSpec, text: string, current: number): BlurResult {
-  const r = tryParseQmk(spec, text);
+export function resolveBlur(spec: KeycodeSpec, text: string, current: number, ctx: ParseContext = {}): BlurResult {
+  const r = tryParseQmk(spec, text, ctx);
   if ('error' in r) return { action: 'error', error: r.error };
   return r.value === current ? { action: 'close' } : { action: 'commit', value: r.value };
 }

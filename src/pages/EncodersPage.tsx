@@ -11,7 +11,7 @@ import { keyLabel } from '../core/keycodes/labels';
 import { featureStatus } from '../core/features/registry';
 import { copyEncoderToLayers, setEncoder, resizeEncoders } from '../core/project/ops';
 import { hardwareFacts } from '../lib/hardwareFacts';
-import { useActive, useLabelContext } from '../lib/projectContext';
+import { useActive, useLabelContext, useParseContext } from '../lib/projectContext';
 import { href, navigate } from '../lib/router';
 import { QMK_DOCS } from '../lib/qmkDocs';
 import { resolveBlur } from '../lib/encoderEdit';
@@ -43,6 +43,7 @@ const PRESETS: { name: () => string; ccw: string; cw: string }[] = [
 function CodeCell({ value, onSet }: { value: number; onSet: (v: number) => void }) {
   const spec = useSpec();
   const labelCtx = useLabelContext();
+  const parseCtx = useParseContext();
   const [editing, setEditing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   if (!labelCtx) return null;
@@ -54,7 +55,7 @@ function CodeCell({ value, onSet }: { value: number; onSet: (v: number) => void 
   };
   /** Leaving the field commits a valid expression; an invalid one stays open with its error. */
   const onBlur = () => {
-    const r = resolveBlur(spec, editing ?? '', value);
+    const r = resolveBlur(spec, editing ?? '', value, parseCtx);
     if (r.action === 'error') return setError(r.error);
     if (r.action === 'commit') onSet(r.value);
     cancel();
@@ -62,7 +63,7 @@ function CodeCell({ value, onSet }: { value: number; onSet: (v: number) => void 
   if (editing !== null) {
     // Like every keycode field: the expression with what it means beside it, and the catalog button. Focus moving
     // between the box, the button and the catalog it opens (a portal) isn't leaving the field.
-    const preview = error ?? typedMeaning(spec, labelCtx, editing);
+    const preview = error ?? typedMeaning(spec, labelCtx, editing, parseCtx);
     return (
       <span
         className="kc-field"
@@ -76,7 +77,7 @@ function CodeCell({ value, onSet }: { value: number; onSet: (v: number) => void 
           className={`expr-input ${error ? 'is-error' : ''}`}
           onSubmit={(e) => {
             e.preventDefault();
-            const r = tryParseQmk(spec, editing);
+            const r = tryParseQmk(spec, editing, parseCtx);
             if ('error' in r) return setError(r.error);
             onSet(r.value);
             cancel();

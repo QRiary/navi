@@ -4,7 +4,7 @@
  */
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Keyboard, LayoutGrid } from 'lucide-react';
-import { decode, tryParseQmk } from '../../core/keycodes/codec';
+import { decode, tryParseQmk, type ParseContext } from '../../core/keycodes/codec';
 import { friendlyName, type FriendlyName } from '../../core/keycodes/friendly';
 import type { LabelContext } from '../../core/keycodes/labels';
 import type { KeycodeSpec } from '../../core/keycodes/spec';
@@ -17,7 +17,7 @@ import type { FeatureId } from '../../core/features/registry';
 import { whyDisabled } from '../../lib/whyDisabled';
 import type { CustomAction, Project } from '../../core/project/types';
 import { hardwareFacts } from '../../lib/hardwareFacts';
-import { useLabelContext } from '../../lib/projectContext';
+import { useLabelContext, useParseContext } from '../../lib/projectContext';
 import { href } from '../../lib/router';
 import { useSpec } from '../../store/projectStore';
 import { getLanguage, t } from '../../i18n';
@@ -43,6 +43,7 @@ export function KeycodeField({
 }) {
   const spec = useSpec();
   const labelCtx = useLabelContext();
+  const parseCtx = useParseContext();
   const name = labelCtx ? friendlyName(spec, value, labelCtx) : null;
   const qmk = name?.qmk ?? '';
   const [text, setText] = useState<string | null>(null);
@@ -54,7 +55,7 @@ export function KeycodeField({
   const shown = text ?? (value ? qmk : '');
   const preview = (() => {
     if (error) return error;
-    if (text !== null) return typedMeaning(spec, labelCtx, text);
+    if (text !== null) return typedMeaning(spec, labelCtx, text, parseCtx);
     return value && name ? keyMeaning(spec, name, value) : '';
   })();
   return (
@@ -114,7 +115,7 @@ export function KeycodeField({
   function commit() {
     if (text === null) return;
     if (!text.trim()) return set(0);
-    const r = tryParseQmk(spec, text);
+    const r = tryParseQmk(spec, text, parseCtx);
     if ('error' in r) setError(r.error);
     else set(r.value);
   }
@@ -127,9 +128,9 @@ function keyMeaning(spec: KeycodeSpec, n: FriendlyName, v: number): string {
 }
 
 /** The preview of what is being typed into a QMK box (a parse error shows only once it is committed). */
-export function typedMeaning(spec: KeycodeSpec, labelCtx: LabelContext | null, text: string): string {
+export function typedMeaning(spec: KeycodeSpec, labelCtx: LabelContext | null, text: string, parseCtx: ParseContext): string {
   if (!text.trim() || !labelCtx) return '';
-  const r = tryParseQmk(spec, text);
+  const r = tryParseQmk(spec, text, parseCtx);
   return 'value' in r ? keyMeaning(spec, friendlyName(spec, r.value, labelCtx), r.value) : '';
 }
 
@@ -218,17 +219,18 @@ export function KeyChips({
 }) {
   const spec = useSpec();
   const labelCtx = useLabelContext();
+  const parseCtx = useParseContext();
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const add = () => {
     if (!text.trim()) return setError(null);
-    const r = tryParseQmk(spec, text);
+    const r = tryParseQmk(spec, text, parseCtx);
     if ('error' in r) return setError(r.error);
     onAdd(r.value);
     setText('');
     setError(null);
   };
-  const preview = error ?? typedMeaning(spec, labelCtx, text);
+  const preview = error ?? typedMeaning(spec, labelCtx, text, parseCtx);
   return (
     <div className="key-chips">
       {items.map((c, i) => (

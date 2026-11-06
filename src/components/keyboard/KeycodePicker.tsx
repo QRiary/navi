@@ -10,7 +10,7 @@ import { tryParseQmk, toQmk } from '../../core/keycodes/codec';
 import { friendlyName } from '../../core/keycodes/friendly';
 import { keycodeNeeds, needStatus } from '../../core/keycodes/requirements';
 import { FEATURE_BY_ID, type FeatureState } from '../../core/features/registry';
-import { catalogContext, useLabelContext } from '../../lib/projectContext';
+import { catalogContext, useLabelContext, useParseContext } from '../../lib/projectContext';
 import { hardwareFacts } from '../../lib/hardwareFacts';
 import { assignToSelection } from '../../lib/keymapActions';
 import { useDeviceStore } from '../../store/deviceStore';
@@ -24,6 +24,7 @@ export function KeycodePicker({ currentKeycode, onPick }: { currentKeycode: numb
   const project = useProjectStore((s) => s.project);
   const spec = useSpec();
   const labelCtx = useLabelContext();
+  const parseCtx = useParseContext();
   const macroCount = useDeviceStore((s) => s.caps?.macros?.count);
   const category = useEditorStore((s) => s.pickerCategory);
   const query = useEditorStore((s) => s.pickerQuery);
@@ -64,7 +65,7 @@ export function KeycodePicker({ currentKeycode, onPick }: { currentKeycode: numb
     };
   }, [project, spec]);
 
-  const parsed = expr.trim() ? tryParseQmk(spec, expr, { unicode: project?.firmware.unicode }) : null;
+  const parsed = expr.trim() ? tryParseQmk(spec, expr, parseCtx) : null;
   const applyExpr = () => {
     if (!parsed || !('value' in parsed)) return;
     if (onPick) onPick(parsed.value);

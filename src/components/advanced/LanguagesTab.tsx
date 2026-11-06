@@ -10,6 +10,7 @@ import {
   addLanguage,
   checkLanguages,
   isTypingLayer,
+  setLayerTypingTick,
   LANGUAGE_NAME_MAX,
   LANGUAGES_MAX,
   languageKeycodes,
@@ -17,7 +18,7 @@ import {
   patchLanguage,
   removeLanguage,
 } from '../../core/project/languages';
-import { activeKeymap, setLayerTyping } from '../../core/project/ops';
+import { activeKeymap } from '../../core/project/ops';
 import { TEXT_ROUTES, type Keymap, type Language, type Project, type TextRoute } from '../../core/project/types';
 import { t } from '../../i18n';
 import { findAttr } from '../../lib/find';
@@ -66,7 +67,7 @@ export function TypingLayerTick({ project, keymap, layer, tip = true }: { projec
   const title = t('Typing layer', 'Слой для набора');
   return (
     <label className="checkbox">
-      <input type="checkbox" checked={on} onChange={(e) => apply((p) => setLayerTyping(p, keymap.id, layer, e.target.checked), t('typing layer', 'слой для набора'))} aria-label={title} />
+      <input type="checkbox" checked={on} onChange={(e) => apply((p) => setLayerTypingTick(p, keymap.id, layer, e.target.checked), t('typing layer', 'слой для набора'))} aria-label={title} />
       {title}
       {tip && (
       <InfoTip label={title}>

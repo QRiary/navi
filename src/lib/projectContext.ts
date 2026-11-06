@@ -3,6 +3,8 @@
  */
 import { useMemo } from 'react';
 import type { CatalogContext } from '../core/keycodes/catalog';
+import type { ParseContext } from '../core/keycodes/codec';
+import { layerIdentifiers } from '../core/qmk/generate';
 import type { LabelContext } from '../core/keycodes/labels';
 import type { KeycodeSpec } from '../core/keycodes/spec';
 import { aliasLookup } from '../core/project/aliases';
@@ -51,6 +53,31 @@ export function labelContext(project: Project, spec: KeycodeSpec, settings: { os
   };
 }
 
+/**
+ * Names a typed keycode box reads back: own keycodes and language keys by their C names, tap dances by name,
+ * layers by their C name or by the name the boxes show (`labelContext.layerName`).
+ */
+export function parseContext(project: Project, spec: KeycodeSpec): ParseContext {
+  const km = activeKeymap(project);
+  const custom = new Map(project.customKeycodes.map((c, i) => [c.name, customKeycodeValue(spec, i)]));
+  project.languages.forEach((_, i) => {
+    const k = languageKeycodes(spec, i);
+    for (const v of [k.to, k.toggle]) {
+      const name = languageKeyCName(spec, project, v);
+      if (name && !custom.has(name)) custom.set(name, v);
+    }
+  });
+  const layers = new Map<string, number>();
+  layerIdentifiers(km).forEach((id, i) => layers.set(id, i));
+  km.layers.forEach((l, i) => l.name && !layers.has(l.name) && layers.set(l.name, i));
+  return {
+    unicode: project.firmware.unicode,
+    customByName: (n) => custom.get(n),
+    layerByName: (n) => layers.get(n),
+    tapDanceByName: (n) => project.tapDances.find((t) => t.name === n)?.index,
+  };
+}
+
 export function catalogContext(project: Project, spec: KeycodeSpec, label: LabelContext, macroCount?: number): CatalogContext {
   const km = activeKeymap(project);
   return {
@@ -68,6 +95,12 @@ export function catalogContext(project: Project, spec: KeycodeSpec, label: Label
     }),
     aliases: [...aliasLookup(project.keyAliases)].map(([value, a]) => ({ value, ...a })),
   };
+}
+
+export function useParseContext(): ParseContext {
+  const project = useProjectStore((s) => s.project);
+  const spec = useSpec();
+  return useMemo(() => (project ? parseContext(project, spec) : {}), [project, spec]);
 }
 
 export function useLabelContext(): LabelContext | null {

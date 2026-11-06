@@ -14,7 +14,7 @@ import type { AdvancedIssue } from '../features/advanced';
 import type { KeycodeSpec } from '../keycodes/spec';
 import { newId } from '../layout/geometry';
 import { KC_NO } from './factory';
-import { mapProjectKeycodes } from './ops';
+import { mapProjectKeycodes, setLayerTyping } from './ops';
 import type { Keymap, Language, Project } from './types';
 
 export const LANGUAGES_MAX = 8;
@@ -44,10 +44,12 @@ export const languageKeyRange = (spec: KeycodeSpec) => ({ start: userEnd(spec) -
 
 /** A typing layer sends its keys to the OS layout as they are in every language (Layer.typing). */
 export function isTypingLayer(project: Pick<Project, 'languages'>, keymap: Keymap, layer: number): boolean {
-  const own = keymap.layers[layer]?.typing;
-  if (own !== undefined) return own;
-  return layer === keymap.defaultLayer || project.languages.some((l) => l.layer === layer);
+  return keymap.layers[layer]?.typing ?? typingByDefault(project, keymap, layer);
 }
+
+/** What a layer with no typing tick of its own is: the default layer and the languages' layers type. */
+const typingByDefault = (project: Pick<Project, 'languages'>, keymap: Keymap, layer: number) =>
+  layer === keymap.defaultLayer || project.languages.some((l) => l.layer === layer);
 
 /** The language a toggle key goes back to: the first plain-keys one (else the first). */
 export const plainLanguageIndex = (project: Pick<Project, 'languages'>) => Math.max(0, project.languages.findIndex((l) => l.plainKeys));
@@ -56,6 +58,16 @@ export const plainLanguageIndex = (project: Pick<Project, 'languages'>) => Math.
 export const usesTextRoute = (project: Pick<Project, 'languages'>) => project.languages.some((l) => !l.plainKeys);
 
 // ── operations (undoable through projectStore.apply) ──
+
+/**
+ * The typing-layer tick: a value equal to the default clears the layer's own setting, so a tick put back
+ * follows the default again (a language later moved onto or off the layer).
+ */
+export function setLayerTypingTick(project: Project, keymapId: string, layer: number, typing: boolean): Project {
+  const km = project.keymaps.find((k) => k.id === keymapId);
+  const plain = km && typing === typingByDefault(project, km, layer);
+  return setLayerTyping(project, keymapId, layer, plain ? undefined : typing);
+}
 
 export function addLanguage(project: Project): Project {
   const n = project.languages.length;
