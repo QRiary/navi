@@ -15,6 +15,7 @@ import { useActive, useLabelContext, useParseContext } from '../lib/projectConte
 import { href, navigate } from '../lib/router';
 import { QMK_DOCS } from '../lib/qmkDocs';
 import { resolveBlur } from '../lib/encoderEdit';
+import { keycodeInput } from '../lib/inputRewrite';
 import { CatalogButton, typedMeaning } from '../components/advanced/common';
 import { EmptyState } from '../components/EmptyState';
 import { ListFilter } from '../components/ListFilter';
@@ -83,7 +84,7 @@ function CodeCell({ value, onSet }: { value: number; onSet: (v: number) => void 
             cancel();
           }}
         >
-          <input autoFocus value={editing} onChange={(e) => setEditing(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && cancel()} spellCheck={false} aria-label={t('Keycode', 'Keycode')} />
+          <input autoFocus value={editing} onChange={(e) => setEditing(keycodeInput(e.target, spec, parseCtx))} onKeyDown={(e) => e.key === 'Escape' && cancel()} spellCheck={false} aria-label={t('Keycode', 'Keycode')} />
           {preview && (
             <span className="expr-result" title={preview}>
               {preview}

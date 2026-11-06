@@ -11,6 +11,7 @@ import { friendlyName } from '../../core/keycodes/friendly';
 import { keycodeNeeds, needStatus } from '../../core/keycodes/requirements';
 import { FEATURE_BY_ID, type FeatureState } from '../../core/features/registry';
 import { catalogContext, useLabelContext, useParseContext } from '../../lib/projectContext';
+import { keycodeInput } from '../../lib/inputRewrite';
 import { hardwareFacts } from '../../lib/hardwareFacts';
 import { assignToSelection } from '../../lib/keymapActions';
 import { useDeviceStore } from '../../store/deviceStore';
@@ -126,7 +127,7 @@ export function KeycodePicker({ currentKeycode, onPick }: { currentKeycode: numb
           >
             <input
               value={expr}
-              onChange={(e) => setExpr(e.target.value)}
+              onChange={(e) => setExpr(keycodeInput(e.target, spec, parseCtx))}
               placeholder={t('any QMK expression: LT(1, KC_SPC), C(KC_C), 0x7C00 — Enter', 'любое выражение QMK: LT(1, KC_SPC), C(KC_C), 0x7C00 — Enter')}
               aria-label={t('QMK expression', 'Выражение QMK')}
               spellCheck={false}

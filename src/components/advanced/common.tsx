@@ -18,6 +18,7 @@ import { whyDisabled } from '../../lib/whyDisabled';
 import type { CustomAction, Project } from '../../core/project/types';
 import { hardwareFacts } from '../../lib/hardwareFacts';
 import { useLabelContext, useParseContext } from '../../lib/projectContext';
+import { keycodeInput } from '../../lib/inputRewrite';
 import { href } from '../../lib/router';
 import { useSpec } from '../../store/projectStore';
 import { getLanguage, t } from '../../i18n';
@@ -74,7 +75,7 @@ export function KeycodeField({
           aria-label={label}
           spellCheck={false}
           title={name && value ? `${name.text}\n${name.qmk}` : undefined}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => setText(keycodeInput(e.target, spec, parseCtx))}
           onBlur={() => commit()}
         />
         {preview && (
@@ -258,7 +259,7 @@ export function KeyChips({
           aria-label={label}
           spellCheck={false}
           {...whyDisabled(full, error ?? undefined)}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => setText(keycodeInput(e.target, spec, parseCtx))}
           onBlur={add}
         />
         {preview && (
