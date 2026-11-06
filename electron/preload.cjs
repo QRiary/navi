@@ -88,6 +88,7 @@ contextBridge.exposeInMainWorld('navi', {
     scan: invoke('navi:flash:scan'),
     checkUf2: invoke('navi:flash:check-uf2'),
     backupUf2: invoke('navi:flash:backup-uf2'),
+    importBackup: invoke('navi:flash:import-backup'),
     uf2: invoke('navi:flash:uf2'),
     qmk: invoke('navi:flash:qmk'),
     cancel: invoke('navi:flash:cancel'),

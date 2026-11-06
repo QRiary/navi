@@ -270,6 +270,8 @@ export interface NaviBridge {
     checkUf2(firmwareId: string, driveRoot: string): Promise<Uf2Check>;
     /** Save the board's current firmware (CURRENT.UF2 from the bootloader drive) to the archive. */
     backupUf2(driveRoot: string): Promise<FirmwareInfo>;
+    /** Add a copy saved by picotool (a .uf2 picked in a dialog) as the backup of the board on this drive; null = cancelled. */
+    importBackup(driveRoot: string): Promise<FirmwareInfo | null>;
     uf2(firmwareId: string, driveRoot: string, opts?: { allowUnverified?: boolean }): Promise<{ copied: boolean; copyError: string | null; driveGone: boolean; bytes: number }>;
     qmk(settings: QmkSettings, firmwareId: string, bootloader?: string): Promise<{ job: number; code: number | null; output: string }>;
     cancel(job: number): Promise<boolean>;

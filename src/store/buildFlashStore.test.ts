@@ -194,13 +194,38 @@ describe('build + flash', () => {
     expect(toasts.useToastStore.getState().toasts.some((t) => t.tone === 'error')).toBe(false);
   });
 
-  it('a bootloader without CURRENT.UF2 (the RP2040 ROM): nothing to save, flashes', async () => {
+  it('a bootloader without CURRENT.UF2 (the RP2040 ROM) and no backup: stops before flashing, says how to save one', async () => {
     setup({ disk: 'navi' });
     qmkStore.useQmkStore.setState({ firmware: [] });
+    scans = [{ ...empty(), uf2Drives: [{ ...drive, current: false }] }];
+    await runToEnd();
+    expect(calls).toEqual(['compile']);
+    expect(toasts.useToastStore.getState().toasts.some((t) => t.tone === 'error' && /picotool/.test(t.message))).toBe(true);
+  });
+
+  it('no CURRENT.UF2 but a picotool copy added as the backup: flashes', async () => {
+    setup({ disk: 'navi' });
+    qmkStore.useQmkStore.setState({ firmware: [{ id: 'pt', file: 'backup-left.uf2', source: 'backup', boardId: 'RPI-RP2' }] as never });
     scans = [{ ...empty(), uf2Drives: [{ ...drive, current: false }] }, keyboardBack()];
     await runToEnd();
     expect(calls).toEqual(['compile', 'uf2']);
     expect(toasts.useToastStore.getState().toasts.some((t) => t.tone === 'error')).toBe(false);
+  });
+
+  it('no CURRENT.UF2, no backup, but the user once chose “flash anyway” for this board type: flashes', async () => {
+    const saved = new Map<string, string>();
+    vi.stubGlobal('localStorage', { getItem: (k: string) => saved.get(k) ?? null, setItem: (k: string, v: string) => void saved.set(k, v) });
+    try {
+      const { acceptNoBackup } = await import('../lib/flashSteps');
+      acceptNoBackup('RPI-RP2');
+      setup({ disk: 'navi' });
+      qmkStore.useQmkStore.setState({ firmware: [] });
+      scans = [{ ...empty(), uf2Drives: [{ ...drive, current: false }] }, keyboardBack()];
+      await runToEnd();
+      expect(calls).toEqual(['compile', 'uf2']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('a failed CURRENT.UF2 save stops before flashing', async () => {

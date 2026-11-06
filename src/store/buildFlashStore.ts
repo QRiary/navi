@@ -13,7 +13,7 @@ import { sendRawPacket } from '../device/rawHid';
 import { t } from '../i18n';
 import { generateFiles } from '../lib/firmwareFiles';
 import { testsBlocker, testsResultDetail, testsResultSentence } from '../lib/firmwareTests';
-import { expectedUsb, inBootloader, pickFlashTarget, planKeymapWrite, waitForKeyboardBack, type KeymapWritePlan } from '../lib/flashSteps';
+import { expectedUsb, hasBoardBackup, inBootloader, noBackupAccepted, pickFlashTarget, planKeymapWrite, waitForKeyboardBack, type KeymapWritePlan } from '../lib/flashSteps';
 import { navigate } from '../lib/router';
 import { useDeviceStore } from './deviceStore';
 import { isDirty, saveProject, useProjectStore } from './projectStore';
@@ -183,9 +183,21 @@ export const useBuildFlashStore = create<BuildFlashState>()((set, get) => {
     if (target.kind === 'uf2') {
       const { drive } = target;
       await qmk().refreshFirmware();
+      // A bootloader that shows no CURRENT.UF2 (the RP2040 / RP2350 ROM) can't save the current firmware. Without a
+      // backup in the archive (a picotool copy added on Firmware → flash), the first flash is never done silently:
+      // it may be a seller's firmware with no source. Firmware → flash asks once (“flash anyway”); after that, not here.
+      if (!drive.current && !hasBoardBackup(qmk().firmware, drive.boardId) && !noBackupAccepted(drive.boardId)) {
+        stopWith(
+          t(
+            'Nothing was flashed: this board’s current firmware isn’t saved, and its bootloader can’t save it (no CURRENT.UF2). If it may be a seller’s firmware you’d want back, save every half with picotool (picotool save -a half.uf2) and add the copies on Firmware → flash (“add a saved copy…”). If you don’t need it, flash once on Firmware → flash; after that “build + flash” won’t ask. To leave the bootloader, unplug the half and plug it back in.',
+            'Ничего не прошито: текущая прошивка этой платы не сохранена, а её загрузчик сохранить её не умеет (нет CURRENT.UF2). Если это может быть прошивка продавца, которую захочется вернуть, сохраните каждую половину программой picotool (picotool save -a half.uf2) и добавьте копии во вкладке «Прошивка → прошить» («добавить сохранённую копию…»). Если она не нужна, прошейте один раз во вкладке «Прошивка → прошить» — после этого «Собрать и прошить» спрашивать не будет. Чтобы выйти из загрузчика, отключите половину и подключите снова.',
+          ),
+          { tab: 'flash' },
+        );
+      }
       // No CURRENT.UF2 of this board in the archive yet: save it now (read-only for the board), before anything is
-      // written. A bootloader that doesn't show one (the RP2040 ROM) can't be read this way: nothing to save.
-      if (drive.current && !qmk().firmware.some((f) => f.source === 'backup' && f.boardId === drive.boardId)) {
+      // written.
+      if (drive.current && !hasBoardBackup(qmk().firmware, drive.boardId)) {
         phase('backing-up');
         try {
           await navi.flash.backupUf2(drive.root);
