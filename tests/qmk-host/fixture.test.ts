@@ -82,7 +82,12 @@ export function hostProject(): Project {
     td(11, 23, { tap: ctrlLayerStandIn, hold: altStandIn }),
     // Not on the keymap: only the result of the combo on 9 + 29
     { id: 'td-12', index: 12, name: 'TD_H12', tap: q('C(KC_C)'), hold: q('KC_LSFT'), doubleTap: 0, tapHold: 0 },
+    // On layer 3 (TG(3) at 19 on layer 1): a double tap turns layer 3 off; 6 is KC_NO there, LCTL_T(KC_D) below
+    { id: 'td-13', index: 13, name: 'TD_H13', tap: q('KC_T'), hold: 0, doubleTap: q('TG(3)'), tapHold: 0 },
   ];
+  put(1, 19, q('TG(3)'));
+  put(3, 10, q('TD(13)'));
+  put(3, 6, q('KC_NO'));
   put(0, 13, q('KC_N'));
   put(1, 13, q('KC_A'));
   put(1, 14, q('KC_B'));

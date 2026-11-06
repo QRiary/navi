@@ -510,10 +510,10 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const quickTap = tapHold.quick.length > 0;
   const holdPress = tapHold.holdPress.length > 0;
   const permissive = tapHold.permissive.length > 0;
-  const preProcess = holdKeys || replay || comboRefs;
+  const preProcess = holdKeys || replay || comboRefs || hasTd;
   const interrupters = holdKeys && anyHoldsOn(tracked);
   c.push(...keyListsCode(tapHold.lists));
-  if (preProcess) c.push(...preProcessHook(hookName('pre_process_record_user'), { lastPressed: holdKeys, replay, interrupters, comboLayer: comboRefs, comboEvents }));
+  if (preProcess) c.push(...preProcessHook(hookName('pre_process_record_user'), { lastPressed: holdKeys, replay, interrupters, comboLayer: comboRefs, comboEvents, tapDance: hasTd }));
   if (comboEvents) {
     const played = qmkComboList.map((q) => ({ result: kc(q.combo.result), keys: q.combo.keys, name: q.name }));
     c.push(...comboEventCode(hookName('process_combo_event'), played, { lastPressed: holdKeys, interrupters }));
@@ -897,8 +897,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
         hook: 'pre_process_record_user',
         call: 'return pre_process_record_navi(keycode, record);',
         why: {
-          en: [(holdKeys || replay) && 'tap-hold keys set to hold when another key is pressed need the real order of key presses', comboRefs && 'combo reference layers need the layer of each pressed key'].filter(Boolean).join('; '),
-          ru: [(holdKeys || replay) && 'тап-холд клавишам, которые удерживаются при нажатии другой клавиши, нужен настоящий порядок нажатий', comboRefs && 'опорным слоям комбо нужен слой каждой нажатой клавиши'].filter(Boolean).join('; '),
+          en: [hasTd && 'a key that ends a tap dance must act on the layers the dance leaves on (a mod-tap would hold instead of tap)', (holdKeys || replay) && 'tap-hold keys set to hold when another key is pressed need the real order of key presses', comboRefs && 'combo reference layers need the layer of each pressed key'].filter(Boolean).join('; '),
+          ru: [hasTd && 'клавиша, завершившая tap dance, должна работать на слоях, оставленных им (иначе мод-тап удержится вместо нажатия)', (holdKeys || replay) && 'тап-холд клавишам, которые удерживаются при нажатии другой клавиши, нужен настоящий порядок нажатий', comboRefs && 'опорным слоям комбо нужен слой каждой нажатой клавиши'].filter(Boolean).join('; '),
         },
       },
       { hook: 'get_combo_term', call: 'return get_combo_term_navi(combo_index, combo);', why: { en: 'COMBO_TERM_PER_COMBO is on — without it the build fails', ru: 'включён COMBO_TERM_PER_COMBO — без неё сборка не пройдёт' } },
