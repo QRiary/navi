@@ -267,6 +267,25 @@ TEST_F(NaviHost, combo_slots_dance_tapped_on_the_layer_of_the_key_at_0_0) {
     EXPECT_EQ(play({"+0", "wait", "+9", "+29", "-9", "-29", "-0", "+32", "-32"}), "LCTL LCTL+C LCTL - Q -");
 }
 
+// The user's C (post_process_record_user in the own lines) sees the dance's C(KC_C) as the combo's: a COMBO_EVENT at
+// the position QMK gave the combo, not the key at matrix 0, 0. A dance on a real key plays at that key.
+extern "C" uint8_t host_probe_type, host_probe_row, host_probe_col;
+TEST_F(NaviHost, combo_slots_dance_plays_its_key_as_a_combo_event) {
+    host_probe_type = host_probe_row = host_probe_col = 0xFF;
+    EXPECT_EQ(play({"+9", "+29", "-9", "-29"}), "LCTL LCTL+C LCTL -");
+    EXPECT_EQ(host_probe_type, COMBO_EVENT);
+    EXPECT_EQ(host_probe_row, 0);
+    EXPECT_EQ(host_probe_col, 0);
+}
+
+TEST_F(NaviHost, dance_on_a_key_plays_its_key_as_a_key_event_at_that_key) {
+    host_probe_type = host_probe_row = host_probe_col = 0xFF;
+    EXPECT_EQ(play({"+10", "-10"}), "LCTL LCTL+C LCTL -");
+    EXPECT_EQ(host_probe_type, KEY_EVENT);
+    EXPECT_EQ(host_probe_row, 1);
+    EXPECT_EQ(host_probe_col, 0);
+}
+
 TEST_F(NaviHost, key_at_0_0_taps_normally_after_a_combo_slots_dance_hold) {
     EXPECT_EQ(play({"+9", "+29", "wait", "wait", "-9", "-29", "+0", "-0"}), "LSFT - 0x2C -");
 }

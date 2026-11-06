@@ -112,8 +112,15 @@ export function hostProject(): Project {
       ],
       custom: {
         'keymap.c': [
+          '// What the user\'s C sees of the C(KC_C) the tap dances play: its event type and position.',
+          'uint8_t host_probe_type = 0xFF, host_probe_row = 0xFF, host_probe_col = 0xFF;',
           'void post_process_record_user(uint16_t keycode, keyrecord_t *record) {',
           '    if (keycode == HOST_KEY && record->event.pressed) tap_code(KC_Z);',
+          '    if (keycode == C(KC_C) && record->event.pressed) {',
+          '        host_probe_type = record->event.type;',
+          '        host_probe_row  = record->event.key.row;',
+          '        host_probe_col  = record->event.key.col;',
+          '    }',
           '}',
           'void host_each(tap_dance_state_t *state, void *user_data) {',
           '    if (state->count == 2) tap_code(KC_X);',

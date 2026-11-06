@@ -590,9 +590,10 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     if (layersOnTop) c.push('    navi_layer_keys(keycode, record); // layer keys bring their layer to the top');
     if (tdC.keys) {
       c.push(
-        '    // Tap dances play their keys at the dance key\'s position (QMK runs the dance after this hook).',
+        '    // Tap dances play their keys as the dance key\'s event: its position, and COMBO_EVENT for a combo\'s',
+        '    // (QMK runs the dance after this hook).',
         '    if (IS_QK_TAP_DANCE(keycode) && record->event.pressed && QK_TAP_DANCE_GET_INDEX(keycode) < ARRAY_SIZE(navi_td_keys)) {',
-        '        navi_td_keys[QK_TAP_DANCE_GET_INDEX(keycode)] = record->event.key;',
+        '        navi_td_keys[QK_TAP_DANCE_GET_INDEX(keycode)] = record->event;',
         '    }',
       );
     }
