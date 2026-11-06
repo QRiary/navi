@@ -21,7 +21,7 @@ export interface CustomIssue {
 const msg = (en: string, ru: string) => ({ en, ru });
 
 /** Functions and arrays the generator may create: a second definition will not compile. */
-export const GENERATED_SYMBOLS = ['keymaps', 'encoder_map', 'tap_dance_actions', 'key_combos', 'key_overrides', 'process_record_user', 'get_tapping_term', 'get_combo_term', 'combo_should_trigger', 'layer_state_set_user', 'navi_layers_on', 'navi_layer_off'] as const;
+export const GENERATED_SYMBOLS = ['keymaps', 'encoder_map', 'tap_dance_actions', 'key_combos', 'key_overrides', 'process_record_user', 'get_tapping_term', 'get_combo_term', 'combo_should_trigger', 'layer_state_set_user', 'navi_layers_on', 'navi_layer_off', 'leader_end_user', 'unicode_map'] as const;
 
 /**
  * “Own pipeline” mode: NAVI's hooks get a _navi suffix (the user's code defines the QMK hook and calls them).
@@ -143,6 +143,12 @@ export function allowedMakeVar(name: string): boolean {
   return MAKE_VAR_RE.test(name) || MAKE_VAR_EXTRA.has(name);
 }
 
+/**
+ * The one include allowed in rules.mk: own pipeline's navi_rules.mk from the folder of the makefile being read.
+ * It pulls in only the file next to it, which goes through the same check. Copy in electron/safety.cjs.
+ */
+export const NAVI_RULES_INCLUDE_RE = /^include\s+\$\(dir\s+\$\(lastword\s+\$\(MAKEFILE_LIST\)\)\)navi_rules\.mk$/;
+
 /** Paths in SRC: .c files inside the keymap folder. */
 function safeSourcePath(tok: string): boolean {
   return /^[A-Za-z0-9_][A-Za-z0-9_./-]*\.c$/.test(tok) && !tok.split('/').includes('..');
@@ -157,7 +163,7 @@ function checkRules(text: string): CustomIssue[] {
       return;
     }
     const code = raw.replace(/#.*/, '').trim();
-    if (!code) return;
+    if (!code || NAVI_RULES_INCLUDE_RE.test(code)) return;
     if (/[$`]/.test(code)) {
       issues.push({ line, level: 'error', message: msg('“$(…)” and backticks are not allowed: make can run commands through them.', '«$(…)» и обратные кавычки запрещены: через них make может выполнить команды.') });
       return;
