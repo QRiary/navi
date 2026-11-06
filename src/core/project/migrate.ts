@@ -6,6 +6,7 @@
  *  3) add a test with an old file (project.test.ts).
  * Files NEWER than the app do not open (so unknown fields are not lost).
  */
+import { AUTO_REPEAT_DEFAULT } from './factory';
 import { PROJECT_SCHEMA_VERSION } from './types';
 
 type Data = Record<string, unknown>;
@@ -50,6 +51,12 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
         })
       : d.tapHolds,
   }),
+  // 11 → 12: auto repeat delay and rate (firmware.autoRepeat), the default for older files; macro / custom keycode `repeat` is optional.
+  11: (d) => {
+    const f = d.firmware;
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 12 }; // validate reports it
+    return { ...d, schemaVersion: 12, firmware: { ...(f as Data), autoRepeat: { ...AUTO_REPEAT_DEFAULT } } };
+  },
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {

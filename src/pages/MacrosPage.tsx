@@ -177,6 +177,20 @@ export function MacrosPage() {
               onChange={(e) => update((m) => ({ ...m, name: e.target.value }), t('macro name', 'имя макроса'), `mname:${selected}`)}
               aria-label={t('Macro name', 'Имя макроса')}
             />
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={macro.repeat === true}
+                onChange={(e) => update((x) => ({ ...x, repeat: e.target.checked ? true : undefined }), t('macro repeat', 'повтор макроса'))}
+              />
+              {t('Repeat while held', 'Повтор при удержании')}
+              <InfoTip label={t('Repeat while held', 'Повтор при удержании')}>
+                {t(
+                  'Held, the macro runs again after the delay, then at the rate set in Advanced → NAVI additions, until you let go. Only the key pressed last repeats. Works in firmware NAVI builds (Firmware page).',
+                  'Пока клавиша удерживается, макрос запускается снова после задержки, затем с частотой из Дополнительно → Дополнения NAVI, пока вы не отпустите. Повторяется только клавиша, нажатая последней. Работает в прошивках, собранных NAVI (страница «Прошивка»).',
+                )}
+              </InfoTip>
+            </label>
             <button
               className="btn"
               onClick={() => {

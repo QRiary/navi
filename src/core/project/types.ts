@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 11;
+export const PROJECT_SCHEMA_VERSION = 12;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -208,6 +208,8 @@ export interface Macro {
   index: number;
   name: string;
   steps: MacroStep[];
+  /** Repeat while held (firmware.autoRepeat sets the delay and rate). */
+  repeat?: boolean;
 }
 
 /**
@@ -306,6 +308,8 @@ export interface CustomKeycode {
   name: string;
   description: string;
   action: CustomAction;
+  /** Repeat while held; works only with an action (a ticked keycode with action none is kept but ignored). */
+  repeat?: boolean;
 }
 
 /**
@@ -423,6 +427,11 @@ export interface FirmwareConfig {
    * is hidden while it is on. NAVI's own setting (generated layer_state_set_user / layer_state_set_navi), not a define.
    */
   layerKeysOnTop: boolean;
+  /**
+   * Auto repeat of keys ticked “repeat while held” (macros, custom keycodes): ms before the first repeat and ms between
+   * repeats. NAVI's own C code in keymap.c, not a define.
+   */
+  autoRepeat: { delay: number; rate: number };
 }
 
 // ── Project ───────────────────────────────────────────────────────────

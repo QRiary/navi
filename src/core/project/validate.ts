@@ -11,6 +11,7 @@ import { allowedMakeVar, checkCustom, CUSTOM_FILES, CUSTOM_MAX, MAKE_VALUE_RE, P
 import { ALIAS_LABEL_MAX, KEY_ALIASES_MAX } from './aliases';
 import { HOLD_ON_KEYS_MAX, KEY_LIST_KEYS_MAX, KEY_LIST_NAME_MAX, KEY_LISTS_MAX, TAP_HOLD_FLAVORS, TAP_HOLD_KEYCODES_MAX, TAP_HOLD_MAX, TAP_HOLD_TERM_MAX, TAP_HOLD_TERM_MIN } from './tapHolds';
 import { TAP_HOLD_ACTIONS_MAX } from './tapHoldActions';
+import { AUTO_REPEAT_DEFAULT, AUTO_REPEAT_LIMITS } from './factory';
 import { migrateProject } from './migrate';
 import {
   PROJECT_FORMAT,
@@ -528,6 +529,7 @@ function readFirmware(r: Reader, v: unknown): FirmwareConfig {
     }
   }
   const po = o.pipeline === undefined ? null : r.obj(o.pipeline, 'firmware.pipeline');
+  const ar = o.autoRepeat && typeof o.autoRepeat === 'object' && !Array.isArray(o.autoRepeat) ? (o.autoRepeat as Record<string, unknown>) : {};
   let pipeline: FirmwareConfig['pipeline'];
   if (po) {
     const headers: string[] = [];
@@ -543,6 +545,10 @@ function readFirmware(r: Reader, v: unknown): FirmwareConfig {
     customReview: custom && o.customReview === true ? true : undefined,
     pipeline,
     layerKeysOnTop: r.bool(o.layerKeysOnTop ?? false, 'firmware.layerKeysOnTop', false),
+    autoRepeat: {
+      delay: r.num(ar.delay, 'firmware.autoRepeat.delay', AUTO_REPEAT_LIMITS.delay.min, AUTO_REPEAT_LIMITS.delay.max, AUTO_REPEAT_DEFAULT.delay),
+      rate: r.num(ar.rate, 'firmware.autoRepeat.rate', AUTO_REPEAT_LIMITS.rate.min, AUTO_REPEAT_LIMITS.rate.max, AUTO_REPEAT_DEFAULT.rate),
+    },
     keyboard: keyboard || null,
     keymap,
     keycodeSpec,
@@ -587,6 +593,7 @@ export function validateProject(input: unknown): { project: Project | null; issu
         .arr(mo.steps, `macros[${i}].steps`, LIMITS.maxMacroSteps)
         .map((s, j) => readMacroStep(r, s, `macros[${i}].steps[${j}]`))
         .filter((s): s is MacroStep => s !== null),
+      ...(mo.repeat === true ? { repeat: true } : {}),
     };
   });
   const tapDances: TapDance[] = r.arr(o.tapDances, 'tapDances', LIMITS.maxTapDances).map((t, i) => {
@@ -649,7 +656,7 @@ export function validateProject(input: unknown): { project: Project | null; issu
         : ao.type === 'tap'
           ? { type: 'tap' as const, keycode: r.keycode(ao.keycode, `${p}.action.keycode`) }
           : { type: 'none' as const };
-    return { id: r.id(co.id, `${p}.id`, 'ck'), name, description: r.str(co.description, `${p}.description`, '', 300), action };
+    return { id: r.id(co.id, `${p}.id`, 'ck'), name, description: r.str(co.description, `${p}.description`, '', 300), action, ...(co.repeat === true ? { repeat: true } : {}) };
   });
   const keyAliases: KeyAlias[] = r.arr(o.keyAliases ?? [], 'keyAliases', KEY_ALIASES_MAX).map((a, i) => {
     const p = `keyAliases[${i}]`;
