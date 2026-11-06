@@ -6,6 +6,7 @@ import { Square } from 'lucide-react';
 import { lineLevel, parseBuildLog } from '../../core/qmk/buildLog';
 import { useQmkStore } from '../../store/qmkStore';
 import { t } from '../../i18n';
+import { issueLevelLabel } from '../../lib/issueLevel';
 
 export function BuildLog() {
   const log = useQmkStore((s) => s.log);
@@ -46,7 +47,7 @@ export function BuildLog() {
             .slice(0, 30)
             .map((m, i) => (
               <li key={i} className={`issue issue--${m.level === 'error' ? 'error' : 'warning'}`}>
-                <span className="issue-where">{m.file ? `${m.file.split('/').pop()}:${m.line}${m.column ? `:${m.column}` : ''}` : m.level}</span>
+                <span className="issue-where">{m.file ? `${m.file.split('/').pop()}:${m.line}${m.column ? `:${m.column}` : ''}` : issueLevelLabel(m.level)}</span>
                 <button className="text-btn" style={{ textAlign: 'left' }} onClick={() => jump(m.at)}>
                   {m.text}
                 </button>

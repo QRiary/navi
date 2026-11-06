@@ -17,6 +17,17 @@ describe('computeThemeVariables', () => {
     expect(vars['--text-primary']).toBe(THEME_PRESETS[0].palette.text);
   });
 
+  it('key colors follow cell and border unless set', () => {
+    const follow = computeThemeVariables(withSettings({ colors: { cell: '#111111', border: '#222222' } }));
+    expect(follow['--key-background']).toBe('#111111');
+    expect(follow['--key-border']).toBe('#222222');
+    expect(follow['--card-background']).toBe('#111111');
+    const own = computeThemeVariables(withSettings({ colors: { cell: '#111111', card: '#555555', key: '#333333', keyBorder: '#444444' } }));
+    expect(own['--card-background']).toBe('#555555');
+    expect(own['--key-background']).toBe('#333333');
+    expect(own['--key-border']).toBe('#444444');
+  });
+
   it('meters are a gradient of two colors', () => {
     const vars = computeThemeVariables(withSettings({ colors: { meterFrom: '#000001', meterTo: '#000002' } }));
     expect(vars['--meter-gradient']).toBe('linear-gradient(90deg, #000001, #000002)');

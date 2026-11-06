@@ -4,8 +4,10 @@
  * (“Bksp”, “MO 1”, “A / Ctrl”), and the full QMK name and description in the tooltip and the inspector.
  * Short labels are styling; if there is no label in the table, the label from the QMK spec is used.
  */
-import { decode, preferredName, toQmk, type CodecOptions, type Decoded } from './codec';
+import { decode, modsToConstExpr, preferredName, toQmk, type CodecOptions, type Decoded } from './codec';
 import { loadLanguage, type KeycodeSpec } from './spec';
+import type { HoldAction } from '../project/types';
+import { t } from '../../i18n';
 
 export type HostOs = 'windows' | 'macos' | 'linux';
 
@@ -14,11 +16,19 @@ export interface LabelContext extends CodecOptions {
   /** Computer layout for the second label: 'russian' → KC_Q also shows the Cyrillic letter. */
   hostLanguage?: string;
   layerName?: (layer: number) => string | undefined;
+  /** The layer's full name for readable text (`layerName` is only the short ones that fit on a key). */
+  layerTitle?: (layer: number) => string | undefined;
   tapDanceName?: (index: number) => string | undefined;
   macroName?: (index: number) => string | undefined;
   customName?: (value: number) => string | undefined;
+  /** The language this value is a key of (switch to / toggle); `customName` still gives its C name (NAVI_TO_RU). */
+  languageKey?: (value: number) => { name: string; code: string; toggle: boolean } | undefined;
+  /** The project's key alias of this value (label on the key, C name for the tooltip). */
+  alias?: (value: number) => { label: string; cName: string } | undefined;
   /** Code point of the unicode map entry (UM/UP), if there is one. */
   unicodeEntry?: (index: number) => number | undefined;
+  /** The slots of a tap-hold key with actions, when the value is its stand-in (project tapHoldActions). */
+  tapHoldAction?: (value: number) => { tap: number; hold: HoldAction } | undefined;
 }
 
 export type LabelKind =
@@ -248,14 +258,49 @@ function kindOfGroup(group: string | undefined): LabelKind {
   }
 }
 
-/** Label for a key on the drawing. */
+/** “→” switches to a language, “⇄” toggles it. */
+export const languageArrow = (toggle: boolean) => (toggle ? '⇄' : '→');
+
+/** Readable name of a language key: “→ Russian” / “⇄ Russian”. */
+export const languageKeyName = (k: { name: string; code: string; toggle: boolean }) => `${languageArrow(k.toggle)} ${k.name || k.code}`;
+
+function languageKeyTitle(k: { name: string; code: string; toggle: boolean }): string {
+  const name = k.name || k.code;
+  return k.toggle
+    ? t(`Toggle ${name} (back to the first plain-keys language when it is already on)`, `Переключить ${name} (если он уже включён, вернуться к первому языку с обычными клавишами)`)
+    : t(`Switch to ${name}`, `Переключиться на ${name}`);
+}
+
+/** Label for a key on the drawing. An alias replaces the large label; the hold part and the kind stay. */
 export function keyLabel(spec: KeycodeSpec, value: number, ctx: LabelContext = {}): KeyLabel {
+  const label = plainLabel(spec, value, ctx);
+  const alias = ctx.alias?.(value & 0xffff);
+  if (!alias) return label;
+  // The small top label (a “Ctrl+” prefix, the second layout's letter) would describe the key, not the alias: dropped.
+  return { ...label, main: alias.label, top: undefined, description: `${alias.cName}${label.description ? ` — ${label.description}` : ''}` };
+}
+
+function plainLabel(spec: KeycodeSpec, value: number, ctx: LabelContext): KeyLabel {
   const v = value & 0xffff;
   const qmk = toQmk(spec, v, { layerName: ctx.layerName, tapDanceName: ctx.tapDanceName, customName: ctx.customName }, ctx);
+  const lk = ctx.languageKey?.(v);
+  if (lk) return { main: `${languageArrow(lk.toggle)}${lk.code.toUpperCase()}`, kind: 'custom', qmk, description: languageKeyTitle(lk) };
   const custom = ctx.customName?.(v);
   if (custom) return { main: custom.replace(/_/g, ' '), kind: 'custom', qmk };
-  const d: Decoded = decode(spec, v, ctx);
   const layer = (n: number) => ctx.layerName?.(n) ?? String(n);
+  const th = ctx.tapHoldAction?.(v);
+  if (th) {
+    // A stand-in MT / LT: the key shows its real slots; qmk stays the stand-in value (it parses back).
+    const inner = { ...ctx, tapHoldAction: undefined };
+    const tap = plainLabel(spec, th.tap, inner);
+    const h = th.hold;
+    const mods = h.type === 'key' ? 0 : h.mods;
+    const holdKey = h.type === 'key' ? plainLabel(spec, h.keycode, inner) : null;
+    const hold = holdKey ? holdKey.main : h.type === 'layer' ? `L${layer(h.layer)}${mods ? `+${modsLabel(mods, ctx.os)}` : ''}` : modsLabel(mods, ctx.os);
+    const holdQmk = holdKey ? holdKey.qmk : h.type === 'layer' ? `layer ${h.layer}${mods ? ` + ${modsToConstExpr(mods)}` : ''}` : modsToConstExpr(mods);
+    return { main: tap.main, top: tap.top, hold, kind: h.type === 'layer' ? 'layer-tap' : 'mod-tap', qmk, description: `tap: ${th.tap === 0 ? 'KC_NO' : tap.qmk} · hold: ${holdQmk}` };
+  }
+  const d: Decoded = decode(spec, v, ctx);
   switch (d.kind) {
     case 'basic': {
       if (v === 0) return { main: '', kind: 'none', qmk, description: 'KC_NO' };

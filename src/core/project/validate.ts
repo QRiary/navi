@@ -8,6 +8,11 @@ import { FEATURE_BY_ID, type FeatureId, type FlagInfo } from '../features/regist
 import { listSpecVersions } from '../keycodes/spec';
 import { newId } from '../layout/geometry';
 import { allowedMakeVar, checkCustom, CUSTOM_FILES, CUSTOM_MAX, MAKE_VALUE_RE, PIPELINE_MAX_HEADERS, safeHeaderName, unsafeDefineValue, validCIdentifier } from '../qmk/customCode';
+import { ALIAS_LABEL_MAX, KEY_ALIASES_MAX } from './aliases';
+import { HOLD_ON_KEYS_MAX, KEY_LIST_KEYS_MAX, KEY_LIST_NAME_MAX, KEY_LISTS_MAX, TAP_HOLD_FLAVORS, TAP_HOLD_KEYCODES_MAX, TAP_HOLD_MAX, TAP_HOLD_TERM_MAX, TAP_HOLD_TERM_MIN } from './tapHolds';
+import { TAP_HOLD_ACTIONS_MAX } from './tapHoldActions';
+import { AUTO_REPEAT_DEFAULT, AUTO_REPEAT_LIMITS, TEXT_ROUTE_DEFAULT } from './factory';
+import { LANGUAGE_CODE_RE, LANGUAGE_NAME_MAX, LANGUAGES_MAX } from './languages';
 import { migrateProject } from './migrate';
 import {
   PROJECT_FORMAT,
@@ -16,6 +21,14 @@ import {
   type ControlGeom,
   type CustomAction,
   type CustomKeycode,
+  type KeyAlias,
+  type TapHoldSetting,
+  type KeyList,
+  type Language,
+  type LanguageHoldKeys,
+  TEXT_ROUTES,
+  type HoldAction,
+  type TapHoldAction,
   type LeaderSequence,
   type UnicodeEntry,
   type EncoderGeom,
@@ -35,6 +48,11 @@ import {
   type PinDefinition,
   type Project,
   type TapDance,
+  type TapDanceOwnC,
+  type TapDanceStep,
+  TAP_DANCE_KINDS,
+  TAP_DANCE_MAX_STEPS,
+  TAP_DANCE_VARIANTS,
 } from './types';
 
 export interface ValidationIssue {
@@ -345,16 +363,26 @@ function readKeymap(r: Reader, v: unknown, path: string, rows: number, cols: num
       else if (cNames.has(lo.cName)) r.warn(`${p}.cName`, `layer C name “${lo.cName}” is used by another layer — ignored`);
       else cNames.add((cName = lo.cName));
     }
+    // Combo reference layer: 'self' or a layer number (checked against the layer count below).
+    const comboRef = lo.comboRef === undefined ? undefined : lo.comboRef === 'self' ? ('self' as const) : r.num(lo.comboRef, `${p}.comboRef`, 0, LIMITS.maxLayers - 1, 0);
     return {
       id: r.id(lo.id, `${p}.id`, 'layer'),
       name: r.str(lo.name, `${p}.name`, `Layer ${i}`, 40),
       ...(cName ? { cName } : {}),
+      ...(comboRef !== undefined ? { comboRef } : {}),
+      ...(lo.typing === undefined ? {} : { typing: r.bool(lo.typing, `${p}.typing`, false) }),
       color: color && HEX_COLOR.test(color) ? color : undefined,
       keys,
       encoders,
     };
   });
   if (layers.length === 0) r.error(`${path}.layers`, 'a keymap needs at least one layer');
+  layers.forEach((l, i) => {
+    if (typeof l.comboRef === 'number' && l.comboRef >= layers.length) {
+      r.warn(`${path}.layers[${i}].comboRef`, `combo reference layer ${l.comboRef} does not exist — layer 0 is used`);
+      delete l.comboRef;
+    }
+  });
   return {
     id: r.id(o.id, `${path}.id`, 'keymap'),
     name: r.str(o.name, `${path}.name`, 'keymap'),
@@ -379,6 +407,44 @@ function readMacroStep(r: Reader, v: unknown, path: string): MacroStep | null {
       r.error(`${path}.type`, 'unknown macro step');
       return null;
   }
+}
+
+/** Tap dance kind and its fields (every-tap steps, own C functions); undefined ones stay undefined. */
+function readTapDanceKind(r: Reader, to: Record<string, unknown>, p: string): Pick<TapDance, 'kind' | 'steps' | 'ownC'> {
+  const out: Pick<TapDance, 'kind' | 'steps' | 'ownC'> = {};
+  if (to.kind !== undefined) out.kind = r.oneOf(to.kind, `${p}.kind`, TAP_DANCE_KINDS, 'slots');
+  if (to.steps !== undefined) {
+    const steps = r.arr(to.steps, `${p}.steps`, TAP_DANCE_MAX_STEPS).map((s, i) => {
+      const so = r.obj(s, `${p}.steps[${i}]`);
+      const step: TapDanceStep = {};
+      for (const v of TAP_DANCE_VARIANTS) {
+        if (so[v] === undefined) continue;
+        if (!Array.isArray(so[v])) {
+          r.error(`${p}.steps[${i}].${v}`, 'expected an array of macro steps');
+          continue;
+        }
+        step[v] = r
+          .arr(so[v], `${p}.steps[${i}].${v}`, LIMITS.maxMacroSteps)
+          .map((m, j) => readMacroStep(r, m, `${p}.steps[${i}].${v}[${j}]`))
+          .filter((m): m is MacroStep => m !== null);
+      }
+      return step;
+    });
+    if (Array.isArray(to.steps)) out.steps = steps;
+  }
+  if ((out.kind ?? 'slots') === 'every-tap' && !out.steps?.length) r.error(`${p}.steps`, `an every-tap dance needs 1…${TAP_DANCE_MAX_STEPS} steps`);
+  if (to.ownC !== undefined) {
+    const oo = r.obj(to.ownC, `${p}.ownC`);
+    const ownC: TapDanceOwnC = {};
+    for (const f of ['onEachTap', 'onFinished', 'onReset'] as const) {
+      if (oo[f] === undefined) continue;
+      const name = r.str(oo[f], `${p}.ownC.${f}`, '', 64);
+      if (!validCIdentifier(name)) r.error(`${p}.ownC.${f}`, 'must be a C identifier (not a keyword, up to 64 characters)');
+      else ownC[f] = name;
+    }
+    out.ownC = ownC;
+  }
+  return out;
 }
 
 function readLightingState(r: Reader, v: unknown, path: string): LightingState | null {
@@ -468,6 +534,7 @@ function readFirmware(r: Reader, v: unknown): FirmwareConfig {
     }
   }
   const po = o.pipeline === undefined ? null : r.obj(o.pipeline, 'firmware.pipeline');
+  const ar = o.autoRepeat && typeof o.autoRepeat === 'object' && !Array.isArray(o.autoRepeat) ? (o.autoRepeat as Record<string, unknown>) : {};
   let pipeline: FirmwareConfig['pipeline'];
   if (po) {
     const headers: string[] = [];
@@ -482,6 +549,12 @@ function readFirmware(r: Reader, v: unknown): FirmwareConfig {
     custom,
     customReview: custom && o.customReview === true ? true : undefined,
     pipeline,
+    layerKeysOnTop: r.bool(o.layerKeysOnTop ?? false, 'firmware.layerKeysOnTop', false),
+    autoRepeat: {
+      delay: r.num(ar.delay, 'firmware.autoRepeat.delay', AUTO_REPEAT_LIMITS.delay.min, AUTO_REPEAT_LIMITS.delay.max, AUTO_REPEAT_DEFAULT.delay),
+      rate: r.num(ar.rate, 'firmware.autoRepeat.rate', AUTO_REPEAT_LIMITS.rate.min, AUTO_REPEAT_LIMITS.rate.max, AUTO_REPEAT_DEFAULT.rate),
+    },
+    textRoute: r.oneOf(o.textRoute, 'firmware.textRoute', TEXT_ROUTES, TEXT_ROUTE_DEFAULT),
     keyboard: keyboard || null,
     keymap,
     keycodeSpec,
@@ -526,6 +599,7 @@ export function validateProject(input: unknown): { project: Project | null; issu
         .arr(mo.steps, `macros[${i}].steps`, LIMITS.maxMacroSteps)
         .map((s, j) => readMacroStep(r, s, `macros[${i}].steps[${j}]`))
         .filter((s): s is MacroStep => s !== null),
+      ...(mo.repeat === true ? { repeat: true } : {}),
     };
   });
   const tapDances: TapDance[] = r.arr(o.tapDances, 'tapDances', LIMITS.maxTapDances).map((t, i) => {
@@ -541,6 +615,7 @@ export function validateProject(input: unknown): { project: Project | null; issu
       hold: r.keycode(to.hold, `${p}.hold`),
       doubleTap: r.keycode(to.doubleTap, `${p}.doubleTap`),
       tapHold: r.keycode(to.tapHold, `${p}.tapHold`),
+      ...readTapDanceKind(r, to, p),
       tappingTerm: to.tappingTerm === undefined ? undefined : r.num(to.tappingTerm, `${p}.tappingTerm`, 50, 2000, 200),
     };
   });
@@ -587,7 +662,85 @@ export function validateProject(input: unknown): { project: Project | null; issu
         : ao.type === 'tap'
           ? { type: 'tap' as const, keycode: r.keycode(ao.keycode, `${p}.action.keycode`) }
           : { type: 'none' as const };
-    return { id: r.id(co.id, `${p}.id`, 'ck'), name, description: r.str(co.description, `${p}.description`, '', 300), action };
+    return { id: r.id(co.id, `${p}.id`, 'ck'), name, description: r.str(co.description, `${p}.description`, '', 300), action, ...(co.repeat === true ? { repeat: true } : {}) };
+  });
+  const keyAliases: KeyAlias[] = r.arr(o.keyAliases ?? [], 'keyAliases', KEY_ALIASES_MAX).map((a, i) => {
+    const p = `keyAliases[${i}]`;
+    const ao = r.obj(a, p);
+    return { id: r.id(ao.id, `${p}.id`, 'ka'), label: r.str(ao.label, `${p}.label`, '', ALIAS_LABEL_MAX), keycode: r.keycode(ao.keycode, `${p}.keycode`) };
+  });
+  const optNum = (v: unknown, path: string, min: number, max: number) => (v === undefined || v === null ? undefined : r.num(v, path, min, max, min));
+  const keyLists: KeyList[] = r.arr(o.keyLists ?? [], 'keyLists', KEY_LISTS_MAX).map((x, i) => {
+    const p = `keyLists[${i}]`;
+    const lo = r.obj(x, p);
+    return { id: r.id(lo.id, `${p}.id`, 'kl'), name: r.str(lo.name, `${p}.name`, '', KEY_LIST_NAME_MAX), keys: r.arr(lo.keys ?? [], `${p}.keys`, KEY_LIST_KEYS_MAX).map((k, j) => r.keycode(k, `${p}.keys[${j}]`)) };
+  });
+  const listIds = new Set(keyLists.map((l) => l.id));
+  // Languages: codes are checked again by checkLanguages (repeats, C names); a layer beyond the keymap is dropped there too.
+  const languages: Language[] = r.arr(o.languages ?? [], 'languages', LANGUAGES_MAX).map((x, i) => {
+    const p = `languages[${i}]`;
+    const lo = r.obj(x, p);
+    const code = r.str(lo.code, `${p}.code`, `l${i + 1}`, 16);
+    if (!LANGUAGE_CODE_RE.test(code)) r.error(`${p}.code`, 'code must be lower-case letters and digits, starting with a letter, up to 8 characters');
+    const out: Language = { id: r.id(lo.id, `${p}.id`, 'lang'), name: r.str(lo.name, `${p}.name`, '', LANGUAGE_NAME_MAX), code, plainKeys: r.bool(lo.plainKeys, `${p}.plainKeys`, false) };
+    if (lo.layer !== undefined && lo.layer !== null) out.layer = r.num(lo.layer, `${p}.layer`, 0, LIMITS.maxLayers - 1, 0);
+    if (lo.osShortcut !== undefined && lo.osShortcut !== null) out.osShortcut = r.keycode(lo.osShortcut, `${p}.osShortcut`);
+    return out;
+  });
+  const languageIds = new Set(languages.map((l) => l.id));
+  const tapHolds: TapHoldSetting[] = r.arr(o.tapHolds ?? [], 'tapHolds', TAP_HOLD_MAX).map((x, i) => {
+    const p = `tapHolds[${i}]`;
+    const to = r.obj(x, p);
+    const keycodes = r.arr(to.keycodes ?? [], `${p}.keycodes`, TAP_HOLD_KEYCODES_MAX).map((k, j) => r.keycode(k, `${p}.keycodes[${j}]`));
+    const out: TapHoldSetting = { id: r.id(to.id, `${p}.id`, 'th'), keycodes };
+    if (to.flavor !== undefined && to.flavor !== null) out.flavor = r.oneOf(to.flavor, `${p}.flavor`, TAP_HOLD_FLAVORS, 'tap-preferred');
+    const term = optNum(to.tappingTerm, `${p}.tappingTerm`, TAP_HOLD_TERM_MIN, TAP_HOLD_TERM_MAX);
+    if (term !== undefined) out.tappingTerm = term;
+    const quick = optNum(to.quickTapTerm, `${p}.quickTapTerm`, 0, TAP_HOLD_TERM_MAX);
+    if (quick !== undefined) out.quickTapTerm = quick;
+    if (to.holdOnKeys !== undefined && to.holdOnKeys !== null) out.holdOnKeys = r.arr(to.holdOnKeys, `${p}.holdOnKeys`, HOLD_ON_KEYS_MAX).map((k, j) => r.keycode(k, `${p}.holdOnKeys[${j}]`));
+    if (to.holdOnLists !== undefined && to.holdOnLists !== null) {
+      const ids = r.arr(to.holdOnLists, `${p}.holdOnLists`, KEY_LISTS_MAX).filter((id, j) => {
+        if (typeof id === 'string' && listIds.has(id)) return true;
+        r.warn(`${p}.holdOnLists[${j}]`, 'unknown key list, dropped');
+        return false;
+      }) as string[];
+      if (ids.length) out.holdOnLists = ids;
+    }
+    if (to.holdOnByLanguage !== undefined && to.holdOnByLanguage !== null) {
+      const groups = r.arr(to.holdOnByLanguage, `${p}.holdOnByLanguage`, LANGUAGES_MAX).flatMap((g, j): LanguageHoldKeys[] => {
+        const gp = `${p}.holdOnByLanguage[${j}]`;
+        const go = r.obj(g, gp);
+        if (typeof go.language !== 'string' || !languageIds.has(go.language)) {
+          r.warn(`${gp}.language`, 'unknown language, these hold keys are dropped');
+          return [];
+        }
+        const keys = r.arr(go.keys ?? [], `${gp}.keys`, HOLD_ON_KEYS_MAX).map((k, n) => r.keycode(k, `${gp}.keys[${n}]`));
+        const lists = r.arr(go.lists ?? [], `${gp}.lists`, KEY_LISTS_MAX).filter((id, n) => {
+          if (typeof id === 'string' && listIds.has(id)) return true;
+          r.warn(`${gp}.lists[${n}]`, 'unknown key list, dropped');
+          return false;
+        }) as string[];
+        return [{ language: go.language, keys, ...(lists.length ? { lists } : {}) }];
+      });
+      if (groups.length) out.holdOnByLanguage = groups;
+    }
+    return out;
+  });
+  // Slot rules (no nested tap-hold keys, the stand-in fits its hold) are checked by checkTapHoldActions; the
+  // generator writes only the valid ones.
+  const tapHoldActions: TapHoldAction[] = r.arr(o.tapHoldActions ?? [], 'tapHoldActions', TAP_HOLD_ACTIONS_MAX).map((x, i) => {
+    const p = `tapHoldActions[${i}]`;
+    const ao = r.obj(x, p);
+    const ho = r.obj(ao.hold, `${p}.hold`);
+    const type = r.oneOf(ho.type, `${p}.hold.type`, ['mods', 'layer', 'key'] as const, 'mods');
+    const hold: HoldAction =
+      type === 'mods'
+        ? { type, mods: r.num(ho.mods, `${p}.hold.mods`, 1, 0x1f, 1) }
+        : type === 'layer'
+          ? { type, layer: r.num(ho.layer, `${p}.hold.layer`, 0, 15, 0), mods: r.num(ho.mods ?? 0, `${p}.hold.mods`, 0, 0x1f, 0) }
+          : { type, keycode: r.keycode(ho.keycode, `${p}.hold.keycode`) };
+    return { id: r.id(ao.id, `${p}.id`, 'tha'), keycode: r.keycode(ao.keycode, `${p}.keycode`), tap: r.keycode(ao.tap, `${p}.tap`), hold };
   });
   const readAction = (v: unknown, p: string): CustomAction => {
     const ao = r.obj(v ?? { type: 'none' }, p);
@@ -641,8 +794,13 @@ export function validateProject(input: unknown): { project: Project | null; issu
     combos,
     keyOverrides,
     customKeycodes,
+    keyAliases,
+    tapHolds,
+    keyLists,
+    tapHoldActions,
     leaderSequences,
     unicodeMap,
+    languages,
     lighting,
     firmware: readFirmware(r, o.firmware),
     device: dev ? { vid: r.num(dev.vid, 'device.vid', 0, 0xffff, 0), pid: r.num(dev.pid, 'device.pid', 0, 0xffff, 0), product: dev.product === undefined ? undefined : r.str(dev.product, 'device.product') } : null,

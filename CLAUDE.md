@@ -8,6 +8,7 @@ Owner's personal notes (not in git, may be missing): @CLAUDE.local.md
 
 ```
 npm test               # vitest: core + main process (~2 s)
+npm run test:qmk       # generated tap-hold C in QMK's unit test framework (WSL: NAVI_WSL_DISTRO=QMK), tests/qmk-host
 npm run typecheck      # tsc --noEmit
 npm run build          # tsc + vite build → dist/
 npm run app            # build + Electron window
@@ -16,6 +17,7 @@ npm run app:test       # build + open the worktree with the newest commit not on
 npm run device:probe   # build + hidden window: reads (read-only!) all VIA keyboards and prints JSON
 npm run gen:qmk -- <qmk_firmware>   # regenerate src/core/qmk-data/* from QMK sources
 npm run icon           # build/icon.svg → build/icon.png, public/icon.png, build/icon.ico
+npm run check:docs     # opens every QMK docs link in src/ and checks the page and its #anchor exist (run after adding one)
 npm run dist           # Windows installer (electron-builder)
 ```
 After changes: `npm run typecheck; npm test; npm run build`.

@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 4;
+export const PROJECT_SCHEMA_VERSION = 13;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -173,6 +173,16 @@ export interface Layer {
   cName?: string;
   /** Layer tag color (#rrggbb) or empty. */
   color?: string;
+  /**
+   * Where combos read their keys on this layer (Advanced → Combos): a layer number, or 'self' = this layer.
+   * Unset = layer 0. A key transparent here uses the setting of the layer it falls through to.
+   */
+  comboRef?: number | 'self';
+  /**
+   * A typing layer (Advanced → Languages): its keys go to the OS layout as they are, in every language. Unset = on for
+   * layer 0 and any layer a language turns on, off for the rest (project/languages.ts `isTypingLayer`).
+   */
+  typing?: boolean;
   /** Keycodes row by row: keys[row * cols + col]. Length = rows × cols. */
   keys: number[];
   /** Encoder actions by encoder number. */
@@ -203,6 +213,36 @@ export interface Macro {
   index: number;
   name: string;
   steps: MacroStep[];
+  /** Repeat while held (firmware.autoRepeat sets the delay and rate). */
+  repeat?: boolean;
+}
+
+/**
+ * How a tap dance works: `slots` — tap / hold / double tap / tap-then-hold, any keycode each; `every-tap` — each tap
+ * plays the next step at once (cycling); `own-c` — the user's own C functions.
+ */
+export type TapDanceKind = 'slots' | 'every-tap' | 'own-c';
+export const TAP_DANCE_KINDS: readonly TapDanceKind[] = ['slots', 'every-tap', 'own-c'];
+export const TAP_DANCE_MAX_STEPS = 4;
+
+/**
+ * One step of an every-tap dance, by the modifiers held at that tap (Shift = either Shift, Ctrl = either Ctrl; real,
+ * weak and one-shot). A set variant plays with Shift and Ctrl removed; undefined = the `none` variant with the mods
+ * kept; [] = nothing.
+ */
+export interface TapDanceStep {
+  none?: MacroStep[];
+  shift?: MacroStep[];
+  ctrl?: MacroStep[];
+  ctrlShift?: MacroStep[];
+}
+export const TAP_DANCE_VARIANTS = ['none', 'shift', 'ctrl', 'ctrlShift'] as const;
+
+/** C functions of the user's own code: void fn(tap_dance_state_t *state, void *user_data). */
+export interface TapDanceOwnC {
+  onEachTap?: string;
+  onFinished?: string;
+  onReset?: string;
 }
 
 /** Tap dance: actions for taps/holds. 0 = nothing. Generated into keymap.c. */
@@ -211,10 +251,16 @@ export interface TapDance {
   index: number;
   /** Name for keymap.c (a C identifier). */
   name: string;
+  /** undefined = 'slots'. The fields of the other kinds are kept (switching back restores them) but not generated. */
+  kind?: TapDanceKind;
   tap: number;
   hold: number;
   doubleTap: number;
   tapHold: number;
+  /** every-tap: 1–4 steps, tap n plays steps[(n - 1) % length]. */
+  steps?: TapDanceStep[];
+  /** own-c: at least one function. */
+  ownC?: TapDanceOwnC;
   /** Own tapping term for this tap dance, ms (otherwise the global one). */
   tappingTerm?: number;
 }
@@ -267,6 +313,75 @@ export interface CustomKeycode {
   name: string;
   description: string;
   action: CustomAction;
+  /** Repeat while held; works only with an action (a ticked keycode with action none is kept but ignored). */
+  repeat?: boolean;
+}
+
+/**
+ * Key alias: a label for a keycode, shown on every key with that value. The generated C gets
+ * `#define NV_<LABEL> <expression>` (core/keycodes/aliases.ts) so the user's own C can refer to the key;
+ * the keymap itself keeps the plain expression.
+ */
+export interface KeyAlias {
+  id: string;
+  /** What the key shows: “Copy”. The C name is derived from it. */
+  label: string;
+  keycode: number;
+}
+
+/**
+ * Tap-hold settings of one mod-tap / layer-tap keycode (core/project/tapHolds.ts): every key with that keycode
+ * shares them, like QMK's own per-key get_*() functions. undefined = the global setting.
+ */
+export interface TapHoldSetting {
+  id: string;
+  /** The mod-tap / layer-tap keycodes sharing this setting (since format 11; one `keycode` before). */
+  keycodes: number[];
+  /** tap-preferred: neither flag; balanced: PERMISSIVE_HOLD; hold-preferred: HOLD_ON_OTHER_KEY_PRESS. */
+  flavor?: 'tap-preferred' | 'balanced' | 'hold-preferred';
+  tappingTerm?: number;
+  quickTapTerm?: number;
+  /** Pressing one of these keys while the tap-hold key is undecided makes it a hold at once. */
+  holdOnKeys?: number[];
+  /** Key lists (KeyList.id) whose keys also make it a hold at once (since format 11). */
+  holdOnLists?: string[];
+  /** Hold keys that count only while one language is active (since format 13). */
+  holdOnByLanguage?: LanguageHoldKeys[];
+}
+
+/** Hold keys of a tap-hold setting that count only in one language. */
+export interface LanguageHoldKeys {
+  /** Language.id */
+  language: string;
+  keys: number[];
+  /** KeyList ids */
+  lists?: string[];
+}
+
+/** A named list of keycodes that tap-hold settings point to instead of repeating the keys (since format 11). */
+export interface KeyList {
+  id: string;
+  name: string;
+  keys: number[];
+}
+
+/**
+ * What holding a tap-hold key does: modifiers (5 QMK MOD_* bits), a layer (0–15) with optional modifiers, or any
+ * keycode held down as long as the key is (core/project/tapHoldActions.ts).
+ */
+export type HoldAction = { type: 'mods'; mods: number } | { type: 'layer'; layer: number; mods: number } | { type: 'key'; keycode: number };
+
+/**
+ * A tap-hold key whose tap or hold QMK's MT() / LT() cannot express (a modded or custom key on tap, a layer with
+ * modifiers on hold …). Keys carry `keycode`, a stand-in MT / LT value with a base key no real key uses, so QMK's own
+ * tap-hold logic (and its per-key settings) decides; the generated keymap.c plays the real actions.
+ */
+export interface TapHoldAction {
+  id: string;
+  keycode: number;
+  /** Keycode played on tap (0 = nothing). */
+  tap: number;
+  hold: HoldAction;
 }
 
 // ── Lighting ──────────────────────────────────────────────────────────
@@ -323,6 +438,41 @@ export interface FirmwareConfig {
    * headers — the user's header files included at the top of keymap.c, in order (relative paths, ≤ 20).
    */
   pipeline?: { enabled: boolean; headers: string[] };
+  /**
+   * Layer keys bring their layer to the top: the layer turned on last wins and every layer above it (by number)
+   * is hidden while it is on. NAVI's own setting (generated layer_state_set_user / layer_state_set_navi), not a define.
+   */
+  layerKeysOnTop: boolean;
+  /**
+   * Auto repeat of keys ticked “repeat while held” (macros, custom keycodes): ms before the first repeat and ms between
+   * repeats. NAVI's own C code in keymap.c, not a define.
+   */
+  autoRepeat: { delay: number; rate: number };
+  /** How text is typed outside a plain-keys language (since format 13; used only with such a language). */
+  textRoute: TextRoute;
+}
+
+// ── Languages ─────────────────────────────────────────────────────────
+
+/**
+ * How text is typed in a language that doesn't type with plain keys: one route per firmware (Advanced → Languages).
+ * own-program: the user's C hands it to their own PC program; the others are QMK Unicode input modes.
+ */
+export const TEXT_ROUTES = ['own-program', 'wincompose', 'alt-codes', 'linux'] as const;
+export type TextRoute = (typeof TEXT_ROUTES)[number];
+
+/** A language the keyboard types in (since format 13). The first one is active at power-on. */
+export interface Language {
+  id: string;
+  name: string;
+  /** Short code, lower case: the C names NAVI_LANG_<CODE>, NAVI_TO_<CODE>, NAVI_TOGGLE_<CODE>. */
+  code: string;
+  /** Types with plain keys (English): no text goes through the route. */
+  plainKeys: boolean;
+  /** A layer that is on while the language is active (turned on under what shows). */
+  layer?: number;
+  /** The OS shortcut that switches the computer to this language (routes without a PC program). */
+  osShortcut?: number;
 }
 
 // ── Project ───────────────────────────────────────────────────────────
@@ -344,10 +494,20 @@ export interface Project {
   combos: Combo[];
   keyOverrides: KeyOverride[];
   customKeycodes: CustomKeycode[];
+  /** Labels for keycodes, with a C name for the user's code (since format 5). */
+  keyAliases: KeyAlias[];
+  /** Per-keycode tap-hold settings (since format 7). */
+  tapHolds: TapHoldSetting[];
+  /** Named key lists the tap-hold settings' hold keys point to (since format 11). */
+  keyLists: KeyList[];
+  /** Tap-hold keys with any action in each slot, by their stand-in keycode (since format 8). */
+  tapHoldActions: TapHoldAction[];
   /** Sequences after the leader key (QK_LEAD) — leader_end_user in keymap.c. */
   leaderSequences: LeaderSequence[];
   /** Character table for UM(i)/UP(i,j) (UNICODEMAP): index = position in the list. */
   unicodeMap: UnicodeEntry[];
+  /** Languages the keyboard types in (since format 13). */
+  languages: Language[];
   lighting: LightingConfig;
   firmware: FirmwareConfig;
   /** Linked keyboard (for hints when connecting). */

@@ -11,11 +11,14 @@
   --app-background: #050505;
   --panel-background: #0c0c0c;
   --cell-background: #080808;
+  --card-background: #080808;
   --hover-background: #151515;
   --border-color: #262626;
+  --key-background: #080808;
+  --key-border: #262626;
   --text-primary: #e8e8e8;
   --text-secondary: #9a9a9a;
-  --text-label: #6a6a6a;
+  --text-label: #878787;
   --accent-color: #e8e8e8;
   --accent-contrast: #050505;
   --accent-soft: rgba(232, 232, 232, 0.08);
@@ -37,8 +40,8 @@
   --card-min-width: 172px;
   --sidebar-width: 264px;
   --right-panel-width: 320px;
-  --gap: calc(10px * var(--space));
-  --pad: calc(22px * var(--space));
+  --gap: calc(12px * var(--space));
+  --pad: calc(24px * var(--space));
 
   /* Effects */
   --panel-blur: 0px;
@@ -52,13 +55,13 @@
   --font-mono: 'JetBrains Mono Variable', 'Cascadia Mono', Consolas, monospace;
   --font-pixel: 'Silkscreen', 'JetBrains Mono Variable', monospace;
   --font-scale: 1;
-  --fs-2xs: calc(10px * var(--font-scale));
-  --fs-xs: calc(11px * var(--font-scale));
-  --fs-sm: calc(12.5px * var(--font-scale));
-  --fs-md: calc(14px * var(--font-scale));
+  --fs-2xs: calc(11px * var(--font-scale)); /* non-interactive tags only (badges, counts, status chips) */
+  --fs-xs: calc(12px * var(--font-scale)); /* the floor for anything functional: labels, buttons, inputs, list text */
+  --fs-sm: calc(13px * var(--font-scale));
+  --fs-md: calc(14px * var(--font-scale)); /* body */
   --fs-lg: calc(16px * var(--font-scale));
   --fs-xl: calc(22px * var(--font-scale));
-  --label-spacing: 0.28em;
+  --label-spacing: 0.1em;
 
   /* Motion */
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);

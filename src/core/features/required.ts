@@ -5,6 +5,8 @@
 import { keycodeNeeds, type Need } from '../keycodes/requirements';
 import type { KeycodeSpec } from '../keycodes/spec';
 import type { Keymap, Project } from '../project/types';
+import { effectiveTapHoldActions } from '../project/tapHoldActions';
+import { activeTapDanceKeycodes, tapDanceSends } from '../project/tapDances';
 import type { FeatureId } from './registry';
 
 export function requiredFeatures(project: Project, keymap: Keymap, spec: KeycodeSpec): Map<FeatureId, string> {
@@ -18,7 +20,19 @@ export function requiredFeatures(project: Project, keymap: Keymap, spec: Keycode
     l.keys.forEach((v) => keycodeNeeds(spec, v, { unicode: project.firmware.unicode }).forEach((n) => add(pick(n), 'keymap')));
     l.encoders.forEach((e) => [e.cw, e.ccw].forEach((v) => keycodeNeeds(spec, v, { unicode: project.firmware.unicode }).forEach((n) => add(pick(n), 'encoders'))));
   });
+  // Tap-hold keys with actions: NAVI plays their slots with record->keycode, which QMK reads only with REPEAT_KEY_ENABLE
+  // (or COMBO_ENABLE); the slots' own keycodes need their features too.
+  const actions = effectiveTapHoldActions(spec, project);
+  if (actions.length) add('repeat_key', 'tap-hold keys with actions');
+  for (const a of actions) {
+    for (const v of [a.tap, a.hold.type === 'key' ? a.hold.keycode : 0]) keycodeNeeds(spec, v, { unicode: project.firmware.unicode }).forEach((n) => add(pick(n), 'tap-hold keys with actions'));
+  }
   if (project.tapDances.length) add('tap_dance', 'tap dance');
+  // Tap dances play their keycodes as key events with record->keycode (navi_send) too.
+  if (project.tapDances.some(tapDanceSends)) add('repeat_key', 'tap dances');
+  for (const t of project.tapDances) {
+    for (const v of activeTapDanceKeycodes(t)) keycodeNeeds(spec, v, { unicode: project.firmware.unicode }).forEach((n) => add(pick(n), 'tap dances'));
+  }
   if (project.combos.length) add('combo', 'combos');
   if (project.keyOverrides.length) add('key_override', 'key overrides');
   if (keymap.layers.some((l) => l.encoders.length)) add('encoder_map', 'encoders');

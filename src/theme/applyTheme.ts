@@ -4,20 +4,25 @@ import {
   PALETTE_KEYS,
   PIXEL_FONT_STACK,
   UI_FONTS,
+  completePalette,
   getPreset,
   type AppSettings,
+  type PresetPalette,
   type ThemePalette,
 } from '../config/theme.config';
 import { hexToRgb, isHexColor } from './color';
 
-/** The resulting palette: the preset + own colors from the "colors" section. */
+/**
+ * The resulting palette: the preset + own colors from the "colors" section. Box and key colors the preset and
+ * the config both leave out follow the resulting `cell` / `border`, so an own `cell` still recolors them.
+ */
 export function resolvePalette(settings: AppSettings): ThemePalette {
-  const palette = { ...getPreset(settings.theme).palette };
+  const palette: PresetPalette = { ...getPreset(settings.theme).palette };
   for (const key of PALETTE_KEYS) {
     const override = settings.colors[key];
     if (override && isHexColor(override)) palette[key] = override;
   }
-  return palette;
+  return completePalette(palette);
 }
 
 /**
@@ -38,8 +43,11 @@ export function computeThemeVariables(settings: AppSettings): Record<string, str
     '--app-background': p.background,
     '--panel-background': rgba(p.panel, opacity),
     '--cell-background': p.cell,
+    '--card-background': p.card,
     '--hover-background': p.hover,
     '--border-color': p.border,
+    '--key-background': p.key,
+    '--key-border': p.keyBorder,
     '--text-primary': p.text,
     '--text-secondary': p.textDim,
     '--text-label': p.label,

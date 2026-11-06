@@ -10,7 +10,9 @@ import { decode, encode, type Decoded } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
 import { newId } from '../layout/geometry';
 import { KC_NO, KC_TRNS, makeLayer } from './factory';
-import type { EncoderAction, Geometry, KeyGeom, Keymap, Layer, MatrixPos, Project } from './types';
+import { layerTarget } from './layerRefs';
+import { mapTapDanceKeycodes } from './tapDances';
+import type { CustomAction, EncoderAction, Geometry, HoldAction, KeyGeom, Keymap, Layer, MatrixPos, Project, TapHoldAction } from './types';
 
 // ── Access ────────────────────────────────────────────────────────────
 
@@ -166,26 +168,125 @@ export function remapLayerRef(spec: KeycodeSpec, value: number, mapping: (old: n
   return next ? encode(spec, next) : KC_NO;
 }
 
+/**
+ * Tap-hold keys with actions (tapHoldActions) after a layer move: slots are renumbered like any keycode, an LT
+ * stand-in follows its hold layer. One whose hold layer is gone (or whose hold key became KC_NO) is removed and its
+ * keys become the plain tap. Returns the kept actions and the new keycode of every old stand-in.
+ */
+function remapTapHoldActions(p: Project, spec: KeycodeSpec, mapping: (old: number) => number | null, fix: (v: number) => number) {
+  const replaced = new Map<number, number>();
+  const actions: TapHoldAction[] = [];
+  for (const a of p.tapHoldActions) {
+    if (replaced.has(a.keycode)) continue;
+    const tap = fix(a.tap);
+    let hold: HoldAction | null = a.hold;
+    let keycode = a.keycode;
+    if (a.hold.type === 'layer') {
+      const n = mapping(a.hold.layer);
+      const d = decode(spec, a.keycode);
+      if (n === null || n > 15 || d.kind !== 'layer-tap') hold = null;
+      else {
+        hold = { ...a.hold, layer: n };
+        keycode = encode(spec, { ...d, layer: n });
+      }
+    } else if (a.hold.type === 'key') {
+      const k = fix(a.hold.keycode);
+      hold = k === KC_NO ? null : { type: 'key', keycode: k };
+    }
+    replaced.set(a.keycode, hold ? keycode : tap);
+    if (hold) actions.push({ ...a, keycode, tap, hold });
+  }
+  return { actions, replaced };
+}
+
 function remapAllLayerRefs(p: Project, keymapId: string, spec: KeycodeSpec, mapping: (old: number) => number | null): Project {
-  const fix = (v: number) => remapLayerRef(spec, v, mapping);
+  const plainFix = (v: number) => remapLayerRef(spec, v, mapping);
+  const { actions: tapHoldActions, replaced } = remapTapHoldActions(p, spec, mapping, plainFix);
+  const kept = new Set(tapHoldActions.map((a) => a.keycode));
+  const fix = (v: number) => replaced.get(v) ?? plainFix(v);
   const keymaps = p.keymaps.map((k) =>
     k.id !== keymapId
       ? k
       : {
           ...k,
           defaultLayer: mapping(k.defaultLayer) ?? 0,
-          layers: k.layers.map((l) => ({ ...l, keys: l.keys.map(fix), encoders: l.encoders.map((e) => ({ ccw: fix(e.ccw), cw: fix(e.cw) })) })),
+          layers: k.layers.map((l) => {
+            const layer: Layer = { ...l, keys: l.keys.map(fix), encoders: l.encoders.map((e) => ({ ccw: fix(e.ccw), cw: fix(e.cw) })) };
+            // A combo reference layer follows its layer; a deleted one falls back to layer 0 (unset).
+            if (typeof l.comboRef === 'number') {
+              const n = mapping(l.comboRef);
+              if (n === null) delete layer.comboRef;
+              else layer.comboRef = n;
+            }
+            return layer;
+          }),
         },
   );
   // Tap dance and combos are shared by the project but refer to layer numbers of the active keymap.
-  const tapDances = p.tapDances.map((t) => ({ ...t, tap: fix(t.tap), hold: fix(t.hold), doubleTap: fix(t.doubleTap), tapHold: fix(t.tapHold) }));
+  const tapDances = p.tapDances.map((t) => mapTapDanceKeycodes(t, fix));
   const combos = p.combos.map((c) => ({
     ...c,
     result: fix(c.result),
     layers: c.layers?.map(mapping).filter((n): n is number => n !== null),
   }));
   const keyOverrides = p.keyOverrides.map((o) => ({ ...o, replacement: fix(o.replacement), layers: o.layers?.map(mapping).filter((n): n is number => n !== null) }));
-  return touch({ ...p, keymaps, tapDances, combos, keyOverrides });
+  // An alias follows its key: TG(2) stays the same layer after a reorder. An alias of a deleted layer goes away,
+  // otherwise its label would land on every KC_NO (or on the plain tap key of an LT).
+  const refsDeleted = (v: number) => {
+    if (replaced.has(v)) return !kept.has(replaced.get(v) ?? -1);
+    const target = layerTarget(spec, v);
+    return target !== null && mapping(target.layer) === null;
+  };
+  const keyAliases = p.keyAliases.filter((a) => !refsDeleted(a.keycode)).map((a) => ({ ...a, keycode: fix(a.keycode) }));
+  // Tap-hold settings follow their keycode the same way; hold keys pointing at a deleted layer are dropped.
+  const holdKeys = (keys: number[]) => keys.filter((k) => !refsDeleted(k)).map(fix);
+  const tapHolds = p.tapHolds
+    .map((s) => ({
+      ...s,
+      keycodes: s.keycodes.filter((k) => !refsDeleted(k)).map(fix),
+      ...(s.holdOnKeys ? { holdOnKeys: holdKeys(s.holdOnKeys) } : {}),
+      ...(s.holdOnByLanguage ? { holdOnByLanguage: s.holdOnByLanguage.map((g) => ({ ...g, keys: holdKeys(g.keys) })) } : {}),
+    }))
+    .filter((s) => s.keycodes.length > 0);
+  const keyLists = p.keyLists.map((l) => ({ ...l, keys: l.keys.filter((k) => !refsDeleted(k)).map(fix) }));
+  // A language's layer follows its layer; a deleted one leaves the language without a layer.
+  const languages = p.languages.map((l) => {
+    if (l.layer === undefined) return l;
+    const n = mapping(l.layer);
+    if (n !== null) return { ...l, layer: n };
+    const { layer: _, ...rest } = l;
+    return rest;
+  });
+  return touch({ ...p, keymaps, tapDances, combos, keyOverrides, keyAliases, tapHolds, keyLists, tapHoldActions, languages });
+}
+
+/**
+ * Every keycode the project stores, through `fix` (language keys renumbered after a language moved or went): keys and
+ * encoders of every keymap, tap dances, combo results, key overrides, aliases, tap-hold settings and key lists, tap-hold
+ * action slots, leader and custom keycode actions, language shortcuts. A key that becomes KC_NO is dropped from
+ * aliases, hold keys and key lists. Macro steps hold basic keys only, so they are left alone.
+ */
+export function mapProjectKeycodes(p: Project, fix: (v: number) => number): Project {
+  const keep = (keys: number[]) => keys.map(fix).filter((k) => k !== KC_NO);
+  const action = <A extends CustomAction>(a: A): A => (a.type === 'tap' ? { ...a, keycode: fix(a.keycode) } : a);
+  return touch({
+    ...p,
+    keymaps: p.keymaps.map((k) => ({ ...k, layers: k.layers.map((l) => ({ ...l, keys: l.keys.map(fix), encoders: l.encoders.map((e) => ({ ccw: fix(e.ccw), cw: fix(e.cw) })) })) })),
+    tapDances: p.tapDances.map((t) => mapTapDanceKeycodes(t, fix)),
+    combos: p.combos.map((c) => ({ ...c, result: fix(c.result) })),
+    keyOverrides: p.keyOverrides.map((o) => ({ ...o, trigger: fix(o.trigger), replacement: fix(o.replacement) })),
+    keyAliases: p.keyAliases.map((a) => ({ ...a, keycode: fix(a.keycode) })).filter((a) => a.keycode !== KC_NO),
+    tapHolds: p.tapHolds.map((s) => ({
+      ...s,
+      ...(s.holdOnKeys ? { holdOnKeys: keep(s.holdOnKeys) } : {}),
+      ...(s.holdOnByLanguage ? { holdOnByLanguage: s.holdOnByLanguage.map((g) => ({ ...g, keys: keep(g.keys) })) } : {}),
+    })),
+    keyLists: p.keyLists.map((l) => ({ ...l, keys: keep(l.keys) })),
+    tapHoldActions: p.tapHoldActions.map((a) => ({ ...a, tap: fix(a.tap), hold: a.hold.type === 'key' ? { type: 'key', keycode: fix(a.hold.keycode) } : a.hold })),
+    leaderSequences: p.leaderSequences.map((s) => ({ ...s, action: action(s.action) })),
+    customKeycodes: p.customKeycodes.map((c) => ({ ...c, action: action(c.action) })),
+    languages: p.languages.map((l) => (l.osShortcut === undefined ? l : { ...l, osShortcut: fix(l.osShortcut) })),
+  });
 }
 
 export function addLayer(p: Project, keymapId: string, name: string, at?: number): Project {
@@ -256,6 +357,26 @@ export function setLayerCName(p: Project, keymapId: string, index: number, cName
     updateLayer(k, index, (l) => {
       const { cName: _old, ...rest } = l;
       return value ? { ...rest, cName: value } : rest;
+    }),
+  );
+}
+
+/** Where combos read their keys on a layer: a layer number, 'self', or undefined = layer 0. */
+export function setLayerComboRef(p: Project, keymapId: string, index: number, ref: Layer['comboRef']): Project {
+  return updateKeymap(p, keymapId, (k) =>
+    updateLayer(k, index, (l) => {
+      const { comboRef: _old, ...rest } = l;
+      return ref === undefined || ref === 0 ? rest : { ...rest, comboRef: ref };
+    }),
+  );
+}
+
+/** A typing layer (Advanced → Languages); undefined = the default (on for the default layer and language layers). */
+export function setLayerTyping(p: Project, keymapId: string, index: number, typing: boolean | undefined): Project {
+  return updateKeymap(p, keymapId, (k) =>
+    updateLayer(k, index, (l) => {
+      const { typing: _old, ...rest } = l;
+      return typing === undefined ? rest : { ...rest, typing };
     }),
   );
 }

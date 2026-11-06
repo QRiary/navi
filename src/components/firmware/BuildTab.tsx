@@ -8,7 +8,12 @@ import { useState } from 'react';
 import { Hammer, Plus, X } from 'lucide-react';
 import { patchProject } from '../../core/project/ops';
 import { allowedMakeVar, MAKE_VALUE_RE } from '../../core/qmk/customCode';
+import { QMK_DOCS } from '../../lib/qmkDocs';
 import { href } from '../../lib/router';
+import { whyDisabled } from '../../lib/whyDisabled';
+import { Hint } from '../InfoTip';
+import { EmptyState } from '../EmptyState';
+import { ErrorDetails } from '../ErrorDetails';
 import { useProjectStore } from '../../store/projectStore';
 import { autoJobs, useQmkStore } from '../../store/qmkStore';
 import { BuildLog } from './BuildLog';
@@ -23,6 +28,7 @@ export function BuildTab() {
   const compile = useQmkStore((s) => s.compile);
   const last = useQmkStore((s) => s.lastCompile);
   const error = useQmkStore((s) => s.error);
+  const errorDetail = useQmkStore((s) => s.errorDetail);
   const apply = useProjectStore((s) => s.apply);
   const [optKey, setOptKey] = useState('');
   const [optValue, setOptValue] = useState('');
@@ -43,12 +49,21 @@ export function BuildTab() {
     <div className="page">
       <div className="toolbar">
         <span className="kicker">
-          {kb ? `qmk compile -kb ${kb} -km ${project.firmware.keymap} -j ${build.parallel ?? autoJobs()}${Object.entries(buildEnv).map(([k, v]) => ` -e ${k}=${v}`).join('')}` : t('choose a keyboard target first', 'сначала выберите target')}
+          {kb
+            ? `qmk compile -kb ${kb} -km ${project.firmware.keymap} -j ${build.parallel ?? autoJobs()}${Object.entries(buildEnv)
+                .map(([k, v]) => ` -e ${k}=${v}`)
+                .join('')}`
+            : t('choose a keyboard target first', 'сначала выберите target')}
         </span>
         <div className="toolbar-actions">
           <button
             className={`btn btn--primary ${stale && confirmStale ? 'btn--danger' : ''}`}
-            disabled={!ready || running}
+            {...whyDisabled(
+              (!env?.runner && t('QMK CLI not found: see the “setup” tab', 'QMK CLI не найден: смотрите вкладку «окружение»')) ||
+                (!env?.homeValid && t('qmk_firmware not found: see the “setup” tab', 'qmk_firmware не найден: смотрите вкладку «окружение»')) ||
+                (!kb && t('Choose a keyboard target first (“target” tab)', 'Сначала выберите target клавиатуры (вкладка «target»)')) ||
+                (running && t('Wait: the build is running', 'Подождите: идёт сборка')),
+            )}
             onClick={() => {
               if (stale && !confirmStale) {
                 setConfirmStale(true);
@@ -58,15 +73,33 @@ export function BuildTab() {
               void compile(kb!, project.firmware.keymap, buildEnv, build.parallel);
             }}
           >
-            <Hammer size={14} strokeWidth={1.5} /> {running ? t('building…', 'сборка…') : stale && confirmStale ? t('build the files on disk anyway', 'всё равно собрать файлы с диска') : t('build firmware', 'собрать прошивку')}
+            <Hammer size={14} strokeWidth={1.5} />{' '}
+            {running ? t('building…', 'сборка…') : stale && confirmStale ? t('build the files on disk anyway', 'всё равно собрать файлы с диска') : t('build firmware', 'собрать прошивку')}
           </button>
         </div>
       </div>
       <div className="panel-box" style={{ marginBottom: 'var(--gap)' }}>
         <div className="panel-box-head">
-          <span className="cell-label">{t('build options', 'параметры сборки')}</span>
+          <span className="cell-label">
+            <Hint
+              docs={QMK_DOCS.configOptions}
+              tip={t(
+                'Extra settings given to the QMK build as KEY=VALUE (for example CONSOLE_ENABLE=yes), on top of the generated rules.mk. They apply to this build only.',
+                'Дополнительные настройки сборки QMK в виде KEY=VALUE (например, CONSOLE_ENABLE=yes) поверх сгенерированного rules.mk. Действуют только на эту сборку.',
+              )}
+            >
+              {t('build options', 'параметры сборки')}
+            </Hint>
+          </span>
           <label className="field-hint">
-            {t('parallel jobs', 'параллельно')}{' '}
+            <Hint
+              tip={t(
+                'How many files the compiler builds at once (make -j). More is faster but uses more CPU and memory; auto picks a value for this computer.',
+                'Сколько файлов компилятор собирает одновременно (make -j). Больше — быстрее, но сильнее грузит процессор и память; авто подбирает значение для этого компьютера.',
+              )}
+            >
+              {t('parallel jobs', 'параллельно')}
+            </Hint>{' '}
             <select className="select" value={build.parallel ?? 0} onChange={(e) => setBuild({ ...build, parallel: Number(e.target.value) || undefined }, t('build jobs', 'параллельная сборка'))}>
               <option value={0}>
                 {t('auto', 'авто')} · -j {autoJobs()}
@@ -80,12 +113,26 @@ export function BuildTab() {
           </label>
         </div>
         <div className="panel-box-body field">
-          <span className="field-hint">{t('Extra make variables (qmk compile -e KEY=VALUE), e.g. CONSOLE_ENABLE=yes. Only feature flags and drivers — tool variables (CC, SHELL…) could run programs.', 'Дополнительные переменные make (qmk compile -e КЛЮЧ=ЗНАЧЕНИЕ), например CONSOLE_ENABLE=yes. Только флаги и драйверы — переменные инструментов (CC, SHELL…) могли бы запускать программы.')}</span>
-          <div className="chips">
+          <span className="field-hint">
+            {t(
+              'Extra make variables (qmk compile -e KEY=VALUE), e.g. CONSOLE_ENABLE=yes. Only feature flags and drivers — tool variables (CC, SHELL…) could run programs.',
+              'Дополнительные переменные make (qmk compile -e КЛЮЧ=ЗНАЧЕНИЕ), например CONSOLE_ENABLE=yes. Только флаги и драйверы — переменные инструментов (CC, SHELL…) могли бы запускать программы.',
+            )}
+          </span>
+          {Object.keys(buildEnv).length === 0 && (
+            <EmptyState
+              what={t('No extra variables: the build uses only the keymap’s rules.mk.', 'Дополнительных переменных нет: сборка берёт только rules.mk раскладки.')}
+              example={t('CONSOLE_ENABLE=yes for one debug build, without changing rules.mk.', 'CONSOLE_ENABLE=yes для одной отладочной сборки, не меняя rules.mk.')}
+            />
+          )}
+          <div className="chips" style={Object.keys(buildEnv).length === 0 ? { display: 'none' } : undefined}>
             {Object.entries(buildEnv).map(([k, v]) => (
               <span key={k} className="chip">
                 {k}={v}{' '}
-                <button aria-label={t('Remove', 'Убрать')} onClick={() => setBuild({ ...build, env: Object.fromEntries(Object.entries(buildEnv).filter(([x]) => x !== k)) }, t('build option', 'параметр сборки'))}>
+                <button
+                  aria-label={t('Remove', 'Убрать')}
+                  onClick={() => setBuild({ ...build, env: Object.fromEntries(Object.entries(buildEnv).filter(([x]) => x !== k)) }, t('build option', 'параметр сборки'))}
+                >
                   <X size={11} strokeWidth={1.5} />
                 </button>
               </span>
@@ -97,7 +144,11 @@ export function BuildTab() {
             <input className="input" style={{ width: 140 }} placeholder="yes" value={optValue} onChange={(e) => setOptValue(e.target.value)} aria-label={t('Option value', 'Значение')} />
             <button
               className="btn"
-              disabled={!keyOk || !valueOk}
+              {...whyDisabled(
+                (!optKey && t('Type an option name first', 'Сначала введите имя параметра')) ||
+                  (!keyOk && t('This option name is not allowed (see the list below)', 'Это имя параметра не разрешено (список ниже)')) ||
+                  (!valueOk && t('The value must be one word: letters, digits, _', 'Значение — одно слово: буквы, цифры, _')),
+              )}
               onClick={() => {
                 setBuild({ ...build, env: { ...buildEnv, [optKey]: optValue } }, t('build option', 'параметр сборки'));
                 setOptKey('');
@@ -111,12 +162,16 @@ export function BuildTab() {
                 {t('only …_ENABLE, …_DRIVER, …_TYPE, CONVERT_TO, SPLIT_KEYBOARD, BOOTLOADER', 'только …_ENABLE, …_DRIVER, …_TYPE, CONVERT_TO, SPLIT_KEYBOARD, BOOTLOADER')}
               </span>
             )}
-            {optValue && !valueOk && <span className="field-hint" style={{ color: 'var(--danger-color)' }}>{t('one word: letters, digits, _', 'одно слово: буквы, цифры, _')}</span>}
+            {optValue && !valueOk && (
+              <span className="field-hint" style={{ color: 'var(--danger-color)' }}>
+                {t('one word: letters, digits, _', 'одно слово: буквы, цифры, _')}
+              </span>
+            )}
           </div>
         </div>
       </div>
       {!ready && (
-        <div className="notice">
+        <div className="notice" role="status">
           <span>
             {!env?.runner || !env?.homeValid ? (
               <a href={href({ section: 'firmware', tab: 'setup' })}>{t('Set up QMK (environment)', 'Настройте QMK (окружение)')}</a>
@@ -127,25 +182,34 @@ export function BuildTab() {
         </div>
       )}
       {ready && stale && (
-        <div className="notice" style={{ borderColor: 'var(--danger-color)' }}>
+        <div className="notice" role="alert" style={{ borderColor: 'var(--danger-color)' }}>
           <span>
-            {t('The files in the keymap folder differ from the project — the build uses the files on disk, not the project.', 'Файлы в папке keymap отличаются от проекта — собираются файлы с диска, а не проект.')}{' '}
+            {t(
+              'The files in the keymap folder differ from the project — the build uses the files on disk, not the project.',
+              'Файлы в папке keymap отличаются от проекта — собираются файлы с диска, а не проект.',
+            )}{' '}
             <a href={href({ section: 'firmware', tab: 'files' })}>{t('Write the project files first →', 'Сначала запишите файлы проекта →')}</a>
           </span>
         </div>
       )}
       {ready && !keymapSources?.exists && (
-        <p className="field-hint">
-          {t('The keymap folder does not exist yet — write the files first (tab “files”).', 'Папки keymap ещё нет — сначала запишите файлы (вкладка «файлы»).')}
-        </p>
+        <p className="field-hint">{t('The keymap folder does not exist yet — write the files first (tab “files”).', 'Папки keymap ещё нет — сначала запишите файлы (вкладка «файлы»).')}</p>
       )}
-      {error && <p className="field-hint" style={{ color: 'var(--danger-color)' }}>{error}</p>}
+      {error && (
+        <div className="field-hint" role="alert">
+          <span style={{ color: 'var(--danger-color)' }}>{error}</span>
+          <ErrorDetails text={errorDetail} />
+        </div>
+      )}
       {last && !running && (
-        <div className="notice" style={{ borderColor: last.code === 0 ? 'var(--meter-to)' : 'var(--danger-color)' }}>
+        <div className="notice" role={last.code === 0 ? 'status' : 'alert'} style={{ borderColor: last.code === 0 ? 'var(--meter-to)' : 'var(--danger-color)' }}>
           <span>
             {last.code === 0
               ? last.firmware
-                ? t(`Built in ${Math.round(last.durationMs / 1000)} s: ${last.firmware.file} (${Math.round(last.firmware.size / 1024)} KB) — saved to the firmware archive.`, `Собрано за ${Math.round(last.durationMs / 1000)} с: ${last.firmware.file} (${Math.round(last.firmware.size / 1024)} КБ) — сохранено в архив прошивок.`)
+                ? t(
+                    `Built in ${Math.round(last.durationMs / 1000)} s: ${last.firmware.file} (${Math.round(last.firmware.size / 1024)} KB) — saved to the firmware archive.`,
+                    `Собрано за ${Math.round(last.durationMs / 1000)} с: ${last.firmware.file} (${Math.round(last.firmware.size / 1024)} КБ) — сохранено в архив прошивок.`,
+                  )
                 : t('qmk compile finished, but the firmware file was not found.', 'qmk compile завершился, но файл прошивки не найден.')
               : t(`Build failed (exit code ${last.code}). See the errors above the log.`, `Сборка не удалась (код ${last.code}). Ошибки — над логом.`)}{' '}
             {last.firmware && <a href={href({ section: 'firmware', tab: 'flash' })}>{t('→ flash', '→ прошить')}</a>}

@@ -16,6 +16,16 @@ import {
   type Project,
 } from './types';
 
+/** New projects: “layer keys bring their layer to the top” (firmware.layerKeysOnTop). */
+export const LAYER_KEYS_ON_TOP_DEFAULT = false;
+
+/** New projects: auto repeat delay and rate in ms (firmware.autoRepeat) and the limits the file and the UI accept. */
+export const AUTO_REPEAT_DEFAULT = { delay: 500, rate: 33 }; // Windows defaults (delay 1, speed 31): measured 500 ms, 33 ms
+export const AUTO_REPEAT_LIMITS = { delay: { min: 1, max: 10000 }, rate: { min: 1, max: 1000 } };
+
+/** New projects and older files: the text route (firmware.textRoute), QMK's recommended Windows Unicode input. */
+export const TEXT_ROUTE_DEFAULT = 'wincompose' as const;
+
 export const KC_NO = 0x0000;
 export const KC_TRNS = 0x0001;
 
@@ -84,8 +94,13 @@ export function createProject({ name, hardware, geometry, layers = 4, encoderCou
     combos: [],
     keyOverrides: [],
     customKeycodes: [],
+    keyAliases: [],
+    tapHolds: [],
+    keyLists: [],
+    tapHoldActions: [],
     leaderSequences: [],
     unicodeMap: [],
+    languages: [],
     lighting: { rgbMatrix: null, rgblight: null, rgbMatrixEffects: null },
     firmware: {
       keyboard: null,
@@ -95,6 +110,9 @@ export function createProject({ name, hardware, geometry, layers = 4, encoderCou
       flags: {},
       buildFeatures: {},
       buildConfig: {},
+      layerKeysOnTop: LAYER_KEYS_ON_TOP_DEFAULT,
+      autoRepeat: { ...AUTO_REPEAT_DEFAULT },
+      textRoute: TEXT_ROUTE_DEFAULT,
     },
     device: null,
   };

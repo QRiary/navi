@@ -74,12 +74,17 @@ export function diffProjects(before: Project, after: Project): ProjectDiff {
   check('name', before.name, after.name);
   check('hardware', before.hardware, after.hardware);
   check('geometry', before.geometries, after.geometries);
-  check('keymaps', before.keymaps.map((k) => [k.id, k.name, k.defaultLayer, k.layers.map((l) => [l.id, l.name, l.color])]), after.keymaps.map((k) => [k.id, k.name, k.defaultLayer, k.layers.map((l) => [l.id, l.name, l.color])]));
+  const keymapMeta = (p: Project) => p.keymaps.map((k) => [k.id, k.name, k.defaultLayer, k.layers.map((l) => [l.id, l.name, l.color, l.comboRef])]);
+  check('keymaps', keymapMeta(before), keymapMeta(after));
   check('macros', before.macros, after.macros);
   check('tapDances', before.tapDances, after.tapDances);
   check('combos', before.combos, after.combos);
   check('keyOverrides', before.keyOverrides, after.keyOverrides);
   check('customKeycodes', before.customKeycodes, after.customKeycodes);
+  check('keyAliases', before.keyAliases, after.keyAliases);
+  check('tapHolds', before.tapHolds, after.tapHolds);
+  check('keyLists', before.keyLists, after.keyLists);
+  check('tapHoldActions', before.tapHoldActions, after.tapHoldActions);
   check('leaderSequences', before.leaderSequences, after.leaderSequences);
   check('unicodeMap', before.unicodeMap, after.unicodeMap);
   check('lighting', before.lighting, after.lighting);

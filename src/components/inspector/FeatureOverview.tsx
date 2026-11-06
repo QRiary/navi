@@ -36,8 +36,8 @@ export function FeatureOverview() {
         </dd>
         <dt>{t('target', 'target')}</dt>
         <dd>{project.firmware.keyboard ?? t('not set', 'не задан')}</dd>
-        <dt>spec</dt>
-        <dd>keycodes {project.firmware.keycodeSpec}</dd>
+        <dt>{t('keycodes', 'keycodes')}</dt>
+        <dd>{t(`QMK ${project.firmware.keycodeSpec} set`, `набор QMK ${project.firmware.keycodeSpec}`)}</dd>
       </dl>
       <div className="field">
         <span className="field-label">{t('current firmware', 'текущая прошивка')}</span>

@@ -6,12 +6,20 @@
 import { useMemo, useState } from 'react';
 import { Copy } from 'lucide-react';
 import { tryParseQmk } from '../core/keycodes/codec';
+import { friendlyName } from '../core/keycodes/friendly';
 import { keyLabel } from '../core/keycodes/labels';
 import { featureStatus } from '../core/features/registry';
 import { copyEncoderToLayers, setEncoder, resizeEncoders } from '../core/project/ops';
 import { hardwareFacts } from '../lib/hardwareFacts';
-import { useActive, useLabelContext } from '../lib/projectContext';
+import { useActive, useLabelContext, useParseContext } from '../lib/projectContext';
 import { href, navigate } from '../lib/router';
+import { QMK_DOCS } from '../lib/qmkDocs';
+import { resolveBlur } from '../lib/encoderEdit';
+import { CatalogButton, typedMeaning } from '../components/advanced/common';
+import { EmptyState } from '../components/EmptyState';
+import { ListFilter } from '../components/ListFilter';
+import { matchesQuery, useListFilter } from '../lib/find';
+import { Hint } from '../components/InfoTip';
 import { useEditorStore } from '../store/editorStore';
 import { useProjectStore, useSpec } from '../store/projectStore';
 import { StatusChip } from '../components/inspector/KeyInspector';
@@ -35,32 +43,67 @@ const PRESETS: { name: () => string; ccw: string; cw: string }[] = [
 function CodeCell({ value, onSet }: { value: number; onSet: (v: number) => void }) {
   const spec = useSpec();
   const labelCtx = useLabelContext();
+  const parseCtx = useParseContext();
   const [editing, setEditing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   if (!labelCtx) return null;
   const l = keyLabel(spec, value, labelCtx);
+  const name = friendlyName(spec, value, labelCtx);
+  const cancel = () => {
+    setEditing(null);
+    setError(null);
+  };
+  /** Leaving the field commits a valid expression; an invalid one stays open with its error. */
+  const onBlur = () => {
+    const r = resolveBlur(spec, editing ?? '', value, parseCtx);
+    if (r.action === 'error') return setError(r.error);
+    if (r.action === 'commit') onSet(r.value);
+    cancel();
+  };
   if (editing !== null) {
+    // Like every keycode field: the expression with what it means beside it, and the catalog button. Focus moving
+    // between the box, the button and the catalog it opens (a portal) isn't leaving the field.
+    const preview = error ?? typedMeaning(spec, labelCtx, editing, parseCtx);
     return (
-      <form
-        className={`expr-input ${error ? 'is-error' : ''}`}
-        onSubmit={(e) => {
-          e.preventDefault();
-          const r = tryParseQmk(spec, editing);
-          if ('error' in r) return setError(r.error);
-          onSet(r.value);
-          setEditing(null);
-          setError(null);
+      <span
+        className="kc-field"
+        onBlur={(e) => {
+          const to = e.relatedTarget as Element | null;
+          if (to && (e.currentTarget.contains(to) || to.closest('.kc-popover'))) return;
+          onBlur();
         }}
       >
-        <input autoFocus value={editing} onChange={(e) => setEditing(e.target.value)} onBlur={() => setEditing(null)} onKeyDown={(e) => e.key === 'Escape' && setEditing(null)} spellCheck={false} />
-        <span className="expr-result">{error ?? 'enter'}</span>
-      </form>
+        <form
+          className={`expr-input ${error ? 'is-error' : ''}`}
+          onSubmit={(e) => {
+            e.preventDefault();
+            const r = tryParseQmk(spec, editing, parseCtx);
+            if ('error' in r) return setError(r.error);
+            onSet(r.value);
+            cancel();
+          }}
+        >
+          <input autoFocus value={editing} onChange={(e) => setEditing(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && cancel()} spellCheck={false} aria-label={t('Keycode', 'Keycode')} />
+          {preview && (
+            <span className="expr-result" title={preview}>
+              {preview}
+            </span>
+          )}
+        </form>
+        <CatalogButton
+          current={value}
+          onPick={(v) => {
+            onSet(v);
+            cancel();
+          }}
+        />
+      </span>
     );
   }
   return (
-    <button className="kc-tile" style={{ minHeight: 34, cursor: 'text' }} onClick={() => setEditing(l.qmk)} title={l.description ?? l.qmk}>
+    <button className="kc-tile" style={{ minHeight: 34, cursor: 'text' }} onClick={() => setEditing(l.qmk)} title={[name.text, l.description, name.qmk].filter((s, i, all) => s && all.indexOf(s) === i).join('\n')}>
       <span className="kc-tile-label">{l.kind === 'transparent' ? '▽' : l.main || '∅'}</span>
-      <span className="kc-tile-name">{l.qmk}</span>
+      <span className="kc-tile-name">{name.text}</span>
     </button>
   );
 }
@@ -73,6 +116,7 @@ export function EncodersPage() {
   const setEncoderTarget = useEditorStore((s) => s.setEncoderTarget);
   const setLayer = useEditorStore((s) => s.setLayer);
   const [presetEnc, setPresetEnc] = useState(0);
+  const [query, setQuery] = useListFilter();
   const [presetLayer, setPresetLayer] = useState(0);
 
   const count = useMemo(() => {
@@ -93,30 +137,67 @@ export function EncodersPage() {
 
   if (count === 0) {
     return (
-      <div className="empty-state">
-        <p>{t('No encoders in this project. Set the number of encoders in “Hardware” and place them on the layout.', 'В проекте нет энкодеров. Укажите их число в разделе «Железо» и поставьте на схему.')}</p>
+      <EmptyState
+        what={t(
+          'An encoder is a rotary knob; here you choose what turning it each way does on each layer. This project has none yet: set their number in “Hardware” and place them on the layout.',
+          'Энкодер — поворотная ручка; здесь выбирают, что делает поворот в каждую сторону на каждом слое. В проекте их пока нет: укажите число в разделе «Железо» и поставьте на схему.',
+        )}
+        example={t('clockwise = volume up, counter-clockwise = volume down.', 'по часовой — громче, против часовой — тише.')}
+      >
         <a className="btn" href={href({ section: 'hardware', tab: 'profile' })}>
           {t('hardware profile', 'профиль железа')}
         </a>
-      </div>
+      </EmptyState>
     );
   }
 
   const set = (layer: number, enc: number, dir: 'cw' | 'ccw', v: number) => apply((p) => setEncoder(p, keymap.id, layer, enc, dir, v), `E${enc} ${dir}`);
 
+  // A layer row matches by number, name, or what its encoders do (readable name and QMK code).
+  const actionText = (v: number) => {
+    const n = friendlyName(spec, v, labelCtx);
+    return `${n.text} ${n.qmk}`;
+  };
+  const shownLayers = keymap.layers
+    .map((l, li) => ({ l, li }))
+    .filter(({ l, li }) => matchesQuery(query, li, `L${li}`, l.name, ...Array.from({ length: count }, (_, e) => (l.encoders[e] ? `${actionText(l.encoders[e].ccw)} ${actionText(l.encoders[e].cw)}` : null))));
+
   return (
     <div className="page">
-      <div className="notice">
+      <div className="notice" role="status">
         <span>
-          <strong>{t('Encoder map', 'Карта энкодеров')}</strong> <StatusChip state={mapStatus.state} likely={mapStatus.likely} text={lang === 'ru' ? mapStatus.reason.ru : mapStatus.reason.en} /> ·{' '}
-          {t('Encoders', 'Энкодеры')} <StatusChip state={encStatus.state} likely={encStatus.likely} text={lang === 'ru' ? encStatus.reason.ru : encStatus.reason.en} />
+          <strong>
+            <Hint
+              docs={QMK_DOCS.encoderMap}
+              tip={t(
+                'The encoder map is a table in the firmware that gives each encoder a key for clockwise and for counter-clockwise on every layer. With it (and VIA) the actions can be changed without rebuilding.',
+                'Карта энкодеров — таблица в прошивке: для каждого энкодера и каждого слоя клавиша на поворот по часовой и против. Если она есть (и VIA), действия меняются без пересборки.',
+              )}
+            >
+              {t('Encoder map', 'Карта энкодеров')}
+            </Hint>
+          </strong>{' '}
+          <StatusChip state={mapStatus.state} likely={mapStatus.likely} text={lang === 'ru' ? mapStatus.reason.ru : mapStatus.reason.en} /> · {t('Encoders', 'Энкодеры')}{' '}
+          <StatusChip state={encStatus.state} likely={encStatus.likely} text={lang === 'ru' ? encStatus.reason.ru : encStatus.reason.en} />
           <br />
           {mapStatus.state === 'available'
             ? t('Actions below can be written to the keyboard over VIA right away (bottom bar → “to keyboard”).', 'Действия ниже можно сразу записать в клавиатуру по VIA (внизу → «в клавиатуру»).')
-            : t('Without an encoder map in the firmware, these actions go only into your own firmware build (keymap.c → encoder_map).', 'Без карты энкодеров в прошивке эти действия попадут только в вашу сборку (keymap.c → encoder_map).')}
+            : t(
+                'Without an encoder map in the firmware, these actions go only into your own firmware build (keymap.c → encoder_map).',
+                'Без карты энкодеров в прошивке эти действия попадут только в вашу сборку (keymap.c → encoder_map).',
+              )}
         </span>
       </div>
-      <div className="panel-box">
+      <ListFilter
+        value={query}
+        onChange={setQuery}
+        label={t('Filter encoder layers', 'Фильтр слоёв энкодеров')}
+        placeholder={t('Filter by layer or action', 'Фильтр по слою или действию')}
+        shown={shownLayers.length}
+        total={keymap.layers.length}
+      />
+      {shownLayers.length === 0 && <p className="field-hint">{t('Nothing matches the filter.', 'Под фильтр ничего не подходит.')}</p>}
+      <div className="panel-box" hidden={shownLayers.length === 0}>
         <div className="rows">
           <div className="row" style={{ ['--row-cols' as string]: `120px repeat(${count}, minmax(0, 1fr))` }}>
             <span className="kicker">{t('layer', 'слой')}</span>
@@ -129,7 +210,7 @@ export function EncodersPage() {
               );
             })}
           </div>
-          {keymap.layers.map((l, li) => (
+          {shownLayers.map(({ l, li }) => (
             <div key={l.id} className="row" style={{ ['--row-cols' as string]: `120px repeat(${count}, minmax(0, 1fr))` }}>
               <span>
                 <span className="num">L{li}</span> {l.name}
@@ -201,7 +282,10 @@ export function EncodersPage() {
                 }
               }}
             >
-              {p.name()} <span className="kicker">{p.ccw} / {p.cw}</span>
+              {p.name()}{' '}
+              <span className="kicker" title={`${p.ccw} / ${p.cw}`}>
+                {[p.ccw, p.cw].map((x) => { const r = tryParseQmk(spec, x); return 'value' in r ? friendlyName(spec, r.value, labelCtx).text : x; }).join(' / ')}
+              </span>
             </button>
           ))}
         </div>
@@ -209,7 +293,16 @@ export function EncodersPage() {
 
       <section className="section">
         <div className="section-head">
-          <h2>{t('encoder press', 'нажатие энкодера')}</h2>
+          <h2>
+            <Hint
+              tip={t(
+                'Many encoders also click when pushed in. The click is an ordinary key in the matrix, so it is assigned like any key on the Keyboard page, not in the encoder map.',
+                'Многие энкодеры ещё и нажимаются. Нажатие — обычная клавиша матрицы: его назначают как любую клавишу на странице «Клавиатура», а не в карте энкодеров.',
+              )}
+            >
+              {t('encoder press', 'нажатие энкодера')}
+            </Hint>
+          </h2>
         </div>
         <div className="panel-box rows">
           {Array.from({ length: count }, (_, e) => {
@@ -218,10 +311,13 @@ export function EncodersPage() {
             return (
               <div key={e} className="row" style={{ ['--row-cols' as string]: '60px minmax(0,1fr) auto' }}>
                 <span className="num">E{e}</span>
-                <span className="field-hint">
+                <span className="field-hint" title={pos ? ((n) => (n.text === n.qmk ? n.qmk : `${n.text}\n${n.qmk}`))(friendlyName(spec, keymap.layers[0].keys[pos[0] * cols + pos[1]], labelCtx)) : undefined}>
                   {pos
-                    ? `${t('matrix', 'матрица')} [${pos[0]},${pos[1]}] · L0: ${keyLabel(spec, keymap.layers[0].keys[pos[0] * cols + pos[1]], labelCtx).qmk}`
-                    : t('The press is not linked to a matrix position (unknown or no button). Link it in “Hardware → geometry”.', 'Нажатие не связано с позицией матрицы (неизвестно или кнопки нет). Свяжите в «Железо → геометрия».')}
+                    ? `${t('matrix', 'матрица')} [${pos[0]},${pos[1]}] · L0: ${friendlyName(spec, keymap.layers[0].keys[pos[0] * cols + pos[1]], labelCtx).text}`
+                    : t(
+                        'The press is not linked to a matrix position (unknown or no button). Link it in “Hardware → geometry”.',
+                        'Нажатие не связано с позицией матрицы (неизвестно или кнопки нет). Свяжите в «Железо → геометрия».',
+                      )}
                 </span>
                 {pos && (
                   <button
@@ -251,7 +347,10 @@ export function EncodersPage() {
         >
           {t('assign on the layout (catalog)', 'назначать на схеме (каталог)')}
         </button>
-        <button className="btn btn--ghost" onClick={() => apply((p) => ({ ...p, keymaps: p.keymaps.map((k) => (k.id === keymap.id ? resizeEncoders(k, count) : k)) }), t('encoder slots', 'слоты энкодеров'))}>
+        <button
+          className="btn btn--ghost"
+          onClick={() => apply((p) => ({ ...p, keymaps: p.keymaps.map((k) => (k.id === keymap.id ? resizeEncoders(k, count) : k)) }), t('encoder slots', 'слоты энкодеров'))}
+        >
           {t('fill missing slots', 'дополнить пустые места')}
         </button>
       </div>

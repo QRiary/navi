@@ -60,6 +60,25 @@ describe('project storage', () => {
     expect(fs.readdirSync(path.join(tmp, '.trash'))).toHaveLength(1);
   });
 
+  it('restore brings the newest deleted copy back from .trash', () => {
+    const store = createProjectStore(tmp);
+    const text = (name) => JSON.stringify({ name, updatedAt: '2026-01-01' });
+    expect(store.restore('p1')).toBe(false); // nothing deleted yet
+    store.save('p1', text('A'));
+    store.remove('p1');
+    expect(store.list()).toEqual([]);
+    expect(store.restore('p1')).toBe(true);
+    expect(store.list().map((p) => p.name)).toEqual(['A']);
+    expect(fs.readdirSync(path.join(tmp, '.trash'))).toHaveLength(0);
+    // A taken id is not overwritten; another project's trash is not taken.
+    store.save('p10', text('B'));
+    store.remove('p10');
+    expect(store.restore('p1')).toBe(false);
+    store.save('p10', text('C'));
+    expect(store.restore('p10')).toBe(false);
+    expect(() => store.restore('../x')).toThrow();
+  });
+
   it('history is limited to 50 versions', () => {
     const store = createProjectStore(tmp);
     for (let i = 0; i < 55; i++) store.save('p', text(`v${i}`, String(i)));
@@ -76,6 +95,10 @@ describe('project storage', () => {
 describe('sources before writing to qmk_firmware', () => {
   it('rules.mk: only flags and drivers, nothing executable', () => {
     expect(unsafeSource('rules.mk', '# NAVI\nVIA_ENABLE = yes\nCONSOLE_ENABLE = yes\nSRC += extra.c\n')).toBeNull();
+    expect(unsafeSource('rules.mk', 'include $(dir $(lastword $(MAKEFILE_LIST)))navi_rules.mk\nVIA_ENABLE = no\n')).toBeNull();
+    for (const bad of ['include $(dir $(lastword $(MAKEFILE_LIST)))navi_rules.mk $(shell x)', 'include $(dir $(lastword $(MAKEFILE_LIST)))../navi_rules.mk']) {
+      expect(unsafeSource('rules.mk', bad), bad).not.toBeNull();
+    }
     for (const bad of ['X_ENABLE = $(shell calc)', 'X_ENABLE != calc', '\tcalc', 'all: ; calc', 'CC = powershell -enc AAAA', 'SHELL = cmd', 'include x.mk', 'SRC += ../x.c', 'X_ENABLE = yes\\#$(shell x)']) {
       expect(unsafeSource('rules.mk', bad), bad).not.toBeNull();
     }

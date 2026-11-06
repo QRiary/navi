@@ -5,18 +5,22 @@
  */
 import { useMemo } from 'react';
 import { ClipboardCopy, ClipboardPaste, Eraser, Search, SquareDashed } from 'lucide-react';
+import { friendlyName } from '../../core/keycodes/friendly';
 import { keyLabel } from '../../core/keycodes/labels';
 import { keycodeNeeds, needStatus, needsCode } from '../../core/keycodes/requirements';
 import { FEATURE_BY_ID } from '../../core/features/registry';
 import { effectiveKeycode, getKeycode } from '../../core/project/ops';
 import { hardwareFacts } from '../../lib/hardwareFacts';
-import { assignToSelection, clearSelection, copySelection, findKeycode, pasteToSelection, selectPositions } from '../../lib/keymapActions';
+import { assignTapHoldToSelection, assignToSelection, clearSelection, copySelection, findKeycode, pasteToSelection, selectPositions } from '../../lib/keymapActions';
 import { useActive, useLabelContext } from '../../lib/projectContext';
 import { useEditorStore } from '../../store/editorStore';
 import { useSpec } from '../../store/projectStore';
 import { getLanguage, t, count } from '../../i18n';
 import { KeycodeComposer } from '../keyboard/KeycodeComposer';
+import { KeyName } from '../KeyName';
+import { LayerRoutes, useLayerRefs } from '../layers/LayerRoutes';
 import { toast } from '../../store/toastStore';
+import { whyDisabled } from '../../lib/whyDisabled';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
@@ -45,6 +49,7 @@ export function KeyInspector() {
   const clipboard = useEditorStore((s) => s.clipboard);
 
   const selectedKeys = useMemo(() => (active ? active.geometry.keys.filter((k) => selection.includes(k.id)) : []), [active, selection]);
+  const refs = useLayerRefs();
 
   if (!active || !labelCtx) return null;
   const { project, keymap } = active;
@@ -70,8 +75,14 @@ export function KeyInspector() {
   if (selectedKeys.length === 0) {
     return (
       <div className="inspector-body">
+        <div className="kicker">
+          {t('how to get to', 'как попасть на')} {keymap.layers[layer]?.name || `L${layer}`}
+        </div>
+        <LayerRoutes layer={layer} refs={refs} />
         <div className="empty-state" style={{ padding: 0 }}>
-          <p>{t('Click a key on the layout to edit it. Shift+click or drag a frame to select several.', 'Щёлкните клавишу на схеме, чтобы изменить её. Shift+щелчок или рамка — выбрать несколько.')}</p>
+          <p>
+            {t('Click a key on the layout to edit it. Shift+click or drag a frame to select several.', 'Щёлкните клавишу на схеме, чтобы изменить её. Shift+щелчок или рамка — выбрать несколько.')}
+          </p>
           <ul className="steps-list">
             <li>{t('Catalog tile → assigns to selected keys', 'Плитка каталога → назначается выбранным клавишам')}</li>
             <li>{t('Drag a tile onto a key, or a key onto another (swap)', 'Перетащите плитку на клавишу или клавишу на другую (обмен)')}</li>
@@ -97,7 +108,11 @@ export function KeyInspector() {
       >
         <ClipboardCopy {...ICON} /> {t('copy', 'копировать')}
       </button>
-      <button className="btn" disabled={!clipboard} onClick={() => pasteToSelection()} title="Ctrl+V">
+      <button
+        className="btn"
+        {...whyDisabled(!clipboard && t('Nothing copied yet: copy keys first (Ctrl+C)', 'Ничего не скопировано: сначала скопируйте клавиши (Ctrl+C)'), 'Ctrl+V')}
+        onClick={() => pasteToSelection()}
+      >
         <ClipboardPaste {...ICON} /> {t('paste', 'вставить')}
       </button>
       <button className="btn" onClick={() => clearSelection(true)} title="T">
@@ -113,7 +128,9 @@ export function KeyInspector() {
     return (
       <div className="inspector-body">
         <div className="kicker">{count(selectedKeys.length, ['key selected', 'keys selected'], ['клавиша выбрана', 'клавиши выбраны', 'клавиш выбрано'])}</div>
-        <p className="field-hint">{t('A catalog tile or an expression will be assigned to all of them on the current layer.', 'Плитка каталога или выражение назначится всем сразу на текущем слое.')}</p>
+        <p className="field-hint">
+          {t('A catalog tile or an expression will be assigned to all of them on the current layer.', 'Плитка каталога или выражение назначится всем сразу на текущем слое.')}
+        </p>
         {actions}
       </div>
     );
@@ -132,6 +149,7 @@ export function KeyInspector() {
   const hw = hardwareFacts(project);
   const req = keycodeNeeds(spec, value, { unicode: project.firmware.unicode });
   const code = needsCode(spec, value);
+  const standIn = project.tapHoldActions.some((a) => a.keycode === value);
   const eff = effectiveKeycode(project, keymap, key.matrix, [layer]);
 
   return (
@@ -142,10 +160,11 @@ export function KeyInspector() {
       <BigKeycode value={value} />
       {value === 1 && (
         <p className="field-hint">
-          {t('Transparent: works as on the layer below →', 'Прозрачная: работает как на слое ниже →')} <code>{keyLabel(spec, eff.keycode, labelCtx).qmk}</code> ({t('layer', 'слой')} {eff.fromLayer})
+          {t('Transparent: works as on the layer below →', 'Прозрачная: работает как на слое ниже →')} <KeyName name={friendlyName(spec, eff.keycode, labelCtx)} /> ({t('layer', 'слой')}{' '}
+          {eff.fromLayer})
         </p>
       )}
-      {(req.length > 0 || code) && (
+      {(req.length > 0 || code || standIn) && (
         <div className="field">
           <span className="field-label">{t('firmware', 'прошивка')}</span>
           {req.map((need) => {
@@ -158,27 +177,41 @@ export function KeyInspector() {
               </div>
             );
           })}
+          {standIn && (
+            <p className="field-hint">
+              {t(
+                'Tap-hold key with actions: QMK has no keycode for this pair, so NAVI writes a stand-in MT / LT and the code that plays it into keymap.c. It works only in your own firmware build (Firmware → keymap.c).',
+                'Тап-холд клавиша с действиями: в QMK нет keycode для такой пары, поэтому NAVI пишет заменяющий MT / LT и код, который его играет, в keymap.c. Работает только в вашей сборке прошивки (Прошивка → keymap.c).',
+              )}
+            </p>
+          )}
           {code && (
             <p className="field-hint">
               {code === 'tap-dance'
-                ? t('Tap dance runs code from keymap.c — it works only in your own firmware build (Firmware → keymap.c).', 'Tap dance — это код в keymap.c: работает только в вашей сборке прошивки (Прошивка → keymap.c).')
+                ? t(
+                    'Tap dance runs code from keymap.c — it works only in your own firmware build (Firmware → keymap.c).',
+                    'Tap dance — это код в keymap.c: работает только в вашей сборке прошивки (Прошивка → keymap.c).',
+                  )
                 : t('Custom keycode: needs process_record code in the firmware.', 'Свой keycode: нужен код process_record в прошивке.')}
             </p>
           )}
         </div>
       )}
       {actions}
-      <KeycodeComposer spec={spec} project={project} value={value} onChange={(v) => assignToSelection(v)} />
+      <KeycodeComposer spec={spec} project={project} value={value} onChange={(v) => assignToSelection(v)} onTapHold={(tap, hold) => assignTapHoldToSelection(tap, hold)} />
       <div className="field">
         <span className="field-label">{t('all layers', 'все слои')}</span>
         <div className="layer-stack">
           {keymap.layers.map((l, i) => {
             const v = l.keys[key.matrix![0] * project.hardware.matrix.cols + key.matrix![1]];
-            const lab = keyLabel(spec, v, labelCtx);
+            const name = friendlyName(spec, v, labelCtx);
             return (
               <button key={l.id} className={`layer-stack-row ${i === layer ? 'is-active' : ''}`} onClick={() => setLayer(i)}>
                 <span className="num">L{i}</span>
-                <code className={v === 1 || v === 0 ? 'dim' : ''}>{lab.qmk}</code>
+                <span className={v === 1 || v === 0 ? 'dim' : ''} title={name.qmk}>
+                  {name.text}
+                  {name.text !== name.qmk && <code className="qmk-sub">{name.qmk}</code>}
+                </span>
                 <span className="dim">{l.name}</span>
               </button>
             );
@@ -205,12 +238,17 @@ function BigKeycode({ value }: { value: number }) {
   const labelCtx = useLabelContext();
   if (!labelCtx) return null;
   const l = keyLabel(spec, value, labelCtx);
+  const name = friendlyName(spec, value, labelCtx);
   return (
     <div className="big-keycode">
       <div className="big-keycode-cap">{l.kind === 'transparent' ? '▽' : l.main || '∅'}</div>
       <div className="big-keycode-text">
+        {name.text !== l.qmk && <span className="big-keycode-name">{name.text}</span>}
         <code>{l.qmk}</code>
-        <span>{l.description ?? ''}{l.hold ? ` · ${t('hold', 'удержание')}: ${l.hold}` : ''}</span>
+        <span>
+          {l.description ?? ''}
+          {l.hold ? ` · ${t('hold', 'удержание')}: ${l.hold}` : ''}
+        </span>
         <span className="kicker">0x{value.toString(16).toUpperCase().padStart(4, '0')}</span>
       </div>
     </div>

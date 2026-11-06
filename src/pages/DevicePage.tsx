@@ -15,9 +15,14 @@ import { href, navigate } from '../lib/router';
 import { useDeviceStore } from '../store/deviceStore';
 import { useEditorStore } from '../store/editorStore';
 import { useProjectStore, useSpec } from '../store/projectStore';
-import { toast } from '../store/toastStore';
+import { toast, toastError } from '../store/toastStore';
 import { t } from '../i18n';
+import { QMK_DOCS } from '../lib/qmkDocs';
+import { whyDisabled } from '../lib/whyDisabled';
+import { EmptyState } from '../components/EmptyState';
+import { Hint } from '../components/InfoTip';
 import { BootloaderHelp } from '../components/device/BootloaderHelp';
+import { ErrorDetails } from '../components/ErrorDetails';
 
 const ICON = { size: 15, strokeWidth: 1.5 };
 const hex4 = (n: number) => `0x${n.toString(16).toUpperCase().padStart(4, '0')}`;
@@ -79,19 +84,14 @@ function Tester() {
             'Нажимайте клавиши: они подсветятся по позиции в матрице (чтение по VIA). Так проверяются переключатели и то, какая физическая клавиша — какая позиция.',
           )}
         </p>
-        <LayoutPreview
-          geometry={active.geometry}
-          label={([r, c]) => keyLabel(spec, km.layers[0].keys[r * cols + c], labelCtx)}
-          marked={new Set([...pressed, ...seen])}
-          height={180}
-        />
+        <LayoutPreview geometry={active.geometry} label={([r, c]) => keyLabel(spec, km.layers[0].keys[r * cols + c], labelCtx)} marked={new Set([...pressed, ...seen])} height={180} />
         {testerActive && (
           <span className="kicker">
             {t('pressed now', 'нажато сейчас')}: {[...pressed].join('  ') || '—'} · {t('seen', 'было нажато')}: {seen.size}
           </span>
         )}
         {testerActive && !sawData && elapsed > 4000 && (
-          <div className="notice">
+          <div className="notice" role="status">
             <span>
               {t(
                 'No key presses arrive over VIA. Newer QMK (≈2025+) returns an empty matrix unless built with VIA_INSECURE — the key tester is disabled in this firmware. Below are the keys the computer receives as normal typing:',
@@ -115,6 +115,7 @@ export function DevicePage() {
   const matrix = useDeviceStore((s) => s.matrix);
   const snapshot = useDeviceStore((s) => s.snapshot);
   const error = useDeviceStore((s) => s.error);
+  const errorDetail = useDeviceStore((s) => s.errorDetail);
   const lastWrite = useDeviceStore((s) => s.lastWrite);
   const refresh = useDeviceStore((s) => s.refresh);
   const connect = useDeviceStore((s) => s.connect);
@@ -139,12 +140,21 @@ export function DevicePage() {
   return (
     <div className="page">
       {!supported && (
-        <div className="notice">
+        <div className="notice" role="status">
           <span>{t('WebHID is not available here. Run the desktop app (npm run app).', 'WebHID здесь недоступен. Запустите настольное приложение (npm run app).')}</span>
         </div>
       )}
       <div className="toolbar">
-        <span className="kicker">{t('keyboards with VIA (Raw HID 0xFF60)', 'клавиатуры с VIA (Raw HID 0xFF60)')}</span>
+        <span className="kicker">
+          <Hint
+            tip={t(
+              'VIA is a protocol over USB (a Raw HID interface, usage page 0xFF60) that lets a program read and change the keymap without flashing. Only keyboards whose firmware has VIA turned on are listed.',
+              'VIA — протокол по USB (интерфейс Raw HID, usage page 0xFF60), позволяющий программе читать и менять раскладку без прошивки. Здесь видны только клавиатуры, в прошивке которых включён VIA.',
+            )}
+          >
+            {t('keyboards with VIA (Raw HID 0xFF60)', 'клавиатуры с VIA (Raw HID 0xFF60)')}
+          </Hint>
+        </span>
         <div className="toolbar-actions">
           <button className="btn" onClick={() => void refresh()}>
             <RefreshCw {...ICON} /> {t('search', 'искать')}
@@ -168,7 +178,11 @@ export function DevicePage() {
                   <Plug {...ICON} /> {t('disconnect', 'отключить')}
                 </button>
               ) : (
-                <button className="btn btn--primary" disabled={status === 'connecting' || status === 'busy'} onClick={() => void connect(d.key)}>
+                <button
+                  className="btn btn--primary"
+                  {...whyDisabled((status === 'connecting' || status === 'busy') && t('Wait: the keyboard is busy', 'Подождите: клавиатура занята'))}
+                  onClick={() => void connect(d.key)}
+                >
                   <PlugZap {...ICON} /> {t('connect', 'подключить')}
                 </button>
               )}
@@ -176,19 +190,29 @@ export function DevicePage() {
           );
         })}
         {devices.length === 0 && (
-          <div className="row" style={{ ['--row-cols' as string]: '1fr' }}>
-            <span className="field-hint">
-              {t('No keyboard with VIA found. Plug it in by USB. If it is in bootloader mode or its firmware has no VIA, it is not listed here — see “Firmware”.', 'Клавиатура с VIA не найдена. Подключите по USB. Если она в режиме загрузчика или в её прошивке нет VIA — здесь её не будет, см. «Прошивка».')}
-            </span>
-          </div>
+          <EmptyState
+            what={t(
+              'No keyboard with VIA found. Plug it in by USB. If it is in bootloader mode or its firmware has no VIA, it is not listed here — see “Firmware”.',
+              'Клавиатура с VIA не найдена. Подключите по USB. Если она в режиме загрузчика или в её прошивке нет VIA — здесь её не будет, см. «Прошивка».',
+            )}
+            example={t(
+              'a keyboard whose firmware was built with VIA turned on, plugged in normally (not in bootloader mode).',
+              'клавиатура, прошивка которой собрана с включённым VIA, подключена как обычно (не в режиме загрузчика).',
+            )}
+          />
         )}
       </div>
       {error && (
-        <div className="notice" style={{ borderColor: 'var(--danger-color)', marginTop: 'var(--gap)' }}>
-          <span>{error}</span>
+        <div className="notice" role="alert" style={{ borderColor: 'var(--danger-color)', marginTop: 'var(--gap)' }}>
+          <div>
+            <span>{error}</span>
+            <ErrorDetails text={errorDetail} />
+          </div>
         </div>
       )}
-      {status === 'disconnected' && <p className="field-hint">{t('The keyboard was disconnected. Plug it back and press “connect”.', 'Клавиатура отключена. Подключите снова и нажмите «подключить».')}</p>}
+      {status === 'disconnected' && (
+        <p className="field-hint">{t('The keyboard was disconnected. Plug it back and press “connect”.', 'Клавиатура отключена. Подключите снова и нажмите «подключить».')}</p>
+      )}
 
       {connected && caps && matrix && snapshot && (
         <>
@@ -196,7 +220,14 @@ export function DevicePage() {
             <section className="panel-box">
               <div className="panel-box-head">
                 <span className="cell-label">{t('what the firmware reports', 'что сообщает прошивка')}</span>
-                <button className="text-btn" onClick={() => void reread().catch((e: Error) => toast(e.message, 'error'))}>
+                <button
+                  className="text-btn"
+                  onClick={() =>
+                    void reread().catch((e: Error) =>
+                      toastError(t('Couldn’t read the keyboard’s settings. Check it is connected and try again.', 'Не удалось прочитать настройки клавиатуры. Проверьте подключение и повторите.'), e),
+                    )
+                  }
+                >
                   {t('read again', 'прочитать снова')}
                 </button>
               </div>
@@ -211,20 +242,70 @@ export function DevicePage() {
                     {t('protocol', 'протокол')} {caps.protocol}
                     {caps.keycodesVersion ? ` · keycodes ${caps.keycodesVersion}` : ` · ${t('keycode version not reported (protocol < 13)', 'версия keycodes не сообщается (протокол < 13)')}`}
                   </dd>
-                  <dt>{t('matrix', 'матрица')}</dt>
+                  <dt>
+                    <Hint
+                      docs={QMK_DOCS.howAMatrixWorks}
+                      tip={t(
+                        'Rows × columns of the key matrix. VIA does not report it directly, so NAVI works it out from the keymap size; “other candidates” are other sizes that fit.',
+                        'Строки × столбцы матрицы клавиш. VIA не сообщает их напрямую, поэтому NAVI вычисляет по размеру раскладки; «другие варианты» — другие подходящие размеры.',
+                      )}
+                    >
+                      {t('matrix', 'матрица')}
+                    </Hint>
+                  </dt>
                   <dd>
                     {matrix.rows} × {matrix.cols}
-                    {matrix.candidates.length > 1 ? ` (${t('other candidates', 'другие варианты')}: ${matrix.candidates.slice(1).map((c) => c.join('×')).join(', ')})` : ''}
+                    {matrix.candidates.length > 1
+                      ? ` (${t('other candidates', 'другие варианты')}: ${matrix.candidates
+                          .slice(1)
+                          .map((c) => c.join('×'))
+                          .join(', ')})`
+                      : ''}
                   </dd>
                   <dt>{t('layers', 'слои')}</dt>
                   <dd>{caps.layers}</dd>
-                  <dt>{t('encoders', 'энкодеры')}</dt>
+                  <dt>
+                    <Hint
+                      docs={QMK_DOCS.encoders}
+                      tip={t(
+                        'Rotary knobs. “Encoder map” means the firmware stores their per-layer actions, so VIA can read and change them.',
+                        'Поворотные ручки. «Encoder map» значит, что прошивка хранит их действия по слоям и VIA может их читать и менять.',
+                      )}
+                    >
+                      {t('encoders', 'энкодеры')}
+                    </Hint>
+                  </dt>
                   <dd>{caps.encoderMap ? `${snapshot.encoderCount} · encoder map` : t('no encoder map', 'карты энкодеров нет')}</dd>
-                  <dt>{t('macros', 'макросы')}</dt>
-                  <dd>{caps.macros ? `${caps.macros.count} · ${caps.macros.bufferSize} B · ${t('used', 'занято')} ${snapshot.macros?.filter((m) => m.length).length ?? 0}` : t('not supported', 'не поддерживаются')}</dd>
-                  <dt>{t('lighting', 'подсветка')}</dt>
+                  <dt>
+                    <Hint
+                      tip={t(
+                        'Macro slots stored in the keyboard’s memory: how many there are, the buffer size in bytes, and how many are in use.',
+                        'Ячейки макросов в памяти клавиатуры: сколько их, размер буфера в байтах и сколько занято.',
+                      )}
+                    >
+                      {t('macros', 'макросы')}
+                    </Hint>
+                  </dt>
                   <dd>
-                    {[caps.lighting.rgbMatrix && 'RGB Matrix', caps.lighting.rgblight && 'RGB Light', caps.lighting.ledMatrix && 'LED Matrix', caps.lighting.backlight && 'Backlight'].filter(Boolean).join(', ') || t('no VIA lighting', 'нет подсветки через VIA')}
+                    {caps.macros
+                      ? `${caps.macros.count} · ${caps.macros.bufferSize} B · ${t('used', 'занято')} ${snapshot.macros?.filter((m) => m.length).length ?? 0}`
+                      : t('not supported', 'не поддерживаются')}
+                  </dd>
+                  <dt>
+                    <Hint
+                      docs={QMK_DOCS.rgbMatrix}
+                      tip={t(
+                        'Which QMK lighting systems the firmware exposes to VIA: RGB Matrix (RGB LED per key), RGB Light (LED strip), LED Matrix and Backlight (single-color).',
+                        'Какие системы подсветки QMK прошивка показывает через VIA: RGB Matrix (RGB-светодиод у клавиши), RGB Light (лента), LED Matrix и Backlight (одноцветные).',
+                      )}
+                    >
+                      {t('lighting', 'подсветка')}
+                    </Hint>
+                  </dt>
+                  <dd>
+                    {[caps.lighting.rgbMatrix && 'RGB Matrix', caps.lighting.rgblight && 'RGB Light', caps.lighting.ledMatrix && 'LED Matrix', caps.lighting.backlight && 'Backlight']
+                      .filter(Boolean)
+                      .join(', ') || t('no VIA lighting', 'нет подсветки через VIA')}
                   </dd>
                   <dt>{t('fw version', 'версия')}</dt>
                   <dd>{caps.firmwareVersion}</dd>
@@ -236,7 +317,16 @@ export function DevicePage() {
             </section>
             <section className="panel-box">
               <div className="panel-box-head">
-                <span className="cell-label">{t('project ⇄ keyboard', 'проект ⇄ клавиатура')}</span>
+                <span className="cell-label">
+                  <Hint
+                    tip={t(
+                      'Compares the keymap stored in the keyboard with the project’s active keymap, key by key. “Differs” counts keys whose action is not the same. Nothing is written from this page: writing is the “to keyboard” button in the bottom bar.',
+                      'Сравнивает раскладку, записанную в клавиатуре, с активной раскладкой проекта по клавишам. «Отличается» — число клавиш с разным действием. С этой страницы ничего не пишется: запись — кнопка «в клавиатуру» в нижней панели.',
+                    )}
+                  >
+                    {t('project ⇄ keyboard', 'проект ⇄ клавиатура')}
+                  </Hint>
+                </span>
               </div>
               <div className="panel-box-body field">
                 {project ? (
@@ -248,23 +338,31 @@ export function DevicePage() {
                     )}
                     {differs === 'matrix' ? (
                       <p className="field-hint" style={{ color: 'var(--danger-color)' }}>
-                        {t(`Matrix differs: project ${project.hardware.matrix.rows}×${project.hardware.matrix.cols}, keyboard ${snapshot.rows}×${snapshot.cols}.`, `Матрица не совпадает: в проекте ${project.hardware.matrix.rows}×${project.hardware.matrix.cols}, в клавиатуре ${snapshot.rows}×${snapshot.cols}.`)}
+                        {t(
+                          `Matrix differs: project ${project.hardware.matrix.rows}×${project.hardware.matrix.cols}, keyboard ${snapshot.rows}×${snapshot.cols}.`,
+                          `Матрица не совпадает: в проекте ${project.hardware.matrix.rows}×${project.hardware.matrix.cols}, в клавиатуре ${snapshot.rows}×${snapshot.cols}.`,
+                        )}
                       </p>
                     ) : (
                       <p className="field-hint">
-                        {differs === 0 ? t('The keymap in the keyboard is the same as in the project.', 'Раскладка в клавиатуре такая же, как в проекте.') : t(`${differs} keys differ from the project.`, `Отличается клавиш: ${differs}.`)}
+                        {differs === 0
+                          ? t('The keymap in the keyboard is the same as in the project.', 'Раскладка в клавиатуре такая же, как в проекте.')
+                          : t(`${differs} keys differ from the project.`, `Отличается клавиш: ${differs}.`)}
                       </p>
                     )}
                     <div className="field-row">
                       <button
                         className="btn"
-                        disabled={differs === 'matrix'}
+                        {...whyDisabled(differs === 'matrix' && t('The matrix sizes differ, so the keymaps cannot be compared', 'Размеры матрицы разные, раскладки нельзя сопоставить'))}
                         onClick={() => {
-                          apply((p) => {
-                            const km = activeKeymap(p);
-                            const fromDev = { ...snapshotToKeymap(km, snapshot), id: newId('keymap'), name: `${current?.productName ?? 'keyboard'} ${new Date().toLocaleDateString()}` };
-                            return { ...p, keymaps: [...p.keymaps, fromDev], activeKeymapId: fromDev.id };
-                          }, t('read keymap from keyboard', 'раскладка с клавиатуры'));
+                          apply(
+                            (p) => {
+                              const km = activeKeymap(p);
+                              const fromDev = { ...snapshotToKeymap(km, snapshot), id: newId('keymap'), name: `${current?.productName ?? 'keyboard'} ${new Date().toLocaleDateString()}` };
+                              return { ...p, keymaps: [...p.keymaps, fromDev], activeKeymapId: fromDev.id };
+                            },
+                            t('read keymap from keyboard', 'раскладка с клавиатуры'),
+                          );
                           toast(t('The keyboard keymap is added to the project as a new keymap', 'Раскладка клавиатуры добавлена в проект новой раскладкой'));
                         }}
                       >
@@ -272,7 +370,10 @@ export function DevicePage() {
                       </button>
                       <button
                         className="btn"
-                        disabled={differs === 'matrix' || differs === 0}
+                        {...whyDisabled(
+                          (differs === 'matrix' && t('The matrix sizes differ, so the keymaps cannot be compared', 'Размеры матрицы разные, раскладки нельзя сопоставить')) ||
+                            (differs === 0 && t('No differences: the keyboard matches the project', 'Отличий нет: клавиатура совпадает с проектом')),
+                        )}
                         onClick={() => {
                           setCompare('device');
                           navigate({ section: 'keyboard' });
@@ -281,12 +382,22 @@ export function DevicePage() {
                         {t('show differences', 'показать отличия')}
                       </button>
                       {!project.device && current && (
-                        <button className="btn btn--ghost" onClick={() => apply((p) => patchProject(p, { device: { vid: current.vendorId, pid: current.productId, product: current.productName } }), t('link keyboard', 'привязка клавиатуры'))}>
+                        <button
+                          className="btn btn--ghost"
+                          onClick={() =>
+                            apply((p) => patchProject(p, { device: { vid: current.vendorId, pid: current.productId, product: current.productName } }), t('link keyboard', 'привязка клавиатуры'))
+                          }
+                        >
                           {t('link this keyboard to the project', 'привязать клавиатуру к проекту')}
                         </button>
                       )}
                     </div>
-                    <p className="field-hint">{t('Writing to the keyboard: bottom bar → “to keyboard” (you see all changes before writing; the result is verified by reading back).', 'Запись в клавиатуру: внизу → «в клавиатуру» (сначала показываются все изменения; результат проверяется чтением).')}</p>
+                    <p className="field-hint">
+                      {t(
+                        'Writing to the keyboard: bottom bar → “to keyboard” (you see all changes before writing; the result is verified by reading back).',
+                        'Запись в клавиатуру: внизу → «в клавиатуру» (сначала показываются все изменения; результат проверяется чтением).',
+                      )}
+                    </p>
                     {lastWrite && (
                       <span className="kicker">
                         {t('last write', 'последняя запись')}: {new Date(lastWrite.at).toLocaleTimeString()} · {lastWrite.verified ? t('verified', 'проверено') : t('NOT verified', 'НЕ подтверждено')}

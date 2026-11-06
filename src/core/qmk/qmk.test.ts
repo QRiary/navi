@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseQmk, toQmk } from '../keycodes/codec';
+import { checkKeyOverrides } from '../features/advanced';
 import { loadSpec } from '../keycodes/spec';
 import { createBlankProject, createDilemmaProject } from '../project/factory';
 import { activeGeometry, activeKeymap, renameLayer, setEncoder, setKeycodes, setLayerCName } from '../project/ops';
@@ -59,7 +60,7 @@ describe('keymap.c generator', () => {
     const res = generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: true, encoderCount: 2 });
     const c = res.files.find((f) => f.name === 'keymap.c')!.text;
     expect(c).toContain('TD_ESC = 0');
-    expect(c).toContain('[TD_ESC] = { KC_ESC, MO(L_LOWER), KC_CAPS, KC_NO, KC_NO }');
+    expect(c).toContain('[TD_ESC] = { KC_ESC, MO(L_LOWER), KC_CAPS, KC_NO },');
     expect(c).toContain('.fn = { .on_dance_finished = navi_td_finished, .on_reset = navi_td_reset }');
     expect(c).toContain('case TD(TD_ESC): return 250;');
     expect(c).toContain('const uint16_t PROGMEM esc_one_keys[] = { KC_ESC, KC_1, COMBO_END };');
@@ -510,7 +511,7 @@ describe('own pipeline mode', async () => {
     };
   };
   const QMK_HOOKS = ['process_record_user', 'get_tapping_term', 'get_combo_term', 'combo_should_trigger', 'leader_end_user'];
-  const NAVI_FNS = ['process_record_navi', 'get_tapping_term_navi', 'get_combo_term_navi', 'combo_should_trigger_navi', 'leader_end_navi'];
+  const NAVI_FNS = ['process_record_navi', 'get_tapping_term_navi', 'get_combo_term_navi', 'combo_should_trigger_navi', 'leader_end_navi', 'layer_state_set_navi', 'get_quick_tap_term_navi', 'get_hold_on_other_key_press_navi', 'get_permissive_hold_navi', 'pre_process_record_navi', 'combo_ref_from_layer_navi', 'process_combo_event_navi', 'keyboard_post_init_navi'];
   const defines = (c: string, name: string) => new RegExp(`^\\w[\\w ]*\\b${name}\\([^;]*\\)\\s*\\{`, 'm').test(c);
 
   it('file set: keymap.c, navi.h, navi_rules.mk, navi_config.h — never rules.mk / config.h', () => {
@@ -531,11 +532,11 @@ describe('own pipeline mode', async () => {
     expect(c).toContain('#ifdef LEADER_ENABLE\nvoid leader_end_navi(void) {}\n#endif');
     for (const hook of QMK_HOOKS) expect(defines(c, hook), hook).toBe(false);
     expect(res.issues.filter((i) => i.where.startsWith('own pipeline'))).toEqual([]);
-    expect([...res.symbols].sort()).toEqual(['keymaps', ...NAVI_FNS].sort());
+    expect([...res.symbols].sort()).toEqual(['keymaps', 'navi_layers_on', 'navi_layer_off', 'navi_is_stand_in', ...NAVI_FNS].sort());
     const h = file(res, 'navi.h');
     expect(h).toContain('#pragma once');
     expect(h).toContain('    NAVI_SAFE_RANGE = SAFE_RANGE // your own keycodes start here');
-    expect(h).toMatch(/#ifdef COMBO_ENABLE\nuint16_t get_combo_term_navi\(uint16_t combo_index, combo_t \*combo\);\nbool combo_should_trigger_navi\([^)]*\);\n#endif/);
+    expect(h).toMatch(/#ifdef COMBO_ENABLE\nuint16_t get_combo_term_navi\(uint16_t combo_index, combo_t \*combo\);\nbool combo_should_trigger_navi\([^)]*\);\nuint8_t combo_ref_from_layer_navi\(uint8_t layer\);\nvoid process_combo_event_navi\(uint16_t combo_index, bool pressed\);\n#endif/);
     expect(h).toContain('#ifdef LEADER_ENABLE\nvoid leader_end_navi(void);\n#endif');
   });
 
@@ -550,7 +551,8 @@ describe('own pipeline mode', async () => {
     for (const hook of QMK_HOOKS) expect(defines(generated, hook), hook).toBe(false);
     for (const fn of NAVI_FNS) expect(defines(generated, fn), fn).toBe(true);
     expect(generated).toContain('case TD(TD_ESC): return 250;');
-    expect(generated).toContain('case 0: return layer_state_is(BASE) || layer_state_is(L_LOWER); // esc_one');
+    expect(generated).toContain('layer_state_t top = (layer_state_t)1 << get_highest_layer(layer_state | default_layer_state);');
+    expect(generated).toContain('case 0: return top & ((layer_state_t)1 << BASE | (layer_state_t)1 << L_LOWER); // esc_one');
     expect(generated).toContain('case QK_MACRO_0: // git');
     expect(generated).toContain('if (leader_sequence_two_keys(KC_G, KC_S)) {');
     expect(generated).toContain('const uint32_t PROGMEM unicode_map[] = {');
@@ -621,5 +623,84 @@ describe('own pipeline mode', async () => {
     expect(file(b, 'keymap.c')).not.toContain('NAVI_SAFE_RANGE');
     expect(file(b, 'keymap.c').split('// ── your own lines')[0]).not.toContain('_navi');
     expect(file(b, 'keymap.c')).toContain('enum custom_keycodes {\n    HELLO = SAFE_RANGE, // says hi\n};');
+  });
+
+  describe('layer keys bring their layer to the top', () => {
+    const onTop = (p: Project, on = true): Project => ({ ...p, firmware: { ...p.firmware, layerKeysOnTop: on } });
+    const gen = (p: Project) => generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: false, encoderCount: 2 });
+
+    it('off: pure output is the same as without the field, with no layer state code', () => {
+      for (const p of [createBlankProject('x', 4, 6, false), full()]) {
+        const { layerKeysOnTop: _, ...fw } = p.firmware;
+        const a = gen(onTop(p, false));
+        const b = gen({ ...p, firmware: fw as Project['firmware'] });
+        expect(a.files).toEqual(b.files);
+        const c = file(a, 'keymap.c');
+        for (const s of ['layer_state_set_user', 'navi_wanted', 'navi_layer_keys', 'navi_layers_on']) expect(c).not.toContain(s);
+        expect(a.symbols.has('layer_state_set_user')).toBe(false);
+      }
+      // blank project: no process_record_user either
+      expect(file(gen(createBlankProject('x', 4, 6, false)), 'keymap.c')).not.toContain('process_record_user');
+    });
+
+    it('on, pure: the callback, the state, the helpers and the layer key check in process_record_user', () => {
+      for (const p of [onTop(createBlankProject('x', 4, 6, false)), onTop(full())]) {
+        const res = gen(p);
+        const c = file(res, 'keymap.c').split('// ── your own lines')[0];
+        expect(defines(c, 'layer_state_set_user')).toBe(true);
+        expect(defines(c, 'process_record_user')).toBe(true);
+        expect(defines(c, 'navi_layers_on')).toBe(true);
+        expect(defines(c, 'navi_layer_off')).toBe(true);
+        expect(c).toContain('static layer_state_t navi_wanted');
+        expect(c).toMatch(/bool process_record_user\(uint16_t keycode, keyrecord_t \*record\) \{\n {4}navi_layer_keys\(keycode, record\);/);
+        expect(c).not.toContain('_navi(');
+        for (const s of ['layer_state_set_user', 'process_record_user', 'navi_layers_on', 'navi_layer_off']) expect(res.symbols.has(s), s).toBe(true);
+      }
+      const blank = file(gen(onTop(createBlankProject('x', 4, 6, false))), 'keymap.c');
+      expect(blank).toContain('    navi_layer_keys(keycode, record); // layer keys bring their layer to the top\n    return true;\n}');
+    });
+
+    it('on, pure: own keymap.c lines that define layer_state_set_user are an error', () => {
+      const p = onTop(createBlankProject('x', 4, 6, false));
+      const own = { ...p, firmware: { ...p.firmware, custom: { 'keymap.c': 'layer_state_t layer_state_set_user(layer_state_t state) {\n    return state;\n}' } } };
+      expect(gen(own).issues.some((i) => i.level === 'error' && i.where.startsWith('keymap.c'))).toBe(true);
+      expect(gen(onTop(own, false)).issues.filter((i) => i.level === 'error')).toEqual([]);
+    });
+
+    it('own pipeline: layer_state_set_navi always exists; on → real code, forwarding warnings', () => {
+      const offRes = gen(pipe(createBlankProject('x', 4, 6, false)));
+      expect(file(offRes, 'keymap.c')).toContain('layer_state_t layer_state_set_navi(layer_state_t state) {\n    return state;\n}');
+      const h = file(offRes, 'navi.h');
+      for (const proto of ['layer_state_t layer_state_set_navi(layer_state_t state);', 'layer_state_t navi_layers_on(void);', 'void navi_layer_off(uint8_t layer);']) expect(h).toContain(proto);
+      expect(h).toContain('//   layer_state_t layer_state_set_user(layer_state_t state) { return layer_state_set_navi(state); }');
+
+      const res = gen(pipe(onTop(createBlankProject('x', 4, 6, false))));
+      const c = file(res, 'keymap.c');
+      expect(defines(c, 'layer_state_set_navi')).toBe(true);
+      expect(defines(c, 'layer_state_set_user')).toBe(false);
+      expect(c).not.toContain('    return state;\n}');
+      expect(c).toMatch(/bool process_record_navi\(uint16_t keycode, keyrecord_t \*record\) \{\n {4}navi_layer_keys\(keycode, record\);/);
+      const warn = res.issues.filter((i) => i.where.startsWith('own pipeline'));
+      expect(warn.map((i) => i.where)).toEqual(['own pipeline: process_record_user()', 'own pipeline: layer_state_set_user()']);
+      expect(warn[1].message.en).toContain('return layer_state_set_navi(state);');
+      expect(warn[0].message.en).toContain('layer key releases');
+      // pipeline: the user's own lines may define the QMK hook, not NAVI's function
+      const fwd = (body: string) => gen(pipe({ ...onTop(createBlankProject('x', 4, 6, false)), firmware: { ...onTop(createBlankProject('x', 4, 6, false)).firmware, pipeline: { enabled: true, headers: [] }, custom: { 'keymap.c': body } } }));
+      expect(fwd('layer_state_t layer_state_set_user(layer_state_t state) {\n    return layer_state_set_navi(state);\n}').issues.filter((i) => i.level === 'error')).toEqual([]);
+      expect(fwd('layer_state_t layer_state_set_navi(layer_state_t state) {\n    return state;\n}').issues.some((i) => i.level === 'error')).toBe(true);
+    });
+  });
+});
+
+describe('key overrides', () => {
+  it('a trigger may be any keycode: QMK compares the pressed key’s full 16-bit keycode', () => {
+    const overrides = [
+      { id: 'a', name: 'ctrl_redo', mods: 0x01, trigger: q('C(KC_Z)'), replacement: q('C(S(KC_Z))') },
+      { id: 'b', name: 'shift_lt', mods: 0x02, trigger: q('LT(1, KC_BSPC)'), replacement: q('KC_DEL') },
+    ];
+    expect(checkKeyOverrides(overrides)).toEqual([]);
+    const p = { ...project(), keyOverrides: overrides };
+    const c = generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: false, encoderCount: 0 }).files.find((f) => f.name === 'keymap.c')!.text;
+    expect(c).toContain(`, ${toQmk(spec, q('C(KC_Z)'))}, ${toQmk(spec, q('C(S(KC_Z))'))});`);
   });
 });

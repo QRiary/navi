@@ -6,8 +6,10 @@ import { useState } from 'react';
 import { CopyPlus, Trash2 } from 'lucide-react';
 import { addKeymap, patchProject, removeKeymap, renameKeymap } from '../../core/project/ops';
 import { useProjectStore } from '../../store/projectStore';
-import { toast } from '../../store/toastStore';
 import { t } from '../../i18n';
+import { deletedToast } from '../../lib/undoToast';
+import { whyDisabled } from '../../lib/whyDisabled';
+import { Hint } from '../InfoTip';
 
 export function KeymapManager() {
   const project = useProjectStore((s) => s.project);
@@ -19,7 +21,15 @@ export function KeymapManager() {
     <div className="panel-box" style={{ marginBottom: 'var(--gap)' }}>
       <div className="panel-box-head">
         <span className="cell-label">
-          {t('keymaps in project', 'раскладки проекта')} · {project.keymaps.length}
+          <Hint
+            tip={t(
+              'A keymap is one full set of layers and encoder actions. Keep variants side by side (for example “daily” and “gaming”); only the active one goes to the keyboard and the firmware.',
+              'Раскладка — полный набор слоёв и действий энкодеров. Держите варианты рядом (например, «обычная» и «игровая»); в клавиатуру и прошивку идёт только текущая.',
+            )}
+          >
+            {t('keymaps in project', 'раскладки проекта')}
+          </Hint>{' '}
+          · {project.keymaps.length}
         </span>
         <div className="field-row">
           <select
@@ -42,12 +52,16 @@ export function KeymapManager() {
             onChange={(e) => apply((p) => renameKeymap(p, km.id, e.target.value), t('rename keymap', 'имя раскладки'), { coalesce: `kmname:${km.id}` })}
             aria-label={t('Keymap name', 'Имя раскладки')}
           />
-          <button className="btn" onClick={() => apply((p) => addKeymap(p, `${km.name} copy`, km.id), t('copy keymap', 'копия раскладки'))} title={t('A copy of this keymap becomes active', 'Копия этой раскладки станет текущей')}>
+          <button
+            className="btn"
+            onClick={() => apply((p) => addKeymap(p, `${km.name} copy`, km.id), t('copy keymap', 'копия раскладки'))}
+            title={t('A copy of this keymap becomes active', 'Копия этой раскладки станет текущей')}
+          >
             <CopyPlus size={14} strokeWidth={1.5} /> {t('copy', 'копия')}
           </button>
           <button
             className={`btn ${confirm ? 'btn--danger' : ''}`}
-            disabled={project.keymaps.length <= 1}
+            {...whyDisabled(project.keymaps.length <= 1 && t('A project needs at least one keymap', 'В проекте должна остаться хотя бы одна раскладка'))}
             onClick={() => {
               if (!confirm) {
                 setConfirm(true);
@@ -56,7 +70,7 @@ export function KeymapManager() {
               }
               apply((p) => removeKeymap(p, km.id), t('delete keymap', 'удаление раскладки'));
               setConfirm(false);
-              toast(t('Keymap deleted — Ctrl+Z to undo', 'Раскладка удалена — Ctrl+Z отменит'));
+              deletedToast(km.name || t('keymap', 'раскладка'));
             }}
           >
             <Trash2 size={14} strokeWidth={1.5} /> {confirm ? t('delete for sure?', 'точно удалить?') : t('delete', 'удалить')}

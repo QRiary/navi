@@ -425,6 +425,12 @@ export function parseQmk(spec: KeycodeSpec, source: string, ctx: ParseContext = 
   const value = (): number => {
     const tok = take();
     if (tok.t === 'num') return parseNumber(tok.v);
+    if (tok.v === '(') {
+      // Redundant parentheses, as C allows: C(S((KC_J))).
+      const inner = value();
+      expect(')');
+      return inner;
+    }
     if (tok.t !== 'ident') throw new KeycodeError(`unexpected “${tok.v}”`);
     const name = tok.v;
     if (peek()?.v !== '(') {

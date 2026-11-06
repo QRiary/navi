@@ -61,7 +61,9 @@ button {
   cursor: pointer;
 }
 
-button:disabled {
+button:disabled,
+button[aria-disabled="true"],
+select[aria-disabled="true"] {
   cursor: default;
   opacity: 0.35;
 }
@@ -84,13 +86,19 @@ output {
 }
 
 code {
-  font-size: 0.92em;
+  font-size: max(0.92em, var(--fs-xs));
   color: var(--text-primary);
+}
+
+/* Chromium's own placeholder gray is under 4.5:1 on the dark cells */
+::placeholder {
+  color: var(--text-label);
+  opacity: 1;
 }
 
 kbd {
   font-size: var(--fs-2xs);
-  padding: 1px 5px;
+  padding: 1px 4px;
   border: var(--border);
   color: var(--text-label);
 }
@@ -100,7 +108,12 @@ kbd {
   color: var(--app-background);
 }
 
-:focus-visible {
+/* Rings only after Tab (src/lib/focusRing.ts): arrows after a click do not draw one, not even Chromium's own. */
+:where(html:not([data-focus-ring])) :focus-visible {
+  outline: none;
+}
+
+:where(html[data-focus-ring]) :focus-visible {
   outline: 1px solid var(--text-primary);
   outline-offset: 2px;
 }
@@ -114,7 +127,7 @@ kbd {
 .cell-label,
 .kicker {
   font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   font-weight: 500;
   letter-spacing: var(--label-spacing);
   text-transform: uppercase;
@@ -138,7 +151,7 @@ kbd {
     border-color var(--dur) var(--ease);
 }
 
-.icon-btn:hover:not(:disabled) {
+.icon-btn:hover:not(:disabled):not([aria-disabled="true"]) {
   color: var(--text-primary);
   border-color: var(--border-color);
   background: var(--hover-background);
@@ -166,8 +179,9 @@ kbd {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 32px;
-  padding: 0 12px;
+  min-height: 32px;
+  max-width: 100%;
+  padding: 4px 12px;
   border: var(--border);
   border-radius: var(--panel-radius);
   background: var(--cell-background);
@@ -176,11 +190,12 @@ kbd {
   font-size: var(--fs-xs);
   letter-spacing: 0.08em;
   text-transform: lowercase;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: left;
   transition: all var(--dur) var(--ease);
 }
 
-.btn:hover:not(:disabled) {
+.btn:hover:not(:disabled):not([aria-disabled="true"]) {
   color: var(--text-primary);
   border-color: var(--text-label);
 }
@@ -190,7 +205,7 @@ kbd {
   color: var(--text-primary);
 }
 
-.btn--primary:hover:not(:disabled) {
+.btn--primary:hover:not(:disabled):not([aria-disabled="true"]) {
   background: var(--accent-color);
   color: var(--accent-contrast);
 }
@@ -206,7 +221,7 @@ kbd {
 }
 
 .btn--danger,
-.btn--danger:hover:not(:disabled) {
+.btn--danger:hover:not(:disabled):not([aria-disabled="true"]) {
   border-color: var(--danger-color);
   color: var(--danger-color);
 }
