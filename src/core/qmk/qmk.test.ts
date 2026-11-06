@@ -74,6 +74,33 @@ describe('keymap.c generator', () => {
     expect(res.rules).toMatchObject({ TAP_DANCE_ENABLE: 'yes', COMBO_ENABLE: 'yes', KEY_OVERRIDE_ENABLE: 'yes' });
   });
 
+  it('tap dance: a key that ends the dance is handled after it, in pre_process_record, looked up again', () => {
+    const base = project();
+    const own = { id: 'o', index: 1, name: 'TD_OWN', tap: 0, hold: 0, doubleTap: 0, tapHold: 0, kind: 'own-c' as const, ownC: { onFinished: 'own_done' } };
+    const slots = { id: 't', index: 0, name: 'TD_LEAVE', tap: q('KC_A'), hold: 0, doubleTap: q('TG(1)'), tapHold: 0 };
+    for (const tapDances of [[slots], [own], [slots, own]]) {
+      const c = generateKeymap({ project: { ...base, tapDances }, keymap: activeKeymap(base), spec, via: false, encoderCount: 0 }).files.find((f) => f.name === 'keymap.c')!.text;
+      expect(c).toMatch(/bool pre_process_record_user\(uint16_t keycode, keyrecord_t \*record\) \{\n(    \/\/.*\n)+    if \(preprocess_tap_dance\(keycode, record\)\) keycode = get_record_keycode\(record, true\);\n    return true;\n\}/);
+    }
+    const none = generateKeymap({ project: base, keymap: activeKeymap(base), spec, via: false, encoderCount: 0 }).files.find((f) => f.name === 'keymap.c')!.text;
+    expect(none).not.toContain('pre_process_record_user');
+    expect(none).not.toContain('preprocess_tap_dance');
+  });
+
+  it('tap dance end comes first in pre_process_record: the tap-hold tracking sees the key looked up again', () => {
+    const base = project();
+    const p: Project = {
+      ...base,
+      tapDances: [{ id: 't', index: 0, name: 'TD_LEAVE', tap: q('KC_A'), hold: 0, doubleTap: q('TG(1)'), tapHold: 0 }],
+      tapHolds: [{ id: 'h', keycodes: [q('LCTL_T(KC_Q)')], holdOnKeys: [q('KC_1')] }],
+    };
+    const c = generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: false, encoderCount: 0 }).files.find((f) => f.name === 'keymap.c')!.text;
+    const hook = c.slice(c.indexOf('bool pre_process_record_user('));
+    expect(hook.indexOf('preprocess_tap_dance(')).toBeGreaterThan(0);
+    expect(hook.indexOf('preprocess_tap_dance(')).toBeLessThan(hook.indexOf('navi_last_pressed = keycode'));
+    expect(hook.indexOf('preprocess_tap_dance(')).toBeLessThan(hook.indexOf('navi_watch_presses(keycode, record)'));
+  });
+
   it('without VIA macros are compiled in; config.h parameters come from the official table', () => {
     let p = project();
     p = { ...p, macros: [{ id: 'm', index: 2, name: 'git', steps: [{ type: 'text', text: 'git status' }, { type: 'tap', keycode: 0x28 }, { type: 'delay', ms: 50 }] }] };
@@ -510,7 +537,7 @@ describe('own pipeline mode', async () => {
       firmware: { ...p.firmware, unicode: 'unicodemap', buildConfig: { TAPPING_TERM: 190 }, custom: { 'rules.mk': 'CONSOLE_ENABLE = yes', 'config.h': '#define MY_FLAG 1', 'keymap.c': 'bool process_record_user(uint16_t keycode, keyrecord_t *record) {\n    return process_record_navi(keycode, record);\n}' } },
     };
   };
-  const QMK_HOOKS = ['process_record_user', 'get_tapping_term', 'get_combo_term', 'combo_should_trigger', 'leader_end_user'];
+  const QMK_HOOKS = ['process_record_user', 'get_tapping_term', 'pre_process_record_user', 'get_combo_term', 'combo_should_trigger', 'leader_end_user'];
   const NAVI_FNS = ['navi_raw_hid_receive', 'process_record_navi', 'get_tapping_term_navi', 'get_combo_term_navi', 'combo_should_trigger_navi', 'leader_end_navi', 'layer_state_set_navi', 'get_quick_tap_term_navi', 'get_hold_on_other_key_press_navi', 'get_permissive_hold_navi', 'pre_process_record_navi', 'combo_ref_from_layer_navi', 'process_combo_event_navi', 'keyboard_post_init_navi', 'caps_word_press_navi'];
   const defines = (c: string, name: string) => new RegExp(`^\\w[\\w ]*\\b${name}\\([^;]*\\)\\s*\\{`, 'm').test(c);
 

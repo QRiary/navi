@@ -9,6 +9,7 @@
 //   16 every tap: "!" (Shift: "->"), "="   17 every tap: "a"   18 every tap: "a" (Shift: nothing)
 //   19 every tap: HOST_KEY (the own lines tap KC_Z)   20 own C: host_each taps KC_X on the second tap   21 KC_LSFT
 //   22 every tap: tap KC_A, tap KC_B   23 tap: the stand-in at 3 / hold: the stand-in at 4
+//   layer 3 (on with 30 + 19, TG(3)): 10 tap KC_T / double tap TG(3)   6 KC_NO
 // Combos (layers 1 and 2 read combo keys from themselves, layer 0 and 3 from layer 0):
 //   30 MO(1)   31 MO(2)
 //   32 33 Q W (layer 1: 1 2) → ESC   34 35 R T (layer 2: 3, transparent) → ENTER
@@ -165,6 +166,16 @@ TEST_F(NaviHost, double_tap_dance_interrupted_after_one_tap_taps_first) {
 // Interrupted on the second tap: the double tap plays first (TG(1): the other key comes from layer 1)
 TEST_F(NaviHost, double_tap_dance_interrupted_on_the_second_tap_plays_the_double_tap_first) {
     EXPECT_EQ(play({"+14", "-14", "+14", "+13", "-13", "-14"}), "A -");
+}
+
+// A dance ended by another key's press turns its layer off first: that key is the lower layer's mod-tap from its
+// press on (QMK ends the dance in process_record, after its tapping code judged the key by the old layer's KC_NO)
+TEST_F(NaviHost, dance_turning_its_layer_off_then_a_mod_tap_below_tapped_taps) {
+    EXPECT_EQ(play({"+30", "+19", "-19", "-30", "+10", "-10", "+10", "-10", "+6", "-6"}), "D -");
+}
+
+TEST_F(NaviHost, dance_turning_its_layer_off_then_a_mod_tap_below_held_holds) {
+    EXPECT_EQ(play({"+30", "+19", "-19", "-30", "+10", "-10", "+10", "-10", "+6", "wait", "+7", "-7", "-6"}), "LCTL LCTL+E LCTL -");
 }
 
 // Stand-ins of tap-hold keys with actions in the slots: their tap and hold sides
