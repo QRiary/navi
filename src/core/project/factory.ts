@@ -119,6 +119,7 @@ export function createProject({ name, hardware, geometry, layers = 4, encoderCou
       layerKeysOnTop: LAYER_KEYS_ON_TOP_DEFAULT,
       bootloaderReboot: BOOTLOADER_REBOOT_DEFAULT,
       tests: FIRMWARE_TESTS_DEFAULT,
+      runTests: false,
       autoRepeat: { ...AUTO_REPEAT_DEFAULT },
       textRoute: TEXT_ROUTE_DEFAULT,
     },

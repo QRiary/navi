@@ -598,6 +598,7 @@ function readFirmware(r: Reader, v: unknown): FirmwareConfig {
     layerKeysOnTop: r.bool(o.layerKeysOnTop ?? false, 'firmware.layerKeysOnTop', false),
     bootloaderReboot: r.bool(o.bootloaderReboot ?? false, 'firmware.bootloaderReboot', false),
     tests: r.bool(o.tests ?? false, 'firmware.tests', false),
+    runTests: r.bool(o.runTests ?? false, 'firmware.runTests', false),
     autoRepeat: {
       delay: r.num(ar.delay, 'firmware.autoRepeat.delay', AUTO_REPEAT_LIMITS.delay.min, AUTO_REPEAT_LIMITS.delay.max, AUTO_REPEAT_DEFAULT.delay),
       rate: r.num(ar.rate, 'firmware.autoRepeat.rate', AUTO_REPEAT_LIMITS.rate.min, AUTO_REPEAT_LIMITS.rate.max, AUTO_REPEAT_DEFAULT.rate),

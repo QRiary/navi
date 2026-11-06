@@ -79,6 +79,12 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
     if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 16 }; // validate reports it
     return { ...d, schemaVersion: 16, firmware: { ...(f as Data), tests: false } };
   },
+  // 16 → 17: running the firmware tests before flashing (firmware.runTests), off for older files.
+  16: (d) => {
+    const f = d.firmware;
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 17 }; // validate reports it
+    return { ...d, schemaVersion: 17, firmware: { ...(f as Data), runTests: false } };
+  },
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {
