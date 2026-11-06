@@ -5,7 +5,13 @@ export function KeyName({ name, className }: { name: FriendlyName; className?: s
   return (
     <span className={className} title={name.qmk}>
       {name.text}
-      {name.text !== name.qmk && <code className="qmk-sub qmk-sub--inline">{name.qmk}</code>}
+      {name.text !== name.qmk && (
+        <>
+          {/* a real space, not only the margin: a double-click selects one word and needs the boundary */}
+          {' '}
+          <code className="qmk-sub qmk-sub--inline">{name.qmk}</code>
+        </>
+      )}
     </span>
   );
 }

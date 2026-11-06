@@ -660,7 +660,7 @@
 
 .qmk-sub--inline {
   display: inline;
-  margin-left: 8px;
+  margin-left: 4px; /* plus the space before it in KeyName */
 }
 
 /* ── Key chips: keys and key lists as compact chips, a field at the end adds one ── */
