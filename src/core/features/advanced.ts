@@ -68,7 +68,7 @@ export function checkTapDances(spec: KeycodeSpec, tds: TapDance[], reserved: Rea
     } else if (kind === 'every-tap') {
       const steps = td.steps ?? [];
       if (steps.length < 1 || steps.length > TAP_DANCE_MAX_STEPS) {
-        out.push({ level: 'error', where, message: { en: `An every-tap dance has 1–${TAP_DANCE_MAX_STEPS} steps.`, ru: `У tap dance «каждое нажатие» 1–${TAP_DANCE_MAX_STEPS} шага.` } });
+        out.push({ level: 'error', where, message: { en: `An every-tap dance has 1–${TAP_DANCE_MAX_STEPS} steps.`, ru: `У tap dance «каждое нажатие» от 1 до ${TAP_DANCE_MAX_STEPS} шагов.` } });
       }
       steps.forEach((st, i) => {
         for (const v of TAP_DANCE_VARIANTS) {

@@ -337,6 +337,71 @@ export interface ParseContext extends CodecOptions {
   layerByName?: (name: string) => number | undefined;
   tapDanceByName?: (name: string) => number | undefined;
   customByName?: (name: string) => number | undefined;
+  /** The project's own names (layers, tap dances, own keycodes), for `typingCase`. */
+  ownNames?: readonly string[];
+}
+
+/**
+ * A name lookup that ignores case: the exact spelling wins, else the one entry whose name differs only by case.
+ * Two such entries with different values → KeycodeError naming them (“nav” with layers Nav and NAV).
+ */
+export function caseInsensitiveLookup<T>(entries: Iterable<readonly [string, T]>): (name: string) => T | undefined {
+  const exact = new Map<string, T>();
+  const folded = new Map<string, [string, T][]>();
+  for (const [name, value] of entries) {
+    if (exact.has(name)) continue;
+    exact.set(name, value);
+    const key = name.toUpperCase();
+    folded.set(key, [...(folded.get(key) ?? []), [name, value]]);
+  }
+  return (name) => {
+    if (exact.has(name)) return exact.get(name);
+    const hits = folded.get(name.toUpperCase());
+    if (!hits) return undefined;
+    if (new Set(hits.map(([, v]) => v)).size > 1) throw new KeycodeError(`“${name}” could be ${hits.map(([n]) => n).join(' or ')}: type it exactly`);
+    return hits[0][1];
+  };
+}
+
+/** Function names parseQmk understands (LT, LCTL, MO …). */
+const FUNCTION_NAMES = [
+  ...Object.keys(MOD_FUNCTION_INPUT),
+  ...Object.keys(MOD_TAP_INPUT),
+  ...Object.keys(LAYER_FN_RANGES),
+  'MT', 'LT', 'LM', 'OSM', 'TD', 'SH_T', 'UC', 'UM', 'UP',
+];
+const functionName = caseInsensitiveLookup(FUNCTION_NAMES.map((n) => [n, n] as const));
+const modConstant = caseInsensitiveLookup(Object.entries(MOD_CONSTANTS));
+
+/** Every keycode name of a spec (its names and aliases, KC_HYPR / KC_MEH, OS_*, US aliases) → itself, any case. */
+const builtinNames = new WeakMap<KeycodeSpec, { lookup: (name: string) => string | undefined; mixedCase: string[] }>();
+function builtins(spec: KeycodeSpec) {
+  let b = builtinNames.get(spec);
+  if (!b) {
+    const names = [...spec.byName.keys(), 'KC_HYPR', 'KC_MEH', ...Object.keys(ONE_SHOT_DEFINES), ...us().byKey.keys()];
+    b = { lookup: caseInsensitiveLookup(names.map((n) => [n, n] as const)), mixedCase: names.filter((n) => n !== n.toUpperCase()) };
+    builtinNames.set(spec, b);
+  }
+  return b;
+}
+
+/**
+ * What a keycode box shows while it is typed in: every name in capitals, as QMK spells them, without moving the
+ * caret (only the case changes). A finished name (the caret isn't at its end) that is a mixed-case QMK name (MI_Ab)
+ * or one of the project's own names gets that spelling; the name being typed stays as typed while it could still
+ * become an own name with small letters (“na” → layer “nav”). Numbers (0x1f) are left alone.
+ */
+export function typingCase(spec: KeycodeSpec, text: string, caret: number, ownNames: readonly string[] = []): string {
+  const spelled = [...ownNames, ...builtins(spec).mixedCase];
+  return text.replace(/[0-9][0-9A-Za-z]*|[A-Za-z_][A-Za-z0-9_]*/g, (tok, at: number) => {
+    if (/^[0-9]/.test(tok) || spelled.includes(tok)) return tok;
+    const up = tok.toUpperCase();
+    if (at + tok.length === caret) {
+      return ownNames.some((n) => n !== n.toUpperCase() && n.toUpperCase().startsWith(up)) ? tok : up;
+    }
+    const same = [...new Set(spelled.filter((n) => n.toUpperCase() === up))];
+    return same.length === 1 ? same[0] : same.length > 1 ? tok : up;
+  });
 }
 
 type Token = { t: 'ident' | 'num' | 'punct'; v: string };
@@ -377,10 +442,11 @@ function parseNumber(s: string): number {
 /**
  * QMK expression → value. Understands names and aliases from the spec, KC_EXLM etc.,
  * the functions LCTL()/C()/MT()/LCTL_T()/LT()/LM()/MO()/TG()/TO()/TT()/OSL()/DF()/PDF()/OSM()/TD()/SH_T()/UC()/UM()/UP(),
- * MOD_* and OS_* constants, KC_HYPR/KC_MEH and numbers (0x…).
+ * MOD_* and OS_* constants, KC_HYPR/KC_MEH and numbers (0x…). Names in any case (lt(nav, kc_a)), KC_ may be left out
+ * (esc), and a trailing comma pasted from keymap.c is ignored.
  */
 export function parseQmk(spec: KeycodeSpec, source: string, ctx: ParseContext = {}): number {
-  const tokens = tokenize(source.trim());
+  const tokens = tokenize(source.trim().replace(/,$/, ''));
   let pos = 0;
   const peek = () => tokens[pos];
   const take = () => {
@@ -397,8 +463,9 @@ export function parseQmk(spec: KeycodeSpec, source: string, ctx: ParseContext = 
     let mods = 0;
     for (;;) {
       const tok = take();
+      const constant = tok.t === 'ident' ? modConstant(tok.v) : undefined;
       if (tok.t === 'num') mods |= parseNumber(tok.v);
-      else if (tok.t === 'ident' && tok.v in MOD_CONSTANTS) mods |= MOD_CONSTANTS[tok.v];
+      else if (constant !== undefined) mods |= constant;
       else throw new KeycodeError(`expected a MOD_* constant, got “${tok.v}”`);
       if (peek()?.v === '|') take();
       else break;
@@ -422,6 +489,20 @@ export function parseQmk(spec: KeycodeSpec, source: string, ctx: ParseContext = 
     return n;
   };
 
+  /** A keycode by its exact name: QMK's, an own keycode's (its lookup ignores case itself), a US alias. */
+  const keycodeNamed = (name: string | undefined): number | undefined => {
+    if (name === undefined) return undefined;
+    const def = spec.byName.get(name);
+    if (def) return def.value;
+    if (name === 'KC_HYPR') return encode(spec, { kind: 'mods', mods: 0x0f, base: 0 });
+    if (name === 'KC_MEH') return encode(spec, { kind: 'mods', mods: 0x07, base: 0 });
+    if (Object.hasOwn(ONE_SHOT_DEFINES, name)) return encode(spec, { kind: 'one-shot-mod', mods: ONE_SHOT_DEFINES[name] });
+    const custom = ctx.customByName?.(name);
+    if (custom !== undefined) return custom;
+    const usBase = us().byKey.get(name);
+    return usBase ? parseQmk(spec, usBase, ctx) : undefined;
+  };
+
   const value = (): number => {
     const tok = take();
     if (tok.t === 'num') return parseNumber(tok.v);
@@ -432,19 +513,15 @@ export function parseQmk(spec: KeycodeSpec, source: string, ctx: ParseContext = 
       return inner;
     }
     if (tok.t !== 'ident') throw new KeycodeError(`unexpected “${tok.v}”`);
-    const name = tok.v;
     if (peek()?.v !== '(') {
-      const def = spec.byName.get(name);
-      if (def) return def.value;
-      if (name === 'KC_HYPR') return encode(spec, { kind: 'mods', mods: 0x0f, base: 0 });
-      if (name === 'KC_MEH') return encode(spec, { kind: 'mods', mods: 0x07, base: 0 });
-      if (name in ONE_SHOT_DEFINES) return encode(spec, { kind: 'one-shot-mod', mods: ONE_SHOT_DEFINES[name] });
-      const custom = ctx.customByName?.(name);
-      if (custom !== undefined) return custom;
-      const usBase = us().byKey.get(name);
-      if (usBase) return parseQmk(spec, usBase, ctx);
-      throw new KeycodeError(`unknown keycode “${name}”`);
+      // The name as typed, then in another case (kc_a → KC_A), then without its KC_ (esc → KC_ESC).
+      const builtin = builtins(spec).lookup;
+      const alone = /^KC_/i.test(tok.v) ? undefined : builtin(`KC_${tok.v}`);
+      const found = keycodeNamed(tok.v) ?? keycodeNamed(builtin(tok.v)) ?? keycodeNamed(alone);
+      if (found === undefined) throw new KeycodeError(`unknown keycode “${tok.v}”`);
+      return found;
     }
+    const name = functionName(tok.v) ?? tok.v;
     take(); // (
     let result: number;
     if (name in MOD_FUNCTION_INPUT) {

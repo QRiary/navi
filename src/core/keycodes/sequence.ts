@@ -25,8 +25,7 @@ export function parseKeySequence(spec: KeycodeSpec, text: string, max = 5): { ke
     let v = tok.length === 1 ? charKey(tok) : null;
     if (v === null) {
       const r = tryParseQmk(spec, tok);
-      const r2 = 'error' in r ? tryParseQmk(spec, `KC_${tok.toUpperCase()}`) : r;
-      v = 'error' in r2 ? null : r2.value;
+      v = 'error' in r ? null : r.value;
     }
     if (v === null) return { error: { en: `Unknown key “${tok}” — use Latin letters, digits or QMK names (KC_F1).`, ru: `Неизвестная клавиша «${tok}» — латинские буквы, цифры или имена QMK (KC_F1).` } };
     if (v < 0x04 || v > 0xff) return { error: { en: `“${tok}” is not a plain key.`, ru: `«${tok}» — не простая клавиша.` } };

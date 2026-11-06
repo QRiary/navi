@@ -223,7 +223,7 @@ export interface Macro {
  */
 export type TapDanceKind = 'slots' | 'every-tap' | 'own-c';
 export const TAP_DANCE_KINDS: readonly TapDanceKind[] = ['slots', 'every-tap', 'own-c'];
-export const TAP_DANCE_MAX_STEPS = 4;
+export const TAP_DANCE_MAX_STEPS = 6;
 
 /**
  * One step of an every-tap dance, by the modifiers held at that tap (Shift = either Shift, Ctrl = either Ctrl; real,
@@ -257,7 +257,7 @@ export interface TapDance {
   hold: number;
   doubleTap: number;
   tapHold: number;
-  /** every-tap: 1–4 steps, tap n plays steps[(n - 1) % length]. */
+  /** every-tap: 1–TAP_DANCE_MAX_STEPS (6) steps, tap n plays steps[(n - 1) % length]. */
   steps?: TapDanceStep[];
   /** own-c: at least one function. */
   ownC?: TapDanceOwnC;

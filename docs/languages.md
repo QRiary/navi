@@ -5,8 +5,8 @@ it keeps its own idea of the current language (`navi_language()`). Only the lang
 `navi_set_language()`, change it. Nothing is saved: after power-on the first language in the list is active.
 
 A language with "plain keys" ticked (English on a US layout) types everything with ordinary key presses. In any
-other language, text from macros, custom keycodes and leader strings, and the symbol keys on non-typing layers, go
-through the text route. This page describes the route called "My own program": a program on your computer receives
+other language, text from macros, custom keycodes, leader strings and "every tap" tap dances, and the symbol keys
+on non-typing layers, go through the text route. This page describes the route called "My own program": a program on your computer receives
 the text and types it.
 
 ## What the firmware calls
@@ -60,7 +60,13 @@ keyboard into its bootloader (NAVI warns about it).
   keycode (`KC_A` = 0x04, `KC_LSFT` = 0xE1), the same as QMK's `SS_TAP`, `SS_DOWN` and `SS_UP`.
 
 Macros hold basic keys only, so Ctrl+Enter in a macro is three steps (Ctrl down, Enter tap, Ctrl up) and arrives
-as three codes. Your program should type the text and press or release the keys in the order they come.
+as three codes. A tap dance step can hold a key with modifiers (`LCTL(KC_ENT)`); it arrives the same way, as the
+modifiers' presses, the key, and the modifiers' releases. Your program should type the text and press or release
+the keys in the order they come.
+
+The keyboard doesn't release the modifiers the user is holding before it calls `navi_type_text_user`. A tap dance
+step picked by Shift or Ctrl takes them off inside the keyboard only, so the computer still sees them held. Your
+program should release the modifiers the computer sees as down before it types, and press them again after.
 
 ### Macros
 
@@ -71,6 +77,10 @@ keyboard waits, and the rest arrives in the next call.
 
 Example: tap `A`, type `hi`, tap `B`. In a non-plain language the keyboard taps `A` and then calls
 `navi_type_text_user("hi\x01\x01\x05")`.
+
+The steps of an "every tap" tap dance are split the same way. A step key that isn't a basic key or a key with
+modifiers (a layer key, `QK_BOOT`, your own keycode) can't go into the string: the keyboard presses it after
+sending the text so far, so it may act before your program has typed that text. NAVI warns about such a step.
 
 ### Symbol keys
 
