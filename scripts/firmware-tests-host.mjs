@@ -57,6 +57,11 @@ try {
     check(`${name}: NAVI's own navi_tests.txt passes whole on the firmware it wrote`, gen.status === 'pass' && gen.passed > 0, gen);
   }
 
+  const secret = await play('secret', 4, 10);
+  check('secret: the test build leaves the secrets header out, the macro types only its text', secret.status === 'pass' && secret.passed === 2, secret);
+  const genSecret = await play('generated-secret', 4, 10);
+  check('generated-secret: the secret macro is not checked, the rest passes', genSecret.status === 'pass' && genSecret.passed > 0, genSecret);
+
   const none = await stageAndRun({ r, home: local(homeLinux), keymapDir: samples, rows: 4, cols: 10, run });
   check('a folder without navi_tests.txt: no-tests', none.status === 'no-tests', none);
 } finally {

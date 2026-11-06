@@ -8,6 +8,8 @@
  *   broken    own pipeline whose own.c calls an RGB Matrix function: the test build has no RGB Matrix, so it can't build
  *   split     the Dilemma template (a split board, RGB Matrix, bootloader reboot), the user's rules.mk turning
  *             SPLIT_KEYBOARD on and own lines asking which half they run on
+ *   secret    a macro typing a, a secret, b, with a secrets header beside keymap.c: the test build leaves the header
+ *             out, so the macro types "ab" (also as generated-secret: the macro goes to [not checked])
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -166,7 +168,20 @@ it.skipIf(!out)('writes the sample keymap folders for the firmware test runner',
   writeGenerated(join(out!, 'generated-plain'), plain());
   writeGenerated(join(out!, 'generated-split'), splitWithOptions());
   writeGenerated(join(out!, 'generated-languages'), languages());
+  write(join(out!, 'secret'), secret(), ['r0c0 => a', 'r0c1 => ab'], { 'secrets.h': SECRETS_H });
+  writeGenerated(join(out!, 'generated-secret'), secret());
+  writeFileSync(join(out!, 'generated-secret', 'secrets.h'), SECRETS_H);
 });
+
+const SECRETS_H = '#pragma once\n#define WORK_PIN "zz"\n';
+
+function secret(): Project {
+  const p = withKeys(createBlankProject('fw tests secret', 4, 10, false), [
+    [0, 0, 0, 'KC_A'],
+    [0, 0, 1, 'QK_MACRO_0'],
+  ]);
+  return { ...p, macros: [{ id: 'm0', index: 0, name: 'pin', steps: [{ type: 'text', text: 'a' }, { type: 'secret', name: 'WORK_PIN' }, { type: 'text', text: 'b' }] }] };
+}
 
 function writeGenerated(dir: string, p: Project) {
   const on = { ...p, firmware: { ...p.firmware, tests: true } };

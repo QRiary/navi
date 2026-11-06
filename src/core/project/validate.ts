@@ -12,7 +12,8 @@ import { ALIAS_LABEL_MAX, KEY_ALIASES_MAX } from './aliases';
 import { CAPS_WORD_KEYS_MAX, CAPS_WORD_RULES_MAX } from './capsWord';
 import { HOLD_ON_KEYS_MAX, HOLD_ON_SPOTS_MAX, KEY_LIST_KEYS_MAX, KEY_LIST_NAME_MAX, KEY_LISTS_MAX, TAP_HOLD_FLAVORS, TAP_HOLD_KEYCODES_MAX, TAP_HOLD_MAX, TAP_HOLD_TERM_MAX, TAP_HOLD_TERM_MIN } from './tapHolds';
 import { TAP_HOLD_ACTIONS_MAX } from './tapHoldActions';
-import { AUTO_REPEAT_DEFAULT, AUTO_REPEAT_LIMITS, TEXT_ROUTE_DEFAULT } from './factory';
+import { AUTO_REPEAT_DEFAULT, AUTO_REPEAT_LIMITS, SECRETS_HEADER_DEFAULT, TEXT_ROUTE_DEFAULT } from './factory';
+import { validSecretsHeader } from '../qmk/secretText';
 import { LANGUAGE_CODE_RE, LANGUAGE_NAME_MAX, LANGUAGES_MAX } from './languages';
 import { migrateProject } from './migrate';
 import {
@@ -417,10 +418,20 @@ function readMacroStep(r: Reader, v: unknown, path: string): MacroStep | null {
       return { type: o.type, keycode: r.keycode(o.keycode, `${path}.keycode`) };
     case 'delay':
       return { type: 'delay', ms: r.num(o.ms, `${path}.ms`, 0, 60000, 0) };
+    case 'secret':
+      // Only the define's name: a bad one is kept (so it can be fixed) and refused by the generator (checkSecrets).
+      return { type: 'secret', name: r.str(o.name, `${path}.name`, '', 64) };
     default:
       r.error(`${path}.type`, 'unknown macro step');
       return null;
   }
+}
+
+/** firmware.secretsHeader: a bad or missing name falls back to the default with a warning. */
+function readSecretsHeader(r: Reader, v: unknown): string {
+  if (typeof v === 'string' && validSecretsHeader(v)) return v;
+  if (v !== undefined) r.warn('firmware.secretsHeader', `must be a .h file inside the keymap folder, not one NAVI writes — ${SECRETS_HEADER_DEFAULT} used`);
+  return SECRETS_HEADER_DEFAULT;
 }
 
 /** Tap dance kind and its fields (every-tap steps, own C functions); undefined ones stay undefined. */
@@ -613,6 +624,7 @@ function readFirmware(r: Reader, v: unknown): FirmwareConfig {
     bootloaderReboot: r.bool(o.bootloaderReboot ?? false, 'firmware.bootloaderReboot', false),
     tests: r.bool(o.tests ?? false, 'firmware.tests', false),
     runTests: r.bool(o.runTests ?? false, 'firmware.runTests', false),
+    secretsHeader: readSecretsHeader(r, o.secretsHeader),
     autoRepeat: {
       delay: r.num(ar.delay, 'firmware.autoRepeat.delay', AUTO_REPEAT_LIMITS.delay.min, AUTO_REPEAT_LIMITS.delay.max, AUTO_REPEAT_DEFAULT.delay),
       rate: r.num(ar.rate, 'firmware.autoRepeat.rate', AUTO_REPEAT_LIMITS.rate.min, AUTO_REPEAT_LIMITS.rate.max, AUTO_REPEAT_DEFAULT.rate),

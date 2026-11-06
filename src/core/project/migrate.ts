@@ -6,7 +6,7 @@
  *  3) add a test with an old file (project.test.ts).
  * Files NEWER than the app do not open (so unknown fields are not lost).
  */
-import { AUTO_REPEAT_DEFAULT, TEXT_ROUTE_DEFAULT } from './factory';
+import { AUTO_REPEAT_DEFAULT, SECRETS_HEADER_DEFAULT, TEXT_ROUTE_DEFAULT } from './factory';
 import { PROJECT_SCHEMA_VERSION } from './types';
 
 type Data = Record<string, unknown>;
@@ -100,6 +100,12 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
   },
   // 19 → 20: an own keycode's action may be per language (`by-language`); older files have none, nothing to change.
   19: (d) => ({ ...d, schemaVersion: 20 }),
+  // 20 → 21: secret text steps (macros, every-tap dances) read their defines from firmware.secretsHeader.
+  20: (d) => {
+    const f = d.firmware;
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 21 }; // validate reports it
+    return { ...d, schemaVersion: 21, firmware: { ...(f as Data), secretsHeader: SECRETS_HEADER_DEFAULT } };
+  },
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {
