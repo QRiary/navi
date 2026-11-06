@@ -451,6 +451,7 @@ export function routedMacroStatements(steps: MacroStep[], plan: LanguagePlan, no
       flush();
       out.push(`wait_ms(${s.ms});`);
     } else if (s.keycode > 0 && s.keycode <= 0xff) {
+      // Macros hold basic keys only (VIA's format); a key with modifiers is the modifier's down and up steps.
       // Separate literals, so the octal escapes can't run into the text after them.
       stream.push(`"${byte(1)}${byte(s.type === 'tap' ? 1 : s.type === 'down' ? 2 : 3)}${byte(s.keycode)}"`);
     }

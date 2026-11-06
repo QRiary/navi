@@ -123,8 +123,8 @@ export function LanguagesTab({ project }: { project: Project }) {
         )}{' '}
         <InfoTip label={t('languages', 'языки')}>
           {t(
-            'Firmware cannot read the computer’s layout: it knows the language only from these keys (or from your own program). Outside a plain-keys language, typed text and symbol keys go through the text route.',
-            'Прошивка не может прочитать раскладку компьютера: язык она знает только по этим клавишам (или от вашей программы). Вне языка с обычными клавишами набранный текст и клавиши знаков идут через способ ввода текста.',
+            'Firmware cannot read the computer’s layout: it knows the language only from these keys (or from your own program). Switching on the computer (Win+Space) leaves the keyboard on the old language unless your program tells it. Outside a plain-keys language, typed text and symbol keys go through the text route.',
+            'Прошивка не может прочитать раскладку компьютера: язык она знает только по этим клавишам (или от вашей программы). Если переключить язык на компьютере (Win+Пробел), клавиатура останется на прежнем, пока ваша программа ей не сообщит. Вне языка с обычными клавишами набранный текст и клавиши знаков идут через способ ввода текста.',
           )}
         </InfoTip>
       </p>

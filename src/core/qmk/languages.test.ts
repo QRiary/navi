@@ -211,6 +211,8 @@ describe('languages: generated C', () => {
               { type: 'text', text: 'a\n' },
             ],
           },
+          // Ctrl+Enter after text: the modifier's down and up go into the stream too.
+          { id: 'm2', index: 1, name: 'send', steps: [{ type: 'text', text: '@team' }, { type: 'down', keycode: 0xe0 }, { type: 'tap', keycode: 0x28 }, { type: 'up', keycode: 0xe0 }] },
         ],
         customKeycodes: [{ id: 'c', name: 'HELLO', description: '', action: { type: 'send-string', text: 'hi' } }],
       },
@@ -223,6 +225,7 @@ describe('languages: generated C', () => {
     expect(body(c, 'void navi_switch_language(uint8_t language) {')).toContain('navi_switch_language_user(language);');
     expect(c).not.toContain('navi_lang_shortcuts');
     expect(c).toContain('tap_code(0x29);\n            navi_send_text("привет" "\\001\\001\\050");\n            wait_ms(50);\n            navi_send_text("a\\n");');
+    expect(c).toContain('navi_send_text("@team" "\\001\\002\\340" "\\001\\001\\050" "\\001\\003\\340");');
     expect(c).toContain('case HELLO: navi_send_text("hi"); return false;');
     expect(file(res, 'rules.mk')).not.toContain('UNICODE_ENABLE');
     expect(res.issues.some((i) => i.message.en.includes('navi_type_text_user'))).toBe(true);
