@@ -10,7 +10,7 @@ import { keycodeNeeds, needStatus, needsCode } from '../../core/keycodes/require
 import { FEATURE_BY_ID } from '../../core/features/registry';
 import { effectiveKeycode, getKeycode } from '../../core/project/ops';
 import { hardwareFacts } from '../../lib/hardwareFacts';
-import { assignToSelection, clearSelection, copySelection, findKeycode, pasteToSelection, selectPositions } from '../../lib/keymapActions';
+import { assignTapHoldToSelection, assignToSelection, clearSelection, copySelection, findKeycode, pasteToSelection, selectPositions } from '../../lib/keymapActions';
 import { useActive, useLabelContext } from '../../lib/projectContext';
 import { useEditorStore } from '../../store/editorStore';
 import { useSpec } from '../../store/projectStore';
@@ -132,6 +132,7 @@ export function KeyInspector() {
   const hw = hardwareFacts(project);
   const req = keycodeNeeds(spec, value, { unicode: project.firmware.unicode });
   const code = needsCode(spec, value);
+  const standIn = project.tapHoldActions.some((a) => a.keycode === value);
   const eff = effectiveKeycode(project, keymap, key.matrix, [layer]);
 
   return (
@@ -145,7 +146,7 @@ export function KeyInspector() {
           {t('Transparent: works as on the layer below →', 'Прозрачная: работает как на слое ниже →')} <code>{keyLabel(spec, eff.keycode, labelCtx).qmk}</code> ({t('layer', 'слой')} {eff.fromLayer})
         </p>
       )}
-      {(req.length > 0 || code) && (
+      {(req.length > 0 || code || standIn) && (
         <div className="field">
           <span className="field-label">{t('firmware', 'прошивка')}</span>
           {req.map((need) => {
@@ -158,6 +159,11 @@ export function KeyInspector() {
               </div>
             );
           })}
+          {standIn && (
+            <p className="field-hint">
+              {t('Tap-hold key with actions: QMK has no keycode for this pair, so NAVI writes a stand-in MT / LT and the code that plays it into keymap.c. It works only in your own firmware build (Firmware → keymap.c).', 'Тап-холд клавиша с действиями: в QMK нет keycode для такой пары, поэтому NAVI пишет заменяющий MT / LT и код, который его играет, в keymap.c. Работает только в вашей сборке прошивки (Прошивка → keymap.c).')}
+            </p>
+          )}
           {code && (
             <p className="field-hint">
               {code === 'tap-dance'
@@ -168,7 +174,7 @@ export function KeyInspector() {
         </div>
       )}
       {actions}
-      <KeycodeComposer spec={spec} project={project} value={value} onChange={(v) => assignToSelection(v)} />
+      <KeycodeComposer spec={spec} project={project} value={value} onChange={(v) => assignToSelection(v)} onTapHold={(tap, hold) => assignTapHoldToSelection(tap, hold)} />
       <div className="field">
         <span className="field-label">{t('all layers', 'все слои')}</span>
         <div className="layer-stack">

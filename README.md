@@ -81,6 +81,7 @@ as a blank grid, or by importing a file.
 | `npm run app` | build and open the app |
 | `npm run app:dev` | development mode with hot reload |
 | `npm test` | tests (core logic and the main process) |
+| `npm run test:qmk` | generated tap-hold code run in QMK's own test framework (needs QMK; on Windows in WSL, see `tests/qmk-host/README.md`) |
 | `npm run typecheck` | TypeScript check |
 | `npm run build` | build the interface into `dist/` |
 | `npm run dist` | Windows installer into `release/` |

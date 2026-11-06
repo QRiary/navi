@@ -183,6 +183,8 @@ export interface NaviBridge {
     listKeyboards(home: string): Promise<string[]>;
     readKeyboard(home: string, userspace: string | null, kb: string): Promise<KeyboardSources>;
     readKeymap(home: string, userspace: string | null, kb: string, km: string): Promise<KeymapSources>;
+    /** The user's own C files of the build folders (keymap folder + users/<keymap>), NAVI's keymap.c / navi.h left out. */
+    readOwnCode(home: string, userspace: string | null, kb: string, km: string): Promise<{ path: string; text: string }[]>;
     writeKeymap(home: string, userspace: string | null, kb: string, km: string, files: { name: string; text: string }[]): Promise<{ dir: string; backup: string | null }>;
     writeKeyboard(home: string, kb: string, files: { name: string; text: string }[]): Promise<{ dir: string; backup: string | null }>;
     compile(settings: QmkSettings, opts: { home: string; userspace: string | null; keyboard: string; keymap: string; keymapDir: string; env?: Record<string, string>; parallel?: number }): Promise<CompileResult>;

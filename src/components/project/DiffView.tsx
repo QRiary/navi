@@ -19,6 +19,8 @@ const SECTION_NAMES = (): Record<string, string> => ({
   keyOverrides: t('key overrides', 'подмены'),
   customKeycodes: t('custom keycodes', 'свои keycodes'),
   keyAliases: t('key aliases', 'псевдонимы клавиш'),
+  tapHolds: t('tap-hold settings', 'настройки тап-холд'),
+  tapHoldActions: t('tap-hold keys with actions', 'тап-холд клавиши с действиями'),
   leaderSequences: t('leader sequences', 'последовательности лидера'),
   unicodeMap: t('unicode table', 'таблица юникода'),
   lighting: t('lighting', 'подсветка'),

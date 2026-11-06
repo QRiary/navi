@@ -7,6 +7,7 @@ import type { LabelContext } from '../core/keycodes/labels';
 import type { KeycodeSpec } from '../core/keycodes/spec';
 import { aliasLookup } from '../core/project/aliases';
 import { activeGeometry, activeKeymap } from '../core/project/ops';
+import { tapHoldActionLookup } from '../core/project/tapHoldActions';
 import type { Project } from '../core/project/types';
 import { useProjectStore, useSpec } from '../store/projectStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -21,6 +22,7 @@ export function labelContext(project: Project, spec: KeycodeSpec, settings: { os
   const km = activeKeymap(project);
   const custom = new Map(project.customKeycodes.map((c, i) => [customKeycodeValue(spec, i), c.name]));
   const aliases = aliasLookup(project.keyAliases);
+  const tapHoldActions = tapHoldActionLookup(project);
   return {
     os: settings.os,
     hostLanguage: settings.hostLayout === 'none' ? undefined : settings.hostLayout,
@@ -37,6 +39,7 @@ export function labelContext(project: Project, spec: KeycodeSpec, settings: { os
     customName: (v) => custom.get(v),
     alias: (v) => aliases.get(v),
     unicodeEntry: (i) => project.unicodeMap[i]?.codepoint,
+    tapHoldAction: (v) => tapHoldActions.get(v),
   };
 }
 

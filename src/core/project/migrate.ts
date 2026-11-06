@@ -29,6 +29,10 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
     if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 6 }; // validate reports it
     return { ...d, schemaVersion: 6, firmware: { ...(f as Data), layerKeysOnTop: false } };
   },
+  // 6 → 7: per-keycode tap-hold settings (tapHolds).
+  6: (d) => ({ ...d, schemaVersion: 7, tapHolds: Array.isArray(d.tapHolds) ? d.tapHolds : [] }),
+  // 7 → 8: tap-hold keys with any action in each slot (tapHoldActions).
+  7: (d) => ({ ...d, schemaVersion: 8, tapHoldActions: Array.isArray(d.tapHoldActions) ? d.tapHoldActions : [] }),
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {

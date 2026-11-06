@@ -4,6 +4,7 @@
  */
 import { create } from 'zustand';
 import { analyzeKeyboard, type KeyboardSourceInfo } from '../core/qmk/sources';
+import type { OwnCodeFile } from '../core/project/tapHoldActions';
 import { navi, type CompileResult, type FirmwareInfo, type FlashScan, type KeyboardSources, type KeymapSources, type QmkEnvironment, type TrustState } from '../desktop/bridge';
 import { getLanguage } from '../i18n';
 import { useSettingsStore } from './settingsStore';
@@ -19,6 +20,8 @@ export interface QmkState {
   keyboards: string[] | null;
   sources: { keyboard: string; keymap: string; raw: KeyboardSources; info: KeyboardSourceInfo } | null;
   keymapSources: KeymapSources | null;
+  /** The user's own C of the target's build folders (stand-in bases it names are never taken), null = not read. */
+  ownCode: { keyboard: string; keymap: string; files: OwnCodeFile[] } | null;
   trust: TrustState | null;
   trustedFolders: string[];
   job: { id: number | null; kind: string; running: boolean; startedAt: number } | null;
@@ -33,6 +36,7 @@ export interface QmkState {
   userspace(): string | null;
   loadKeyboards(): Promise<void>;
   loadSources(keyboard: string, keymap: string): Promise<void>;
+  loadOwnCode(keyboard: string, keymap: string): Promise<void>;
   loadTrust(keyboard: string, keymap: string): Promise<void>;
   loadTrustedFolders(): Promise<void>;
   grantTrust(keyboard: string, keymap: string): Promise<void>;
@@ -80,6 +84,7 @@ export const useQmkStore = create<QmkState>()((set, get) => {
     keyboards: null,
     sources: null,
     keymapSources: null,
+    ownCode: null,
     trust: null,
     trustedFolders: [],
     job: null,
@@ -132,8 +137,21 @@ export const useQmkStore = create<QmkState>()((set, get) => {
         );
         set({ sources: { keyboard, keymap, raw, info }, keymapSources: km, error: null });
         await get().loadTrust(keyboard, keymap);
+        await get().loadOwnCode(keyboard, keymap);
       } catch (err) {
         set({ sources: null, keymapSources: null, trust: null, error: (err as Error).message });
+      }
+    },
+
+    async loadOwnCode(keyboard, keymap) {
+      if (!navi) return;
+      if (!get().env && !get().detecting) await get().detect();
+      const home = get().home();
+      if (!home) return;
+      try {
+        set({ ownCode: { keyboard, keymap, files: await navi.qmk.readOwnCode(home, get().userspace(), keyboard, keymap) } });
+      } catch {
+        // Not read: stand-ins are then picked without it, and the Firmware page reads it again.
       }
     },
 

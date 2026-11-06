@@ -8,6 +8,7 @@ Owner's personal notes (not in git, may be missing): @CLAUDE.local.md
 
 ```
 npm test               # vitest: core + main process (~2 s)
+npm run test:qmk       # generated tap-hold C in QMK's unit test framework (WSL: NAVI_WSL_DISTRO=QMK), tests/qmk-host
 npm run typecheck      # tsc --noEmit
 npm run build          # tsc + vite build → dist/
 npm run app            # build + Electron window

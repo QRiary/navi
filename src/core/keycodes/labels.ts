@@ -4,8 +4,9 @@
  * (“Bksp”, “MO 1”, “A / Ctrl”), and the full QMK name and description in the tooltip and the inspector.
  * Short labels are styling; if there is no label in the table, the label from the QMK spec is used.
  */
-import { decode, preferredName, toQmk, type CodecOptions, type Decoded } from './codec';
+import { decode, modsToConstExpr, preferredName, toQmk, type CodecOptions, type Decoded } from './codec';
 import { loadLanguage, type KeycodeSpec } from './spec';
+import type { HoldAction } from '../project/types';
 
 export type HostOs = 'windows' | 'macos' | 'linux';
 
@@ -21,6 +22,8 @@ export interface LabelContext extends CodecOptions {
   alias?: (value: number) => { label: string; cName: string } | undefined;
   /** Code point of the unicode map entry (UM/UP), if there is one. */
   unicodeEntry?: (index: number) => number | undefined;
+  /** The slots of a tap-hold key with actions, when the value is its stand-in (project tapHoldActions). */
+  tapHoldAction?: (value: number) => { tap: number; hold: HoldAction } | undefined;
 }
 
 export type LabelKind =
@@ -264,8 +267,20 @@ function plainLabel(spec: KeycodeSpec, value: number, ctx: LabelContext): KeyLab
   const qmk = toQmk(spec, v, { layerName: ctx.layerName, tapDanceName: ctx.tapDanceName, customName: ctx.customName }, ctx);
   const custom = ctx.customName?.(v);
   if (custom) return { main: custom.replace(/_/g, ' '), kind: 'custom', qmk };
-  const d: Decoded = decode(spec, v, ctx);
   const layer = (n: number) => ctx.layerName?.(n) ?? String(n);
+  const th = ctx.tapHoldAction?.(v);
+  if (th) {
+    // A stand-in MT / LT: the key shows its real slots; qmk stays the stand-in value (it parses back).
+    const inner = { ...ctx, tapHoldAction: undefined };
+    const tap = plainLabel(spec, th.tap, inner);
+    const h = th.hold;
+    const mods = h.type === 'key' ? 0 : h.mods;
+    const holdKey = h.type === 'key' ? plainLabel(spec, h.keycode, inner) : null;
+    const hold = holdKey ? holdKey.main : h.type === 'layer' ? `L${layer(h.layer)}${mods ? `+${modsLabel(mods, ctx.os)}` : ''}` : modsLabel(mods, ctx.os);
+    const holdQmk = holdKey ? holdKey.qmk : h.type === 'layer' ? `layer ${h.layer}${mods ? ` + ${modsToConstExpr(mods)}` : ''}` : modsToConstExpr(mods);
+    return { main: tap.main, top: tap.top, hold, kind: h.type === 'layer' ? 'layer-tap' : 'mod-tap', qmk, description: `tap: ${th.tap === 0 ? 'KC_NO' : tap.qmk} · hold: ${holdQmk}` };
+  }
+  const d: Decoded = decode(spec, v, ctx);
   switch (d.kind) {
     case 'basic': {
       if (v === 0) return { main: '', kind: 'none', qmk, description: 'KC_NO' };

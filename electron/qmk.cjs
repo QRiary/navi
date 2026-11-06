@@ -352,6 +352,56 @@ function readKeymap(home, userspace, kb, km) {
   return { dir, exists, root, files };
 }
 
+/** C-like files the user's own code can be in (any of them can be #included or built). */
+const OWN_CODE_EXT = /\.(c|h|cc|cpp|hpp|inc|def)$/i;
+/** Files NAVI writes into the keymap folder: their stand-ins are NAVI's own, not the user's code. */
+const NAVI_WRITTEN = new Set(['keymap.c', 'navi.h']);
+const OWN_CODE_MAX_FILES = 5000;
+
+/**
+ * The user's own C in the folders the build uses (buildScanFolders): every C-like file, NAVI's keymap.c / navi.h at
+ * the top of the keymap folder left out. Paths are relative to the keymap folder (users/<keymap>/… for the others).
+ * Read-only and lenient: links, .git, big, binary or unreadable files are skipped (the build gate reports those).
+ */
+function readOwnCode(home, userspace, kb, km) {
+  const folders = buildScanFolders(home, userspace, kb, km);
+  const out = [];
+  let count = 0;
+  folders.forEach((folder, i) => {
+    const prefix = i === 0 ? '' : `users/${km}/`;
+    const stack = [folder];
+    while (stack.length && count < OWN_CODE_MAX_FILES) {
+      const cur = stack.pop();
+      let st;
+      try {
+        st = fs.lstatSync(cur);
+      } catch {
+        continue;
+      }
+      if (st.isSymbolicLink()) continue;
+      const rel = path.relative(folder, cur).split(path.sep).join('/');
+      if (st.isDirectory()) {
+        if (cur !== folder && path.basename(cur) === '.git') continue;
+        try {
+          for (const name of fs.readdirSync(cur).sort().reverse()) stack.push(path.join(cur, name));
+        } catch {
+          /* unreadable folder: skipped */
+        }
+        continue;
+      }
+      if (!st.isFile() || !OWN_CODE_EXT.test(cur) || st.size > MAX_SOURCE || (i === 0 && NAVI_WRITTEN.has(rel))) continue;
+      count++;
+      try {
+        const text = fs.readFileSync(cur, 'utf8');
+        if (!text.includes('\0')) out.push({ path: prefix + rel, text });
+      } catch {
+        /* unreadable file: skipped */
+      }
+    }
+  });
+  return out;
+}
+
 function backupFiles(dataDir, baseDir, names) {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const backup = path.join(dataDir, 'backups', 'qmk', stamp);
@@ -581,6 +631,11 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
   ipcMain.handle('navi:qmk:list-keyboards', (_e, home) => listKeyboards(validatePath(home)));
   ipcMain.handle('navi:qmk:read-keyboard', (_e, home, userspace, kb) => readKeyboard(validatePath(home), checkUserspace(userspace), kb));
   ipcMain.handle('navi:qmk:read-keymap', (_e, home, userspace, kb, km) => readKeymap(validatePath(home), checkUserspace(userspace), kb, km));
+  ipcMain.handle('navi:qmk:read-own-code', (_e, home, userspace, kb, km) => {
+    checkKb(kb);
+    checkKm(km);
+    return readOwnCode(validatePath(home), checkUserspace(userspace), kb, km);
+  });
   ipcMain.handle('navi:qmk:write-keymap', (_e, home, userspace, kb, km, files) => writeKeymap(dataDir, validatePath(home), checkUserspace(userspace), kb, km, files));
   ipcMain.handle('navi:qmk:write-keyboard', (_e, home, kb, files) => writeKeyboard(dataDir, validatePath(home), kb, files));
 
@@ -710,4 +765,4 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
   });
 }
 
-module.exports = { registerQmkIpc, buildScanFolders, checkTrust, chooseRunner, homeFromConfig, parseQmkConfig, parseQmkEnv, isUserspace, keymapDir, writeKeymap, checkBuildFolder, firmwareSnapshot, runner, keyboardTargets, listKeyboards, readKeyboard, readKeymap, describeFirmware, scanUf2, archiveFirmware, listFirmware, firmwarePath, findBuiltFirmware, isQmkHome, BACKUP_MAX };
+module.exports = { registerQmkIpc, buildScanFolders, checkTrust, chooseRunner, homeFromConfig, parseQmkConfig, parseQmkEnv, isUserspace, keymapDir, writeKeymap, checkBuildFolder, firmwareSnapshot, runner, keyboardTargets, listKeyboards, readKeyboard, readKeymap, describeFirmware, scanUf2, archiveFirmware, listFirmware, firmwarePath, findBuiltFirmware, isQmkHome, readOwnCode, BACKUP_MAX };

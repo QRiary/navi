@@ -79,6 +79,7 @@ export function planWrite({ project, keymap, snapshot, spec, hardware, includeMa
   const keys: KeyWrite[] = [];
   const unsupported = new Map<FeatureId, number>();
   let needCode = 0;
+  const standIns = new Set(project.tapHoldActions.map((a) => a.keycode));
   for (let l = 0; l < Math.min(devLayers, keymap.layers.length); l++) {
     const proj = keymap.layers[l].keys;
     const dev = snapshot.keymap[l];
@@ -89,7 +90,7 @@ export function planWrite({ project, keymap, snapshot, spec, hardware, includeMa
         const { feature, status } = needStatus(need, project.firmware.flags, hardware);
         if (status.state !== 'available') unsupported.set(feature, (unsupported.get(feature) ?? 0) + 1);
       }
-      if (needsCode(spec, after)) needCode++;
+      if (needsCode(spec, after) || standIns.has(after)) needCode++;
     }
   }
   for (const [f, n] of unsupported) {
@@ -105,8 +106,8 @@ export function planWrite({ project, keymap, snapshot, spec, hardware, includeMa
     warnings.push({
       level: 'warning',
       message: {
-        en: `${needCode} key(s) are tap dance / custom keycodes: they work only if the firmware has code for them.`,
-        ru: `${needCode} клав. — tap dance или свои keycodes: работают, только если в прошивке есть их код.`,
+        en: `${needCode} key(s) are tap dance / custom keycodes / tap-hold keys with actions: they work only if the firmware has code for them.`,
+        ru: `${needCode} клав. — tap dance, свои keycodes или тап-холд клавиши с действиями: работают, только если в прошивке есть их код.`,
       },
     });
   }

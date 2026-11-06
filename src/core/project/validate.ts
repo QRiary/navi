@@ -9,6 +9,8 @@ import { listSpecVersions } from '../keycodes/spec';
 import { newId } from '../layout/geometry';
 import { allowedMakeVar, checkCustom, CUSTOM_FILES, CUSTOM_MAX, MAKE_VALUE_RE, PIPELINE_MAX_HEADERS, safeHeaderName, unsafeDefineValue, validCIdentifier } from '../qmk/customCode';
 import { ALIAS_LABEL_MAX, KEY_ALIASES_MAX } from './aliases';
+import { HOLD_ON_KEYS_MAX, TAP_HOLD_FLAVORS, TAP_HOLD_MAX, TAP_HOLD_TERM_MAX, TAP_HOLD_TERM_MIN } from './tapHolds';
+import { TAP_HOLD_ACTIONS_MAX } from './tapHoldActions';
 import { migrateProject } from './migrate';
 import {
   PROJECT_FORMAT,
@@ -18,6 +20,9 @@ import {
   type CustomAction,
   type CustomKeycode,
   type KeyAlias,
+  type TapHoldSetting,
+  type HoldAction,
+  type TapHoldAction,
   type LeaderSequence,
   type UnicodeEntry,
   type EncoderGeom,
@@ -597,6 +602,34 @@ export function validateProject(input: unknown): { project: Project | null; issu
     const ao = r.obj(a, p);
     return { id: r.id(ao.id, `${p}.id`, 'ka'), label: r.str(ao.label, `${p}.label`, '', ALIAS_LABEL_MAX), keycode: r.keycode(ao.keycode, `${p}.keycode`) };
   });
+  const optNum = (v: unknown, path: string, min: number, max: number) => (v === undefined || v === null ? undefined : r.num(v, path, min, max, min));
+  const tapHolds: TapHoldSetting[] = r.arr(o.tapHolds ?? [], 'tapHolds', TAP_HOLD_MAX).map((x, i) => {
+    const p = `tapHolds[${i}]`;
+    const to = r.obj(x, p);
+    const out: TapHoldSetting = { id: r.id(to.id, `${p}.id`, 'th'), keycode: r.keycode(to.keycode, `${p}.keycode`) };
+    if (to.flavor !== undefined && to.flavor !== null) out.flavor = r.oneOf(to.flavor, `${p}.flavor`, TAP_HOLD_FLAVORS, 'tap-preferred');
+    const term = optNum(to.tappingTerm, `${p}.tappingTerm`, TAP_HOLD_TERM_MIN, TAP_HOLD_TERM_MAX);
+    if (term !== undefined) out.tappingTerm = term;
+    const quick = optNum(to.quickTapTerm, `${p}.quickTapTerm`, 0, TAP_HOLD_TERM_MAX);
+    if (quick !== undefined) out.quickTapTerm = quick;
+    if (to.holdOnKeys !== undefined && to.holdOnKeys !== null) out.holdOnKeys = r.arr(to.holdOnKeys, `${p}.holdOnKeys`, HOLD_ON_KEYS_MAX).map((k, j) => r.keycode(k, `${p}.holdOnKeys[${j}]`));
+    return out;
+  });
+  // Slot rules (no nested tap-hold keys, the stand-in fits its hold) are checked by checkTapHoldActions; the
+  // generator writes only the valid ones.
+  const tapHoldActions: TapHoldAction[] = r.arr(o.tapHoldActions ?? [], 'tapHoldActions', TAP_HOLD_ACTIONS_MAX).map((x, i) => {
+    const p = `tapHoldActions[${i}]`;
+    const ao = r.obj(x, p);
+    const ho = r.obj(ao.hold, `${p}.hold`);
+    const type = r.oneOf(ho.type, `${p}.hold.type`, ['mods', 'layer', 'key'] as const, 'mods');
+    const hold: HoldAction =
+      type === 'mods'
+        ? { type, mods: r.num(ho.mods, `${p}.hold.mods`, 1, 0x1f, 1) }
+        : type === 'layer'
+          ? { type, layer: r.num(ho.layer, `${p}.hold.layer`, 0, 15, 0), mods: r.num(ho.mods ?? 0, `${p}.hold.mods`, 0, 0x1f, 0) }
+          : { type, keycode: r.keycode(ho.keycode, `${p}.hold.keycode`) };
+    return { id: r.id(ao.id, `${p}.id`, 'tha'), keycode: r.keycode(ao.keycode, `${p}.keycode`), tap: r.keycode(ao.tap, `${p}.tap`), hold };
+  });
   const readAction = (v: unknown, p: string): CustomAction => {
     const ao = r.obj(v ?? { type: 'none' }, p);
     if (ao.type === 'send-string') return { type: 'send-string', text: r.str(ao.text, `${p}.text`, '', 1000) };
@@ -650,6 +683,8 @@ export function validateProject(input: unknown): { project: Project | null; issu
     keyOverrides,
     customKeycodes,
     keyAliases,
+    tapHolds,
+    tapHoldActions,
     leaderSequences,
     unicodeMap,
     lighting,
