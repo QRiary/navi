@@ -33,7 +33,8 @@ export type CategoryId =
   | 'connection'
   | 'international'
   | 'other'
-  | 'custom';
+  | 'custom'
+  | 'aliases';
 
 export interface CatalogItem {
   value: number;
@@ -78,6 +79,7 @@ export const CATEGORIES: CategoryInfo[] = [
   { id: 'international', title: { en: 'International', ru: 'Международные' } },
   { id: 'other', title: { en: 'MIDI, steno, joystick…', ru: 'MIDI, стено, джойстик…' } },
   { id: 'custom', title: { en: 'Custom', ru: 'Свои' } },
+  { id: 'aliases', title: { en: 'Aliases', ru: 'Псевдонимы' } },
 ];
 
 const NAV = new Set(['KC_RIGHT', 'KC_LEFT', 'KC_DOWN', 'KC_UP', 'KC_HOME', 'KC_END', 'KC_PAGE_UP', 'KC_PAGE_DOWN', 'KC_INSERT', 'KC_DELETE']);
@@ -142,6 +144,8 @@ export interface CatalogContext extends LabelContext {
   macroCount?: number;
   /** The project's own keycodes. */
   customKeycodes?: { value: number; name: string; description?: string }[];
+  /** The project's key aliases (first alias of a value only). */
+  aliases?: { value: number; label: string; cName: string }[];
 }
 
 function item(spec: KeycodeSpec, value: number, category: CategoryId, ctx: CatalogContext, extraSearch = ''): CatalogItem {
@@ -211,6 +215,11 @@ export function buildCatalog(spec: KeycodeSpec, ctx: CatalogContext): CatalogIte
   for (const c of ctx.customKeycodes ?? []) {
     const it = item(spec, c.value, 'custom', ctx, c.name);
     out.push({ ...it, description: c.description ?? it.description });
+  }
+
+  // The project's key aliases.
+  for (const a of ctx.aliases ?? []) {
+    out.push({ ...item(spec, a.value, 'aliases', ctx, `${a.cName} ${a.label}`), name: a.cName });
   }
   return out;
 }

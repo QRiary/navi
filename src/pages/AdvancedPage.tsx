@@ -10,7 +10,9 @@ import { checkCombos, checkKeyOverrides, checkTapDances } from '../core/features
 import { configParams, groupTitle } from '../core/qmk/configParams';
 import { newId } from '../core/layout/geometry';
 import { activeKeymap } from '../core/project/ops';
-import type { Combo, CustomKeycode, KeyOverride, MatrixPos, Project, TapDance } from '../core/project/types';
+import type { Combo, CustomKeycode, KeyAlias, KeyOverride, MatrixPos, Project, TapDance } from '../core/project/types';
+import { aliasCName, ALIAS_LABEL_MAX, checkKeyAliases, KEY_ALIASES_MAX } from '../core/project/aliases';
+import { layerIdentifiers } from '../core/qmk/generate';
 import { customKeycodeValue, useActive, useLabelContext } from '../lib/projectContext';
 import { href } from '../lib/router';
 import { useEditorStore } from '../store/editorStore';
@@ -254,6 +256,51 @@ function CustomTab({ project }: { project: Project }) {
   );
 }
 
+function AliasesTab({ project }: { project: Project }) {
+  const apply = useProjectStore((s) => s.apply);
+  const issues = useMemo(() => checkKeyAliases(project, layerIdentifiers(activeKeymap(project))).issues, [project]);
+  const set = (list: KeyAlias[], label: string, coalesce?: string) => apply((p) => ({ ...p, keyAliases: list }), label, coalesce ? { coalesce } : undefined);
+  const patch = (id: string, p: Partial<KeyAlias>, label: string, coalesce?: string) => set(project.keyAliases.map((x) => (x.id === id ? { ...x, ...p } : x)), label, coalesce);
+  const cols = 'minmax(140px,1fr) minmax(150px,1fr) minmax(140px,1fr) auto';
+  return (
+    <div className="page">
+      <p className="field-hint">
+        {t(
+          'A label for a key: every key with that keycode shows it. Your own C can use the key by its C name (NV_ + the label): NAVI writes #define NV_… into navi.h in own pipeline mode, otherwise into keymap.c, and the generated keymap names the key by it too. They appear in the catalog under “Aliases”.',
+          'Подпись для клавиши: её показывает каждая клавиша с этим keycode. Ваш код на C может звать клавишу по имени C (NV_ + подпись): NAVI пишет #define NV_… в navi.h в режиме своего конвейера, иначе в keymap.c, и сгенерированная раскладка тоже зовёт клавишу этим именем. В каталоге — категория «Псевдонимы».',
+        )}
+      </p>
+      <div className="panel-box">
+        <div className="rows">
+          <div className="row kicker" style={{ ['--row-cols' as string]: cols }}>
+            <span>{t('label', 'подпись')}</span>
+            <span>{t('key', 'клавиша')}</span>
+            <span>{t('C name', 'имя C')}</span>
+            <span />
+          </div>
+          {project.keyAliases.map((a) => (
+            <div key={a.id} className="row" style={{ ['--row-cols' as string]: cols }}>
+              <input className="input" value={a.label} maxLength={ALIAS_LABEL_MAX} placeholder={t('Copy', 'Копировать')} onChange={(e) => patch(a.id, { label: e.target.value }, t('alias label', 'подпись псевдонима'), `kalabel:${a.id}`)} aria-label={t('Label', 'Подпись')} />
+              <KeycodeField value={a.keycode} label={t('key', 'клавиша')} onChange={(v) => patch(a.id, { keycode: v }, t('alias key', 'клавиша псевдонима'))} />
+              <span className="mono">{aliasCName(a.label.trim()) ?? '—'}</span>
+              <button className="icon-btn" aria-label={t('Delete', 'Удалить')} onClick={() => set(project.keyAliases.filter((x) => x.id !== a.id), t('delete alias', 'удаление псевдонима'))}>
+                <Trash2 {...ICON} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="field-row">
+        <button className="btn btn--primary" disabled={project.keyAliases.length >= KEY_ALIASES_MAX} onClick={() => set([...project.keyAliases, { id: newId('ka'), label: '', keycode: 0 }], t('new alias', 'новый псевдоним'))}>
+          <Plus {...ICON} /> {t('alias', 'псевдоним')}
+        </button>
+        <span className="field-hint">{t('Renaming a label renames its C name: code of yours that uses the old name stops building.', 'Новая подпись — новое имя C: ваш код со старым именем перестанет собираться.')}</span>
+      </div>
+      <IssueList issues={issues} />
+    </div>
+  );
+}
+
 function BehaviorTab({ project }: { project: Project }) {
   const apply = useProjectStore((s) => s.apply);
   const params = useMemo(() => configParams(), []);
@@ -327,13 +374,14 @@ function BehaviorTab({ project }: { project: Project }) {
 
 export function AdvancedPage({ tab }: { tab?: string }) {
   const project = useProjectStore((s) => s.project);
-  const current = ['tapdance', 'combos', 'overrides', 'custom', 'leader', 'unicode', 'behavior'].includes(tab ?? '') ? tab! : 'tapdance';
+  const current = ['tapdance', 'combos', 'overrides', 'custom', 'aliases', 'leader', 'unicode', 'behavior'].includes(tab ?? '') ? tab! : 'tapdance';
   if (!project) return null;
   const tabs: [string, string][] = [
     ['tapdance', 'Tap Dance'],
     ['combos', t('Combos', 'Комбо')],
     ['overrides', t('Key overrides', 'Подмена сочетаний')],
     ['custom', t('Custom keycodes', 'Свои keycodes')],
+    ['aliases', t('Aliases', 'Псевдонимы')],
     ['leader', t('Leader key', 'Клавиша-лидер')],
     ['unicode', t('Unicode', 'Юникод')],
     ['behavior', t('Behavior (config.h)', 'Поведение (config.h)')],
@@ -351,6 +399,7 @@ export function AdvancedPage({ tab }: { tab?: string }) {
       {current === 'combos' && <CombosTab project={project} />}
       {current === 'overrides' && <OverridesTab project={project} />}
       {current === 'custom' && <CustomTab project={project} />}
+      {current === 'aliases' && <AliasesTab project={project} />}
       {current === 'leader' && <LeaderTab project={project} />}
       {current === 'unicode' && <UnicodeTab project={project} />}
       {current === 'behavior' && <BehaviorTab project={project} />}

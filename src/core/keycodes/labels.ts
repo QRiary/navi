@@ -17,6 +17,8 @@ export interface LabelContext extends CodecOptions {
   tapDanceName?: (index: number) => string | undefined;
   macroName?: (index: number) => string | undefined;
   customName?: (value: number) => string | undefined;
+  /** The project's key alias of this value (label on the key, C name for the tooltip). */
+  alias?: (value: number) => { label: string; cName: string } | undefined;
   /** Code point of the unicode map entry (UM/UP), if there is one. */
   unicodeEntry?: (index: number) => number | undefined;
 }
@@ -248,8 +250,16 @@ function kindOfGroup(group: string | undefined): LabelKind {
   }
 }
 
-/** Label for a key on the drawing. */
+/** Label for a key on the drawing. An alias replaces the large label; the hold part and the kind stay. */
 export function keyLabel(spec: KeycodeSpec, value: number, ctx: LabelContext = {}): KeyLabel {
+  const label = plainLabel(spec, value, ctx);
+  const alias = ctx.alias?.(value & 0xffff);
+  if (!alias) return label;
+  // The small top label (a “Ctrl+” prefix, the second layout's letter) would describe the key, not the alias: dropped.
+  return { ...label, main: alias.label, top: undefined, description: `${alias.cName}${label.description ? ` — ${label.description}` : ''}` };
+}
+
+function plainLabel(spec: KeycodeSpec, value: number, ctx: LabelContext): KeyLabel {
   const v = value & 0xffff;
   const qmk = toQmk(spec, v, { layerName: ctx.layerName, tapDanceName: ctx.tapDanceName, customName: ctx.customName }, ctx);
   const custom = ctx.customName?.(v);

@@ -8,6 +8,7 @@ import { FEATURE_BY_ID, type FeatureId, type FlagInfo } from '../features/regist
 import { listSpecVersions } from '../keycodes/spec';
 import { newId } from '../layout/geometry';
 import { allowedMakeVar, checkCustom, CUSTOM_FILES, CUSTOM_MAX, MAKE_VALUE_RE, PIPELINE_MAX_HEADERS, safeHeaderName, unsafeDefineValue, validCIdentifier } from '../qmk/customCode';
+import { ALIAS_LABEL_MAX, KEY_ALIASES_MAX } from './aliases';
 import { migrateProject } from './migrate';
 import {
   PROJECT_FORMAT,
@@ -16,6 +17,7 @@ import {
   type ControlGeom,
   type CustomAction,
   type CustomKeycode,
+  type KeyAlias,
   type LeaderSequence,
   type UnicodeEntry,
   type EncoderGeom,
@@ -589,6 +591,11 @@ export function validateProject(input: unknown): { project: Project | null; issu
           : { type: 'none' as const };
     return { id: r.id(co.id, `${p}.id`, 'ck'), name, description: r.str(co.description, `${p}.description`, '', 300), action };
   });
+  const keyAliases: KeyAlias[] = r.arr(o.keyAliases ?? [], 'keyAliases', KEY_ALIASES_MAX).map((a, i) => {
+    const p = `keyAliases[${i}]`;
+    const ao = r.obj(a, p);
+    return { id: r.id(ao.id, `${p}.id`, 'ka'), label: r.str(ao.label, `${p}.label`, '', ALIAS_LABEL_MAX), keycode: r.keycode(ao.keycode, `${p}.keycode`) };
+  });
   const readAction = (v: unknown, p: string): CustomAction => {
     const ao = r.obj(v ?? { type: 'none' }, p);
     if (ao.type === 'send-string') return { type: 'send-string', text: r.str(ao.text, `${p}.text`, '', 1000) };
@@ -641,6 +648,7 @@ export function validateProject(input: unknown): { project: Project | null; issu
     combos,
     keyOverrides,
     customKeycodes,
+    keyAliases,
     leaderSequences,
     unicodeMap,
     lighting,

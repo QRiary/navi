@@ -5,6 +5,7 @@ import { useMemo } from 'react';
 import type { CatalogContext } from '../core/keycodes/catalog';
 import type { LabelContext } from '../core/keycodes/labels';
 import type { KeycodeSpec } from '../core/keycodes/spec';
+import { aliasLookup } from '../core/project/aliases';
 import { activeGeometry, activeKeymap } from '../core/project/ops';
 import type { Project } from '../core/project/types';
 import { useProjectStore, useSpec } from '../store/projectStore';
@@ -19,6 +20,7 @@ export function customKeycodeValue(spec: KeycodeSpec, index: number): number {
 export function labelContext(project: Project, spec: KeycodeSpec, settings: { os: LabelContext['os']; hostLayout: string }): LabelContext {
   const km = activeKeymap(project);
   const custom = new Map(project.customKeycodes.map((c, i) => [customKeycodeValue(spec, i), c.name]));
+  const aliases = aliasLookup(project.keyAliases);
   return {
     os: settings.os,
     hostLanguage: settings.hostLayout === 'none' ? undefined : settings.hostLayout,
@@ -33,6 +35,7 @@ export function labelContext(project: Project, spec: KeycodeSpec, settings: { os
       return m?.name ? m.name.slice(0, 8) : undefined;
     },
     customName: (v) => custom.get(v),
+    alias: (v) => aliases.get(v),
     unicodeEntry: (i) => project.unicodeMap[i]?.codepoint,
   };
 }
@@ -45,6 +48,7 @@ export function catalogContext(project: Project, spec: KeycodeSpec, label: Label
     tapDances: project.tapDances.map((t) => ({ index: t.index, name: t.name })),
     macroCount,
     customKeycodes: project.customKeycodes.map((c, i) => ({ value: customKeycodeValue(spec, i), name: c.name, description: c.description })),
+    aliases: [...aliasLookup(project.keyAliases)].map(([value, a]) => ({ value, ...a })),
   };
 }
 
