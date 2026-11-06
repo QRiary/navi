@@ -145,6 +145,9 @@ export function layerOnTopCallback(name: string, languageLayer = false): string[
     ? [
         '    // The current language’s layer stays on, under the others (Languages).',
         '    uint8_t keep = navi_language_layer();',
+        '    // The default layer turned on by a key (TO) is under everything anyway: it must not hide the language’s layer.',
+        '    uint8_t base = get_highest_layer(default_layer_state);',
+        '    if (keep < MAX_LAYER && keep != base && (navi_wanted & ((layer_state_t)1 << base))) navi_forget(base);',
         '    if (keep < MAX_LAYER && !(navi_wanted & ((layer_state_t)1 << keep))) {',
         '        for (uint8_t i = navi_count; i > 0; i--) navi_order[i] = navi_order[i - 1];',
         '        navi_order[0] = keep;',
