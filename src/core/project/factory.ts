@@ -20,7 +20,7 @@ import {
 export const LAYER_KEYS_ON_TOP_DEFAULT = false;
 
 /** New projects: auto repeat delay and rate in ms (firmware.autoRepeat) and the limits the file and the UI accept. */
-export const AUTO_REPEAT_DEFAULT = { delay: 500, rate: 25 };
+export const AUTO_REPEAT_DEFAULT = { delay: 500, rate: 33 }; // Windows defaults (delay 1, speed 31): measured 500 ms, 33 ms
 export const AUTO_REPEAT_LIMITS = { delay: { min: 1, max: 10000 }, rate: { min: 1, max: 1000 } };
 
 export const KC_NO = 0x0000;

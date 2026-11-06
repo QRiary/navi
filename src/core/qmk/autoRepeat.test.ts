@@ -135,7 +135,7 @@ describe('auto repeat: generated C', () => {
 
 describe('auto repeat: project file', () => {
   it('new projects get the default delay and rate', () => {
-    expect(AUTO_REPEAT_DEFAULT).toEqual({ delay: 500, rate: 25 });
+    expect(AUTO_REPEAT_DEFAULT).toEqual({ delay: 500, rate: 33 });
     expect(createBlankProject('x', 4, 6, false).firmware.autoRepeat).toEqual(AUTO_REPEAT_DEFAULT);
   });
 
