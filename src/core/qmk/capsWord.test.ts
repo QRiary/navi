@@ -41,8 +41,8 @@ const body = (c: string, signature: string) => {
 const pipeline = (p: Project): Project => ({ ...p, firmware: { ...p.firmware, pipeline: { enabled: true, headers: [] } } });
 
 const letters = keys(...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((l) => `KC_${l}`));
-/** The user's case: letters shifted, digits / backspace / delete keep it on, five punctuation keys are letters on CYR. */
-const qriaryLike: CapsWordRule[] = [
+/** A typical case: letters shifted, digits / backspace / delete keep it on, five punctuation keys are letters on CYR. */
+const cyrillicRules: CapsWordRule[] = [
   { id: 'r1', keys: letters, shift: true },
   { id: 'r2', keys: [...keys('KC_1', 'KC_2', 'KC_3', 'KC_4', 'KC_5', 'KC_6', 'KC_7', 'KC_8', 'KC_9', 'KC_0'), ...keys('KC_BSPC', 'KC_DEL')], shift: false },
   { id: 'r3', keys: keys('KC_DOT', 'KC_COMM', 'KC_LBRC', 'KC_RBRC'), shift: true, layers: [1] },
@@ -65,7 +65,7 @@ describe('caps word rules: generated C', () => {
   });
 
   it('rules: caps_word_press_user with ranges, shifted keys, kept keys, any other key ends it; Caps Word turned on', () => {
-    const res = gen(project(qriaryLike));
+    const res = gen(project(cyrillicRules));
     const c = body(keymapC(res), 'bool caps_word_press_user(uint16_t keycode) {');
     expect(c).toContain('case KC_A ... KC_Z:');
     expect(c).toContain('case KC_1 ... KC_0:');
@@ -77,7 +77,7 @@ describe('caps word rules: generated C', () => {
   });
 
   it('a rule for some layers tests the top layer by its C name; elsewhere the key ends Caps Word', () => {
-    const c = body(keymapC(gen(project(qriaryLike))), 'bool caps_word_press_user(uint16_t keycode) {');
+    const c = body(keymapC(gen(project(cyrillicRules))), 'bool caps_word_press_user(uint16_t keycode) {');
     expect(c).toContain('layer_state_t top = (layer_state_t)1 << get_highest_layer(layer_state | default_layer_state);');
     expect(c).toMatch(/case KC_DOT:[\s\S]*?if \(top & \(\(layer_state_t\)1 << CYR\)\) \{\n\s+add_weak_mods\(MOD_BIT\(KC_LSFT\)\);\n\s+return true;\n\s+\}\n\s+return false;/);
   });
@@ -113,7 +113,7 @@ describe('caps word rules: generated C', () => {
   });
 
   it('own pipeline: caps_word_press_navi, its prototype in navi.h, a forwarding warning; no caps_word_press_user', () => {
-    const res = gen(pipeline(project(qriaryLike)));
+    const res = gen(pipeline(project(cyrillicRules)));
     const c = keymapC(res);
     expect(c).toContain('bool caps_word_press_navi(uint16_t keycode) {');
     expect(c).not.toContain('bool caps_word_press_user(');
@@ -131,7 +131,7 @@ describe('caps word rules: generated C', () => {
   });
 
   it('the user’s own C defining caps_word_press_user next to NAVI’s rules is an error', () => {
-    const p = project(qriaryLike, (p) => ({ ...p, firmware: { ...p.firmware, custom: { 'keymap.c': 'bool caps_word_press_user(uint16_t keycode) { return false; }' } } }));
+    const p = project(cyrillicRules, (p) => ({ ...p, firmware: { ...p.firmware, custom: { 'keymap.c': 'bool caps_word_press_user(uint16_t keycode) { return false; }' } } }));
     expect(gen(p).issues.some((i) => i.level === 'error' && i.message.en.includes('caps_word_press_user'))).toBe(true);
   });
 });
@@ -154,7 +154,7 @@ describe('caps word rules: checks', () => {
     expect(text).toMatch(/no keys/i);
     expect(text).toMatch(/key list that no longer exists/i);
     expect(issues.filter((i) => /two rules|already/i.test(i.message.en))).toHaveLength(2); // A (every layer), B (layer CYR)
-    expect(checkCapsWordRules(project(qriaryLike))).toEqual([]);
+    expect(checkCapsWordRules(project(cyrillicRules))).toEqual([]);
   });
 });
 
@@ -171,9 +171,9 @@ describe('caps word rules: project file and layer changes', () => {
   });
 
   it('round trip keeps the rules; bad entries are dropped with a warning', () => {
-    const p = project(qriaryLike);
+    const p = project(cyrillicRules);
     const back = parseProjectText(serializeProject(p));
-    expect('project' in back && back.project?.firmware.capsWordRules).toEqual(qriaryLike);
+    expect('project' in back && back.project?.firmware.capsWordRules).toEqual(cyrillicRules);
     const raw = JSON.parse(serializeProject(p));
     raw.firmware.capsWordRules.push(
       { id: 'bad', keys: 'nope', shift: 1 },
@@ -181,13 +181,13 @@ describe('caps word rules: project file and layer changes', () => {
       { id: 'nolayer', keys: [5], shift: true, layers: [99] }, // must not become an every-layer rule
     );
     const { project: loaded, issues } = validateProject(raw);
-    expect(loaded!.firmware.capsWordRules!.map((r) => r.id)).toEqual([...qriaryLike.map((r) => r.id), 'somelayers']);
+    expect(loaded!.firmware.capsWordRules!.map((r) => r.id)).toEqual([...cyrillicRules.map((r) => r.id), 'somelayers']);
     expect(loaded!.firmware.capsWordRules!.at(-1)!.layers).toEqual([1]);
     expect(issues.some((i) => i.path.startsWith('firmware.capsWordRules') && i.level === 'warning')).toBe(true);
   });
 
   it('layers move with their rule; a rule whose every layer is deleted goes away (it must not become every-layer)', () => {
-    const p = project([...qriaryLike, { id: 'fn', keys: keys('KC_X'), shift: true, layers: [2] }]);
+    const p = project([...cyrillicRules, { id: 'fn', keys: keys('KC_X'), shift: true, layers: [2] }]);
     const id = activeKeymap(p).id;
     const moved = moveLayer(p, id, spec, 1, 2);
     expect(moved.firmware.capsWordRules!.find((r) => r.id === 'r3')!.layers).toEqual([2]);
