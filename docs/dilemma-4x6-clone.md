@@ -30,9 +30,15 @@ a round trackpad (≈ 40 mm) on the right half near the inner edge. Column stagg
 
 ## Before flashing your own firmware
 
-1. Save the current firmware of **both halves**: put one half into the bootloader (an `RPI-RP2` drive appears),
-   open Firmware → flash → “save current firmware”. This is a full copy of the board's flash and is the only way back,
-   because the seller's source is not available. Repeat for the other half.
+1. Save the current firmware of **both halves**. This is a full copy of the board's flash and is the only way back,
+   because the seller's source is not available. The RP2040 boot ROM drive (`RPI-RP2`) shows only `INFO_UF2.TXT` and
+   `INDEX.HTM`, no `CURRENT.UF2`, so the copy is made with [picotool](https://github.com/raspberrypi/pico-sdk-tools/releases):
+   - TRRS cable unplugged; put one half into the bootloader (an `RPI-RP2` drive appears).
+   - `picotool save -a left-half.uf2` (read-only for the board). On Windows, if picotool can't connect, install the
+     WinUSB driver once with [Zadig](https://zadig.akeo.ie) for **RP2 Boot (Interface 1)** only (Interface 0 is the drive).
+   - Firmware → flash → “add a saved copy…” on the drive: the file becomes the board's backup and can be flashed back.
+   - Unplug, then repeat for the other half (`right-half.uf2`). NAVI can't tell the halves apart (same Board-ID), so
+     keep both files.
 2. The seller's keymap has no `QK_BOOT` key. Use the reset/BOOT button, or Bootmagic
    (hold the top-left key while plugging in — note that Bootmagic also clears the settings saved in the keyboard).
 

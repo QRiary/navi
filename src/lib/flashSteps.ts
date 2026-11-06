@@ -4,10 +4,43 @@
  * keyboard comes back over USB.
  */
 import type { Project } from '../core/project/types';
-import { navi, type BootloaderDevice, type FlashScan, type KeymapSources, type Uf2Drive } from '../desktop/bridge';
+import { navi, type BootloaderDevice, type FirmwareInfo, type FlashScan, type KeymapSources, type Uf2Drive } from '../desktop/bridge';
 import { t } from '../i18n';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * The archive holds a backup of a board with this Board-ID: CURRENT.UF2 saved by NAVI, or a picotool copy added with
+ * “add a saved copy…”. The halves of a split keyboard share their Board-ID, so NAVI can't tell their backups apart.
+ */
+export const hasBoardBackup = (firmware: readonly Pick<FirmwareInfo, 'source' | 'boardId'>[], boardId: string) =>
+  firmware.some((f) => f.source === 'backup' && f.boardId === boardId);
+
+/**
+ * Board-IDs the user chose to flash without a backup (Firmware → flash, “flash anyway”): the first flash of such a
+ * board is asked once; after it, “build + flash” doesn't stop for it. Kept in localStorage: losing it only asks again.
+ */
+const NO_BACKUP_KEY = 'navi.flash.noBackupOk';
+
+function noBackupList(): string[] {
+  try {
+    const v: unknown = JSON.parse(globalThis.localStorage?.getItem(NO_BACKUP_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export const noBackupAccepted = (boardId: string) => noBackupList().includes(boardId);
+
+export function acceptNoBackup(boardId: string): void {
+  if (noBackupAccepted(boardId)) return;
+  try {
+    globalThis.localStorage?.setItem(NO_BACKUP_KEY, JSON.stringify([...noBackupList(), boardId]));
+  } catch {
+    // storage unavailable: it will be asked again next time
+  }
+}
 
 /** The keyboard's USB ID as the project knows it (read from the device, else the hardware page), or null. */
 export function expectedUsb(project: Project | null): { vid: number; pid: number } | null {

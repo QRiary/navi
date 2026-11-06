@@ -25,7 +25,7 @@ After changes: `npm run typecheck; npm test; npm run build`.
 ## Rules
 
 - Own firmware is pure QMK by default (`VIA_ENABLE = no`); VIA only when the user ticks it.
-- Before the first flash of a keyboard whose firmware source is unknown — save the current firmware (`CURRENT.UF2`) of every half.
+- Before the first flash of a keyboard whose firmware source is unknown — save the current firmware of every half: `CURRENT.UF2` where the bootloader drive shows it; the RP2040 / RP2350 boot ROM shows none, so there it is `picotool save -a`, added as the board's backup on Firmware → flash. Flashing a board with no backup asks once (“flash anyway”); “build + flash” never does it silently.
 - Do not fake anything: connection/write/build/flash statuses only from facts (keyboard answer, read-back, exit code, device appearing).
 - Do not invent hardware: unknown stays empty/“unknown”, guesses get evidence `heuristic`.
 - Never write to a keyboard or flash without an explicit user action. Show the change plan before writing.
