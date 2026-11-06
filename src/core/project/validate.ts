@@ -9,6 +9,7 @@ import { listSpecVersions } from '../keycodes/spec';
 import { newId } from '../layout/geometry';
 import { allowedMakeVar, checkCustom, CUSTOM_FILES, CUSTOM_MAX, MAKE_VALUE_RE, PIPELINE_MAX_HEADERS, safeHeaderName, unsafeDefineValue, validCIdentifier } from '../qmk/customCode';
 import { ALIAS_LABEL_MAX, KEY_ALIASES_MAX } from './aliases';
+import { CAPS_WORD_KEYS_MAX, CAPS_WORD_RULES_MAX } from './capsWord';
 import { HOLD_ON_KEYS_MAX, KEY_LIST_KEYS_MAX, KEY_LIST_NAME_MAX, KEY_LISTS_MAX, TAP_HOLD_FLAVORS, TAP_HOLD_KEYCODES_MAX, TAP_HOLD_MAX, TAP_HOLD_TERM_MAX, TAP_HOLD_TERM_MIN } from './tapHolds';
 import { TAP_HOLD_ACTIONS_MAX } from './tapHoldActions';
 import { AUTO_REPEAT_DEFAULT, AUTO_REPEAT_LIMITS, TEXT_ROUTE_DEFAULT } from './factory';
@@ -21,6 +22,7 @@ import {
   type ControlGeom,
   type CustomAction,
   type CustomKeycode,
+  type CapsWordRule,
   type KeyAlias,
   type TapHoldSetting,
   type KeyList,
@@ -478,6 +480,49 @@ function readFlags(r: Reader, v: unknown, path: string): Partial<Record<FeatureI
   return out;
 }
 
+/** Caps Word rules: a malformed rule is dropped, unknown key lists and bad layers are dropped, with a warning. Unset stays unset. */
+function readCapsWordRules(r: Reader, v: unknown, listIds: ReadonlySet<string>, layerCount: number): CapsWordRule[] | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (!Array.isArray(v)) {
+    r.warn('firmware.capsWordRules', 'expected an array — dropped');
+    return undefined;
+  }
+  if (v.length > CAPS_WORD_RULES_MAX) r.warn('firmware.capsWordRules', `too many rules (${v.length} > ${CAPS_WORD_RULES_MAX}) — the rest is dropped`);
+  const out: CapsWordRule[] = [];
+  v.slice(0, CAPS_WORD_RULES_MAX).forEach((x, i) => {
+    const p = `firmware.capsWordRules[${i}]`;
+    if (typeof x !== 'object' || x === null || Array.isArray(x)) return r.warn(p, 'expected an object — dropped');
+    const ro = x as Record<string, unknown>;
+    if (!Array.isArray(ro.keys) || typeof ro.shift !== 'boolean') return r.warn(p, 'needs a keys array and shift true/false — dropped');
+    if (ro.keys.length > CAPS_WORD_KEYS_MAX) r.warn(`${p}.keys`, `too many keys (${ro.keys.length} > ${CAPS_WORD_KEYS_MAX}) — the rest is dropped`);
+    const keys = ro.keys.slice(0, CAPS_WORD_KEYS_MAX).filter((k, j): k is number => {
+      if (typeof k === 'number' && Number.isInteger(k) && k >= 0 && k <= 0xffff) return true;
+      r.warn(`${p}.keys[${j}]`, 'not a keycode — dropped');
+      return false;
+    });
+    const rule: CapsWordRule = { id: r.id(ro.id, `${p}.id`, 'cw'), keys, shift: ro.shift };
+    if (Array.isArray(ro.lists)) {
+      const lists = ro.lists.filter((id, j): id is string => {
+        if (typeof id === 'string' && listIds.has(id)) return true;
+        r.warn(`${p}.lists[${j}]`, 'unknown key list, dropped');
+        return false;
+      });
+      if (lists.length) rule.lists = lists;
+    }
+    if (Array.isArray(ro.layers)) {
+      const layers = ro.layers.filter((l, j): l is number => {
+        if (typeof l === 'number' && Number.isInteger(l) && l >= 0 && l < layerCount && l < LIMITS.maxLayers) return true;
+        r.warn(`${p}.layers[${j}]`, 'not a layer of the keymap — dropped');
+        return false;
+      });
+      if (layers.length) rule.layers = layers;
+      else if (ro.layers.length) r.warn(`${p}.layers`, 'no valid layer left: the rule now counts on every layer');
+    }
+    out.push(rule);
+  });
+  return out;
+}
+
 function readFirmware(r: Reader, v: unknown): FirmwareConfig {
   const o = r.obj(v ?? {}, 'firmware');
   const keyboard = o.keyboard === null || o.keyboard === undefined ? null : r.str(o.keyboard, 'firmware.keyboard', '', 200);
@@ -777,6 +822,10 @@ export function validateProject(input: unknown): { project: Project | null; issu
   const fatal = r.issues.some((i) => i.level === 'error' && /^(hardware\.matrix|geometries$|keymaps$|keymaps\[\d+\]\.layers$|format|schemaVersion)/.test(i.path));
   const activeGeometryId = geometries.some((g) => g.id === o.activeGeometryId) ? (o.activeGeometryId as string) : (geometries[0]?.id ?? '');
   const activeKeymapId = keymaps.some((k) => k.id === o.activeKeymapId) ? (o.activeKeymapId as string) : (keymaps[0]?.id ?? '');
+  // Caps Word rules need the key list ids and the layer count, which are known only here.
+  const rawFirmware = o.firmware && typeof o.firmware === 'object' && !Array.isArray(o.firmware) ? (o.firmware as Record<string, unknown>) : {};
+  const capsWordRules = readCapsWordRules(r, rawFirmware.capsWordRules, listIds, keymaps.find((k) => k.id === activeKeymapId)?.layers.length ?? 0);
+  const withCapsWordRules = (f: FirmwareConfig): FirmwareConfig => (capsWordRules ? { ...f, capsWordRules } : f);
   const project: Project = {
     format: PROJECT_FORMAT,
     schemaVersion: PROJECT_SCHEMA_VERSION,
@@ -802,7 +851,7 @@ export function validateProject(input: unknown): { project: Project | null; issu
     unicodeMap,
     languages,
     lighting,
-    firmware: readFirmware(r, o.firmware),
+    firmware: withCapsWordRules(readFirmware(r, o.firmware)),
     device: dev ? { vid: r.num(dev.vid, 'device.vid', 0, 0xffff, 0), pid: r.num(dev.pid, 'device.pid', 0, 0xffff, 0), product: dev.product === undefined ? undefined : r.str(dev.product, 'device.product') } : null,
   };
   return { project: fatal || geometries.length === 0 || keymaps.length === 0 ? null : project, issues: r.issues };
