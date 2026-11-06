@@ -2,9 +2,7 @@ import { useEffect } from 'react';
 import { clearSelection, copySelection, pasteToSelection } from './keymapActions';
 import { activeKeymap } from '../core/project/ops';
 import { useEditorStore } from '../store/editorStore';
-import { useProjectStore } from '../store/projectStore';
-import { toast } from '../store/toastStore';
-import { t } from '../i18n';
+import { saveProject, useProjectStore } from '../store/projectStore';
 import type { Route } from './router';
 
 /**
@@ -22,7 +20,7 @@ export function useShortcuts(route: Route) {
       const store = useProjectStore.getState();
       if (ctrl && e.code === 'KeyS') {
         e.preventDefault();
-        if (store.project) store.save().then(() => toast(t('Project saved', 'Проект сохранён'))).catch((err: Error) => toast(err.message, 'error'));
+        if (store.project) void saveProject();
         return;
       }
       if (typing) return;

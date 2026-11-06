@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { EffectsOverlay } from './components/EffectsOverlay';
 import { Toasts } from './components/Toasts';
+import { LinkConflictDialog } from './components/project/LinkConflictDialog';
 import { PanelResizer } from './components/PanelResizer';
 import { Deck } from './components/layout/Deck';
 import { Sidebar } from './components/layout/Sidebar';
@@ -165,6 +166,7 @@ export function App() {
       {settings.layout.inspector && <Inspector route={route} />}
       {settings.layout.inspector && <PanelResizer side="right" />}
       <Deck />
+      <LinkConflictDialog />
       <Toasts />
       <EffectsOverlay />
     </div>

@@ -9,8 +9,7 @@ import { activeKeymap } from '../../core/project/ops';
 import { href } from '../../lib/router';
 import { useDeviceStore } from '../../store/deviceStore';
 import { useEditorStore } from '../../store/editorStore';
-import { isDirty, useProjectStore } from '../../store/projectStore';
-import { toast } from '../../store/toastStore';
+import { isDirty, saveProject, useProjectStore } from '../../store/projectStore';
 import { WriteDialog } from '../device/WriteDialog';
 import { t } from '../../i18n';
 
@@ -105,7 +104,6 @@ function SaveCell() {
   const saved = useProjectStore((s) => s.saved);
   const saving = useProjectStore((s) => s.saving);
   const draftError = useProjectStore((s) => s.draftError);
-  const save = useProjectStore((s) => s.save);
   const status = useDeviceStore((s) => s.status);
   const [writing, setWriting] = useState(false);
   const dirty = useMemo(() => isDirty({ project, saved }), [project, saved]);
@@ -119,11 +117,7 @@ function SaveCell() {
       <button
         className="btn btn--primary"
         disabled={!dirty || saving}
-        onClick={() =>
-          save()
-            .then(() => toast(t('Project saved', 'Проект сохранён')))
-            .catch((e: Error) => toast(e.message, 'error'))
-        }
+        onClick={() => void saveProject()}
         title="Ctrl+S"
       >
         <Save size={14} strokeWidth={1.5} /> {t('save', 'сохранить')}

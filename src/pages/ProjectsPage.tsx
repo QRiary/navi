@@ -3,7 +3,7 @@
  * history of the saved versions of the current project.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Copy, Download, FileInput, FolderOpen, History, Keyboard, LayoutGrid, Plus, Trash2, Usb } from 'lucide-react';
+import { Copy, Download, FileInput, FolderOpen, History, Keyboard, LayoutGrid, Link2, Plus, Trash2, Unlink, Usb } from 'lucide-react';
 import { createBlankProject, createDilemmaProject, createProject, emptyHardware } from '../core/project/factory';
 import { activeGeometry, activeKeymap } from '../core/project/ops';
 import { diffProjects } from '../core/project/diff';
@@ -65,6 +65,20 @@ function NewProject() {
     await create(p);
     toast(msg);
     navigate({ section: 'keyboard' });
+  };
+
+  const openLinked = async () => {
+    try {
+      const iss = await useProjectStore.getState().openLinkedFile();
+      if (!iss) return;
+      setIssues(iss);
+      if (useProjectStore.getState().link) {
+        toast(t('Project opened and linked to the file: Save writes it back', 'Проект открыт и связан с файлом: «Сохранить» записывает его обратно'));
+        if (!iss.some((i) => i.level === 'error')) navigate({ section: 'keyboard' });
+      }
+    } catch (err) {
+      setIssues([{ level: 'error', message: (err as Error).message }]);
+    }
   };
 
   const fromDevice = async (key: string) => {
@@ -231,9 +245,21 @@ function NewProject() {
           </div>
           <div className="panel-box-body">
             <p className="field-hint">{t('NAVI project · QMK keyboard.json / info.json · VIA keyboard definition · KLE raw data.', 'Проект NAVI · QMK keyboard.json / info.json · определение клавиатуры VIA · KLE raw data.')}</p>
-            <button className="btn" style={{ marginTop: 10 }} onClick={() => void importFile()}>
-              <FolderOpen {...ICON} /> {t('choose file…', 'выбрать файл…')}
-            </button>
+            <div className="field-row" style={{ marginTop: 10 }}>
+              <button className="btn" onClick={() => void importFile()}>
+                <FolderOpen {...ICON} /> {t('choose file…', 'выбрать файл…')}
+              </button>
+              {navi && (
+                <button className="btn" onClick={() => void openLinked()} title={t('The project stays linked to this NAVI project file: Save writes it back there', 'Проект остаётся связан с этим файлом проекта NAVI: «Сохранить» записывает его туда')}>
+                  <Link2 {...ICON} /> {t('open a file (linked)…', 'открыть файл (со связью)…')}
+                </button>
+              )}
+            </div>
+            {navi && (
+              <p className="field-hint" style={{ marginTop: 8 }}>
+                {t('Import makes a copy. A linked NAVI project stays tied to its file (e.g. in your git repo): Save writes it back.', 'Импорт делает копию. Связанный проект NAVI остаётся привязан к своему файлу (например, в вашем git-репозитории): «Сохранить» записывает его обратно.')}
+              </p>
+            )}
             {layoutChoice && (
               <div className="field-row" style={{ marginTop: 10 }}>
                 <span className="field-hint">{t('Layout:', 'Макет:')}</span>
@@ -368,6 +394,7 @@ function CurrentProject() {
 
   return (
     <div className="page">
+      {navi && <LinkedFile />}
       <div className="grid-2">
         <section className="panel-box">
           <div className="panel-box-head">
@@ -419,6 +446,64 @@ function CurrentProject() {
       <Issues issues={issues} />
       <RevisionList />
     </div>
+  );
+}
+
+/** The file this project is linked to (desktop only): link, relink, unlink. */
+function LinkedFile() {
+  const link = useProjectStore((s) => s.link);
+  const linkToFile = useProjectStore((s) => s.linkToFile);
+  const relink = useProjectStore((s) => s.relink);
+  const unlink = useProjectStore((s) => s.unlink);
+  const run = (fn: () => Promise<unknown>, ok?: string) =>
+    void fn()
+      .then((res) => {
+        if (ok && res !== null) toast(ok);
+      })
+      .catch((err: Error) => toast(err.message, 'error'));
+
+  return (
+    <section className="panel-box" style={{ marginBottom: 'var(--gap)' }}>
+      <div className="panel-box-head">
+        <span className="cell-label">
+          <Link2 size={13} strokeWidth={1.5} /> {t('linked file', 'связанный файл')}
+        </span>
+        {link?.missing && <span className="badge badge--warn">{t('not found', 'не найден')}</span>}
+      </div>
+      <div className="panel-box-body field">
+        {link ? (
+          <>
+            <p className="field-hint">
+              <code style={{ overflowWrap: 'anywhere' }}>{link.path}</code>
+            </p>
+            <p className="field-hint">
+              {link.missing
+                ? t('The file is not at this path any more (moved or deleted). NAVI keeps its own copy; relink to the file or unlink.', 'Файла больше нет по этому пути (перемещён или удалён). У NAVI есть своя копия; привяжите файл заново или отвяжите.')
+                : t('Save (Ctrl+S) also writes this file. If it changes outside NAVI (git pull, a hand edit), NAVI shows the differences before anything is overwritten.', '«Сохранить» (Ctrl+S) записывает и этот файл. Если он изменится вне NAVI (git pull, правка вручную), NAVI покажет различия, прежде чем что-то перезаписать.')}
+            </p>
+            <div className="field-row">
+              <button className="btn" onClick={() => run(relink)}>
+                <FolderOpen {...ICON} /> {t('relink…', 'привязать заново…')}
+              </button>
+              <button className="btn" onClick={() => run(unlink, t('Unlinked: the file stays as it is', 'Связь снята: файл остаётся как есть'))}>
+                <Unlink {...ICON} /> {t('unlink', 'отвязать')}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="field-hint">
+              {t('Not linked. Link the project to a file (e.g. in your own git repo): Save will write it there too. The link is kept only in NAVI, never in the file.', 'Не связан. Свяжите проект с файлом (например, в вашем git-репозитории): «Сохранить» будет записывать и его. Связь хранится только в NAVI, не в файле.')}
+            </p>
+            <div className="field-row">
+              <button className="btn" onClick={() => run(linkToFile, t('Linked: the saved version is written to the file', 'Связано: сохранённая версия записана в файл'))}>
+                <Link2 {...ICON} /> {t('link to a file…', 'связать с файлом…')}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
   );
 }
 
