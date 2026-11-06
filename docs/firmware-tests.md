@@ -56,7 +56,7 @@ value is in the user's secrets header, which NAVI never reads; the test build le
 key can turn on from power-on, a combo whose
 result is a tap dance, and a scenario whose text holds a word NAVI's file check refuses (`#include`, `incbin`).
 The task switcher key (`NAVI_TASK_SWITCH`) is tested on every layer it shows on, tapped once (`⟨C-A-TAB⟩`) and
-twice (`⟨C-A-TAB⟩⟨TAB⟩`), with `⟨ENT⟩` after the release of the layer key holding that layer; as a combo result, a
+twice (`⟨C-A-TAB⟩⟨C-A-TAB⟩`), with `⟨ENT⟩` after the release of the layer key holding that layer; as a combo result, a
 tap dance or tap-hold slot, a key override's trigger or on a language's layer it's left out.
 The lines are for people to read; a harness skips the section.
 

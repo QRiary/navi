@@ -68,7 +68,7 @@ describe('task switcher key: the C', () => {
     const c = file(res, 'keymap.c');
     expect(c).toContain(`#define NAVI_TASK_SWITCH 0x${SW.toString(16).toUpperCase()}`);
     expect(c.slice(c.indexOf('keymaps['))).toContain('NAVI_TASK_SWITCH');
-    expect(c).toContain('tap_code16(navi_switcher_open ? KC_TAB : LCTL(LALT(KC_TAB)));');
+    expect(c).toContain('tap_code16(LCTL(LALT(KC_TAB)));');
     expect(c).toMatch(/bool process_record_user\(uint16_t keycode, keyrecord_t \*record\) \{\n    if \(!navi_switcher_key\(keycode, record\)\) return false;/);
     expect(c).toContain('void housekeeping_task_user(void) {');
     expect(c).toContain('    layer_state_t on = layer_state | default_layer_state;');

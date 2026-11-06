@@ -149,10 +149,10 @@ describe('the task switcher key', () => {
     });
     const t = tests(file(p));
     expect(t).toContain('r1c3 => ⟨C-A-TAB⟩');
-    expect(t).toContain('r1c3 r1c3 => ⟨C-A-TAB⟩⟨TAB⟩');
+    expect(t).toContain('r1c3 r1c3 => ⟨C-A-TAB⟩⟨C-A-TAB⟩');
     expect(t).toContain('+r0c3 r1c3 -r0c3 => ⟨C-A-TAB⟩⟨ENT⟩');
     expect(t).toContain('+r1c1 wait:250 r0c1 -r1c1 => ⟨C-A-TAB⟩⟨ENT⟩');
-    expect(t).toContain('+r1c1 wait:250 r0c1 r0c1 -r1c1 => ⟨C-A-TAB⟩⟨TAB⟩⟨ENT⟩');
+    expect(t).toContain('+r1c1 wait:250 r0c1 r0c1 -r1c1 => ⟨C-A-TAB⟩⟨C-A-TAB⟩⟨ENT⟩');
     expect(section(file(p), 'keys')).toContain('key 0 r1c3 NAVI_TASK_SWITCH');
   });
   it('in a combo is left out', () => {

@@ -189,10 +189,9 @@ interface Behavior {
   switcher?: boolean;
 }
 
-/** What the task switcher key sends (qmk/taskSwitcher.ts): Ctrl+Alt+Tab as tap_code16 (weak mods), then Tab, Enter. */
+/** What the task switcher key sends (qmk/taskSwitcher.ts): Ctrl+Alt+Tab as tap_code16 (weak mods) on every tap, then Enter. */
 const weakTap = (mods: number, code: number): Op[] => [{ t: 'weak+', mods }, { t: 'down', code }, { t: 'up', code }, { t: 'weak-', mods }];
 const SWITCHER_OPEN = weakTap(0x05, 0x2b);
-const SWITCHER_NEXT: Op[] = [{ t: 'down', code: 0x2b }, { t: 'up', code: 0x2b }];
 const SWITCHER_PICK: Op[] = [{ t: 'down', code: 0x28 }, { t: 'up', code: 0x28 }];
 
 const NOTHING: Press = { down: [], up: [] };
@@ -874,7 +873,7 @@ function switcherTests(c: Ctx, route: Route, s: string, out: Section): void {
   const end = leave === undefined ? route.end : [...route.end.slice(0, leave), ...SWITCHER_PICK, ...route.end.slice(leave)];
   for (const [steps, ops] of [
     [[s], SWITCHER_OPEN],
-    [[s, s], [...SWITCHER_OPEN, ...SWITCHER_NEXT]],
+    [[s, s], [...SWITCHER_OPEN, ...SWITCHER_OPEN]],
   ] as const) {
     out.tests.push(`${[...route.before, ...steps, ...route.after].join(' ')} => ${new Typist().run([...route.start, ...ops, ...end]).text()}`);
   }

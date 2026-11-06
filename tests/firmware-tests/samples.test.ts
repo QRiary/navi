@@ -133,14 +133,14 @@ function pipeline(name: string): Project {
  */
 export const SWITCHER_TESTS = [
   'r0c6 => ⟨C-A-TAB⟩',
-  'r0c6 r0c6 r0c6 => ⟨C-A-TAB⟩⟨TAB⟩⟨TAB⟩',
+  'r0c6 r0c6 r0c6 => ⟨C-A-TAB⟩⟨C-A-TAB⟩⟨C-A-TAB⟩',
   'r0c6 r0c4 r0c6 => ⟨C-A-TAB⟩⟨ESC⟩⟨C-A-TAB⟩',
   'r0c6 r0c5 r0c6 => ⟨C-A-TAB⟩⟨ENT⟩⟨C-A-TAB⟩',
-  '+r0c2 r0c6 r0c6 -r0c2 => ⟨C-S-A-TAB⟩⟨S-TAB⟩',
-  'r0c3 r0c6 r0c6 => ⟨C-S-A-TAB⟩⟨TAB⟩',
+  '+r0c2 r0c6 r0c6 -r0c2 => ⟨C-S-A-TAB⟩⟨C-S-A-TAB⟩',
+  'r0c3 r0c6 r0c6 => ⟨C-S-A-TAB⟩⟨C-A-TAB⟩',
   '+r0c1 wait:250 r0c0 -r0c1 => ⟨C-A-TAB⟩⟨ENT⟩',
-  '+r0c1 wait:250 r0c0 r0c0 r1c0 -r0c1 => ⟨C-A-TAB⟩⟨TAB⟩⟨LEFT⟩⟨ENT⟩',
-  '+r0c1 wait:250 +r0c2 r0c0 r0c0 -r0c2 -r0c1 => ⟨C-S-A-TAB⟩⟨S-TAB⟩⟨ENT⟩',
+  '+r0c1 wait:250 r0c0 r0c0 r1c0 -r0c1 => ⟨C-A-TAB⟩⟨C-A-TAB⟩⟨LEFT⟩⟨ENT⟩',
+  '+r0c1 wait:250 +r0c2 r0c0 r0c0 -r0c2 -r0c1 => ⟨C-S-A-TAB⟩⟨C-S-A-TAB⟩⟨ENT⟩',
   '+r0c1 wait:250 r0c0 r0c4 -r0c1 => ⟨C-A-TAB⟩⟨ESC⟩',
   '+r0c8 r0c0 -r0c8 => ⟨C-A-TAB⟩⟨ENT⟩',
   'r0c6 +r0c8 r1c0 -r0c8 => ⟨C-A-TAB⟩⟨LEFT⟩',
@@ -229,7 +229,40 @@ function splitWithOptions(): Project {
   };
 }
 
+/**
+ * Every step-16 feature in one split project: indicator LEDs, hold spots, one-shot cancel (splitWithOptions), the task
+ * switcher key, a per-language custom keycode and a secret macro. `pipe`: own pipeline without the tap-hold setting
+ * (its own C then forwards only the hooks SWITCHER_OWN_C has).
+ */
+function allFeatures(pipe: boolean): Project {
+  const base = splitWithOptions();
+  const p = withKeys(base, [
+    [0, 1, 0, 'NAVI_TASK_SWITCH'],
+    [0, 1, 1, 'QK_USER_0'],
+    [0, 1, 2, 'QK_MACRO_0'],
+  ]);
+  return {
+    ...p,
+    tapHolds: pipe ? [] : p.tapHolds,
+    languages: [
+      { id: 'en', name: 'English', code: 'en', plainKeys: true },
+      { id: 'xx', name: 'Other', code: 'xx', plainKeys: false },
+    ],
+    customKeycodes: [{ id: 'apos', name: 'APOS', description: '', action: { type: 'by-language', byLanguage: [{ language: 'en', action: { type: 'send-string', text: "'s" } }], other: { type: 'send-string', text: "'" } } }],
+    macros: [{ id: 'm0', index: 0, name: 'pin', steps: [{ type: 'text', text: 'a' }, { type: 'secret', name: 'WORK_PIN' }, { type: 'text', text: 'b' }] }],
+    firmware: { ...p.firmware, textRoute: 'wincompose', ...(pipe ? { pipeline: { enabled: true, headers: [] } } : {}) },
+  };
+}
+
 it.skipIf(!out)('writes the sample keymap folders for the firmware test runner', () => {
+  writeGenerated(join(out!, 'generated-all'), allFeatures(false));
+  writeFileSync(join(out!, 'generated-all', 'secrets.h'), SECRETS_H);
+  write(join(out!, 'all-pipeline'), allFeatures(true), ['r1c0 => ⟨C-A-TAB⟩', 'r1c1 => \'s', 'r1c2 => ab'], {
+    'rules.mk': PIPELINE_RULES + 'SPLIT_KEYBOARD = yes\n',
+    'config.h': PIPELINE_CONFIG,
+    'own.c': SWITCHER_OWN_C,
+    'secrets.h': SECRETS_H,
+  });
   write(join(out!, 'plain'), plain(), PLAIN_TESTS);
   const own = (extra: string[]) => ({ 'rules.mk': PIPELINE_RULES, 'config.h': PIPELINE_CONFIG, 'own.c': ownC(extra) });
   write(join(out!, 'pipeline'), pipeline('fw tests pipeline'), ['r0c0 => a', 'r0c1 => y', 'r0c2:300 => ⟨LSFT⟩'], own([]));
