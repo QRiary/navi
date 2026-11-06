@@ -3,8 +3,8 @@
  * finding the keyboard in bootloader mode, writing:
  *  • UF2 (RP2040 etc.) — copying to the bootloader drive, with a chip family check;
  *  • the rest — the official `qmk flash <file>`.
- * Before the first flash — a backup of the current firmware from the RP2040 bootloader drive (CURRENT.UF2):
- * it is the only way to restore the seller's firmware later.
+ * Before the first flash — a backup of the current firmware from a UF2 bootloader drive that shows CURRENT.UF2
+ * (the RP2040 / RP2350 ROM doesn't, so there is nothing to save there): the only way back to the seller's firmware.
  * “Done” is shown only when the keyboard appears over USB again (the project's VID:PID).
  */
 import { useEffect, useRef, useState } from 'react';
@@ -288,7 +288,12 @@ export function FlashTab({ active = true }: { active?: boolean }) {
                   <button
                     className="btn"
                     {...whyDisabled(
-                      busy && t('Wait: a flash or backup is running', 'Подождите: идёт прошивка или копирование'),
+                      (!d.current &&
+                        t(
+                          'This bootloader can’t read the board’s current firmware: its drive has no CURRENT.UF2 (the RP2040 / RP2350 boot ROM never shows one).',
+                          'Этот загрузчик не умеет читать текущую прошивку платы: на его диске нет CURRENT.UF2 (загрузчик RP2040 / RP2350 его не показывает).',
+                        )) ||
+                        (busy && t('Wait: a flash or backup is running', 'Подождите: идёт прошивка или копирование')),
                       t(
                         'Copy the whole flash memory of the board (CURRENT.UF2) into the archive. Nothing is written to the board.',
                         'Скопировать всю память платы (CURRENT.UF2) в архив. На плату ничего не пишется.',
@@ -310,7 +315,7 @@ export function FlashTab({ active = true }: { active?: boolean }) {
                     <Zap {...ICON} /> {confirmUnverified ? t('flash anyway', 'всё равно прошить') : t('flash', 'прошить')}
                   </button>
                 </div>
-                {!hasBackup(d) && (
+                {d.current && !hasBackup(d) && (
                   <p className="field-hint">
                     {t(
                       'First save the current firmware: it is the only way back to the firmware the keyboard came with (the seller’s source is unknown).',

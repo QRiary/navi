@@ -170,8 +170,9 @@ export const useBuildFlashStore = create<BuildFlashState>()((set, get) => {
     if (target.kind === 'uf2') {
       const { drive } = target;
       await qmk().refreshFirmware();
-      // No CURRENT.UF2 of this board in the archive yet: save it now (read-only for the board), before anything is written.
-      if (!qmk().firmware.some((f) => f.source === 'backup' && f.boardId === drive.boardId)) {
+      // No CURRENT.UF2 of this board in the archive yet: save it now (read-only for the board), before anything is
+      // written. A bootloader that doesn't show one (the RP2040 ROM) can't be read this way: nothing to save.
+      if (drive.current && !qmk().firmware.some((f) => f.source === 'backup' && f.boardId === drive.boardId)) {
         phase('backing-up');
         try {
           await navi.flash.backupUf2(drive.root);

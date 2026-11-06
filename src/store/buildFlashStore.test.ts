@@ -4,9 +4,9 @@ import type { Project } from '../core/project/types';
 
 vi.mock('../device/rawHid', () => ({ sendRawPacket: vi.fn() }));
 
-type Scan = { usb: { vid: string; pid: string; name: string; status: string; instanceId: string }[]; bootloaders: unknown[]; uf2Drives: { root: string; boardId: string; model: string }[]; scannedAt: string };
+type Scan = { usb: { vid: string; pid: string; name: string; status: string; instanceId: string }[]; bootloaders: unknown[]; uf2Drives: { root: string; boardId: string; model: string; current: boolean }[]; scannedAt: string };
 const empty = (): Scan => ({ usb: [], bootloaders: [], uf2Drives: [], scannedAt: '' });
-const drive = { root: 'E:\\', boardId: 'RPI-RP2', model: 'RP2' };
+const drive = { root: 'E:\\', boardId: 'RPI-RP2', model: 'RP2', current: true };
 const keyboardBack = (): Scan => ({ ...empty(), usb: [{ vid: 'FEED', pid: '0001', name: 'kb', status: 'OK', instanceId: 'x' }] });
 
 let scans: Scan[] = [];
@@ -187,6 +187,15 @@ describe('build + flash', () => {
     scans = [{ ...empty(), uf2Drives: [drive] }, keyboardBack()];
     await runToEnd();
     expect(calls).toEqual(['compile', 'backup E:\\', 'uf2']);
+    expect(toasts.useToastStore.getState().toasts.some((t) => t.tone === 'error')).toBe(false);
+  });
+
+  it('a bootloader without CURRENT.UF2 (the RP2040 ROM): nothing to save, flashes', async () => {
+    setup({ disk: 'navi' });
+    qmkStore.useQmkStore.setState({ firmware: [] });
+    scans = [{ ...empty(), uf2Drives: [{ ...drive, current: false }] }, keyboardBack()];
+    await runToEnd();
+    expect(calls).toEqual(['compile', 'uf2']);
     expect(toasts.useToastStore.getState().toasts.some((t) => t.tone === 'error')).toBe(false);
   });
 

@@ -124,6 +124,8 @@ export interface Uf2Drive {
   model: string;
   boardId: string;
   info: string;
+  /** The drive shows CURRENT.UF2, so its current firmware can be saved (the RP2040 / RP2350 ROM doesn't). */
+  current: boolean;
 }
 
 export interface FlashScan {
