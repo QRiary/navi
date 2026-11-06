@@ -2,6 +2,7 @@
  * Auto repeat (firmware.autoRepeat): the delay before the first repeat and the rate, in ms. NAVI's own C code in
  * keymap.c; applies to macros and custom keycodes ticked “repeat while held”. Shown on Advanced → NAVI additions.
  */
+import { useState } from 'react';
 import { AUTO_REPEAT_LIMITS } from '../../core/project/factory';
 import type { Project } from '../../core/project/types';
 import { useProjectStore } from '../../store/projectStore';
@@ -10,7 +11,10 @@ import { InfoTip } from '../InfoTip';
 
 export function AutoRepeatRows({ project }: { project: Project }) {
   const apply = useProjectStore((s) => s.apply);
+  // What is being typed: an empty or out-of-range value stays in the field (not stored) until blur puts back the stored one.
+  const [draft, setDraft] = useState<{ field: 'delay' | 'rate'; text: string } | null>(null);
   const set = (field: 'delay' | 'rate', raw: string, label: string) => {
+    setDraft({ field, text: raw });
     const n = Number(raw);
     const { min, max } = AUTO_REPEAT_LIMITS[field];
     if (raw.trim() === '' || !Number.isInteger(n) || n < min || n > max) return; // out of range: not stored
@@ -20,8 +24,8 @@ export function AutoRepeatRows({ project }: { project: Project }) {
     <>
       {' — '}
       {t(
-        'Macros and custom keycodes ticked “repeat while held” run again after the delay, then every rate ms, while held. Only the key pressed last repeats.',
-        'Макросы и свои keycodes с галочкой «повтор при удержании» запускаются снова после задержки, затем каждые rate мс, пока клавиша удерживается. Повторяется только клавиша, нажатая последней.',
+        'Macros and custom keycodes ticked “repeat while held” run again after the delay, then at the repeat rate, while held. Only the key pressed last repeats.',
+        'Макросы и свои keycodes с галочкой «повтор при удержании» запускаются снова после задержки, затем с частотой повтора, пока клавиша удерживается. Повторяется только клавиша, нажатая последней.',
       )}
     </>
   );
@@ -47,8 +51,9 @@ export function AutoRepeatRows({ project }: { project: Project }) {
             type="number"
             min={AUTO_REPEAT_LIMITS[r.field].min}
             max={AUTO_REPEAT_LIMITS[r.field].max}
-            value={project.firmware.autoRepeat[r.field]}
+            value={draft?.field === r.field ? draft.text : project.firmware.autoRepeat[r.field]}
             onChange={(e) => set(r.field, e.target.value, r.label)}
+            onBlur={() => setDraft(null)}
             aria-label={r.title}
           />
         </div>
