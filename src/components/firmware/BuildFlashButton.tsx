@@ -52,8 +52,14 @@ export function BuildFlashButton() {
   const project = useProjectStore((s) => s.project);
   const env = useQmkStore((s) => s.env);
   const job = useQmkStore((s) => s.job);
+  const detecting = useQmkStore((s) => s.detecting);
   const { phase, since, pressWhy, run, cancel } = useBuildFlashStore();
   const [, tick] = useState(0);
+  // The button is on every page, so it finds QMK itself at start (before, only opening Firmware did).
+  useEffect(() => {
+    const q = useQmkStore.getState();
+    if (navi && !q.env && !q.detecting) void q.detect();
+  }, []);
   useEffect(() => {
     if (phase !== 'building') return;
     const id = setInterval(() => tick((n) => n + 1), 1000);
@@ -63,6 +69,7 @@ export function BuildFlashButton() {
   const running = phase !== 'idle' && phase !== 'done';
   const kb = project.firmware.keyboard;
   const reason =
+    (!env && detecting && t('Checking the QMK setup…', 'Проверяю установку QMK…')) ||
     (!env?.runner && t('QMK CLI not found: see Firmware → setup', 'QMK CLI не найден: смотрите «Прошивка → окружение»')) ||
     (!env?.homeValid && t('qmk_firmware not found: see Firmware → setup', 'qmk_firmware не найден: смотрите «Прошивка → окружение»')) ||
     (!kb && t('Choose a keyboard target first (Firmware → target)', 'Сначала выберите target клавиатуры («Прошивка → target»)')) ||
