@@ -20,7 +20,7 @@ import { useQmkStore } from './qmkStore';
 import { useSettingsStore } from './settingsStore';
 import { toast } from './toastStore';
 
-export type BuildFlashPhase = 'idle' | 'saving' | 'review' | 'writing' | 'building' | 'restarting' | 'press' | 'flashing' | 'returning' | 'done';
+export type BuildFlashPhase = 'idle' | 'saving' | 'review' | 'writing' | 'building' | 'restarting' | 'press' | 'backing-up' | 'flashing' | 'returning' | 'done';
 
 export interface BuildFlashState {
   phase: BuildFlashPhase;
@@ -170,8 +170,18 @@ export const useBuildFlashStore = create<BuildFlashState>()((set, get) => {
     if (target.kind === 'uf2') {
       const { drive } = target;
       await qmk().refreshFirmware();
-      if (!qmk().firmware.some((f) => f.source === 'backup' && f.boardId === drive.boardId))
-        stopWith(t('First flash of this board: save its current firmware on Firmware → flash (the board is in its bootloader now), then press “build + flash” again.', 'Первая прошивка этой платы: сохраните её текущую прошивку во вкладке «Прошивка → прошить» (плата сейчас в загрузчике), затем снова нажмите «собрать и прошить».'), { tab: 'flash' });
+      // No CURRENT.UF2 of this board in the archive yet: save it now (read-only for the board), before anything is written.
+      if (!qmk().firmware.some((f) => f.source === 'backup' && f.boardId === drive.boardId)) {
+        phase('backing-up');
+        try {
+          await navi.flash.backupUf2(drive.root);
+        } catch (err) {
+          stopWith(t('Couldn’t save the board’s current firmware (CURRENT.UF2), so nothing was flashed. Try again, or save it on Firmware → flash.', 'Не удалось сохранить текущую прошивку платы (CURRENT.UF2), поэтому ничего не прошито. Повторите или сохраните её во вкладке «Прошивка → прошить».'), { detail: err instanceof Error ? err.message : String(err), tab: 'flash' });
+        }
+        await qmk().refreshFirmware();
+        check(); // stopping during the save is safe: nothing was written to the board
+        phase('flashing');
+      }
       const ok = await navi.flash.checkUf2(fw.id, drive.root);
       if (!ok.ok) stopWith(ok.reason === 'not-uf2' ? t('The built file is not a UF2 firmware.', 'Собранный файл — не прошивка UF2.') : t(`Chip family mismatch: the firmware doesn’t fit board ${drive.boardId}.`, `Не то семейство чипа: прошивка не подходит плате ${drive.boardId}.`), { tab: 'flash' });
       if (ok.unverified) stopWith(t(`Unknown board ${drive.boardId}: flash it on Firmware → flash, where you can confirm it.`, `Неизвестная плата ${drive.boardId}: прошейте её во вкладке «Прошивка → прошить», там это можно подтвердить.`), { tab: 'flash' });

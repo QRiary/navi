@@ -28,6 +28,10 @@ const fakeNavi = {
       calls.push('uf2');
       return { copied: true, copyError: null, driveGone: true, bytes: 1 };
     }),
+    backupUf2: vi.fn(async (root: string) => {
+      calls.push(`backup ${root}`);
+      return { id: 'bk2', source: 'backup', boardId: 'RPI-RP2' };
+    }),
     qmk: vi.fn(),
   },
 };
@@ -177,12 +181,22 @@ describe('build + flash', () => {
     expect(toasts.useToastStore.getState().toasts.some((t) => t.tone === 'error' && /exit code 2|код 2/.test(t.message))).toBe(true);
   });
 
-  it('first flash of a board without a saved CURRENT.UF2: stops before flashing', async () => {
+  it('first flash of a board without a saved CURRENT.UF2: saves it, then flashes', async () => {
     setup({ disk: 'navi' });
     qmkStore.useQmkStore.setState({ firmware: [] });
+    scans = [{ ...empty(), uf2Drives: [drive] }, keyboardBack()];
+    await runToEnd();
+    expect(calls).toEqual(['compile', 'backup E:\\', 'uf2']);
+    expect(toasts.useToastStore.getState().toasts.some((t) => t.tone === 'error')).toBe(false);
+  });
+
+  it('a failed CURRENT.UF2 save stops before flashing', async () => {
+    setup({ disk: 'navi' });
+    qmkStore.useQmkStore.setState({ firmware: [] });
+    fakeNavi.flash.backupUf2.mockRejectedValueOnce(new Error('read error'));
     scans = [{ ...empty(), uf2Drives: [drive] }];
     await runToEnd();
     expect(calls).toEqual(['compile']);
-    expect(toasts.useToastStore.getState().toasts.some((t) => t.tone === 'error')).toBe(true);
+    expect(toasts.useToastStore.getState().toasts.some((t) => t.tone === 'error' && !!t.detail?.includes('read error'))).toBe(true);
   });
 });

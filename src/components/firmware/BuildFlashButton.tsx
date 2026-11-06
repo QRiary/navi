@@ -35,6 +35,8 @@ function label(phase: BuildFlashPhase, since: number): string {
       return t('restarting the keyboard…', 'перезагрузка клавиатуры…');
     case 'press':
       return t('press QK_BOOT', 'нажмите QK_BOOT');
+    case 'backing-up':
+      return t('saving current firmware…', 'сохраняю текущую прошивку…');
     case 'flashing':
       return t('flashing…', 'прошивка…');
     case 'returning':
