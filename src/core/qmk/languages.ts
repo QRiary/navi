@@ -294,7 +294,7 @@ export function languageEarlyCode(o: { project: Project; keymap: Keymap; plan: L
  * Switching languages: after the layer-on-top block (navi_forget), before process_record. `layerHook` is the name of
  * the layer callback to write when “layer keys on top” is off (the on-top callback keeps the layer itself).
  */
-export function languageSwitchCode(o: { project: Project; plan: LanguagePlan; kc: (v: number) => string; layersOnTop: boolean; layerHook: string; postInit: string; spec: KeycodeSpec }): string[] {
+export function languageSwitchCode(o: { project: Project; plan: LanguagePlan; kc: (v: number) => string; layersOnTop: boolean; layerHook: string; spec: KeycodeSpec }): string[] {
   const { project, plan } = o;
   const list = project.languages;
   const out: string[] = [];
@@ -343,7 +343,6 @@ export function languageSwitchCode(o: { project: Project; plan: LanguagePlan; kc
     '}',
     '',
   );
-  if (plan.layers) out.push(`void ${o.postInit}(void) {`, '    layer_state_set(layer_state); // the first language’s layer on at power-on', '}', '');
   return out;
 }
 

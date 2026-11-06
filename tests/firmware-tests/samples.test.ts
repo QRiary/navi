@@ -114,6 +114,11 @@ function split(): Project {
     firmware: {
       ...p.firmware,
       bootloaderReboot: true,
+      // Indicator LEDs build in the test framework too (no pins there: NAVI_TESTS_FILE).
+      indicatorLeds: [
+        { id: 'r', side: 'right', pin: 'GP25', activeLow: false, states: ['caps-lock', 'oneshot-shift', 'toggled-layer'] },
+        { id: 'l', side: 'left', pin: 'GP25', activeLow: true, states: ['caps-word', 'own-code', 'toggled-layer'] },
+      ],
       custom: {
         'keymap.c': ['bool sample_on_left_half(void) {', '    return is_keyboard_left();', '}'].join('\n'),
         'rules.mk': 'SPLIT_KEYBOARD = yes',

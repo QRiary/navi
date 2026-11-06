@@ -10,6 +10,7 @@ import { newId } from '../layout/geometry';
 import { allowedMakeVar, checkCustom, CUSTOM_FILES, CUSTOM_MAX, MAKE_VALUE_RE, PIPELINE_MAX_HEADERS, safeHeaderName, unsafeDefineValue, validCIdentifier } from '../qmk/customCode';
 import { ALIAS_LABEL_MAX, KEY_ALIASES_MAX } from './aliases';
 import { CAPS_WORD_KEYS_MAX, CAPS_WORD_RULES_MAX } from './capsWord';
+import { INDICATOR_LEDS_MAX, INDICATOR_STATES } from './indicatorLeds';
 import { HOLD_ON_KEYS_MAX, KEY_LIST_KEYS_MAX, KEY_LIST_NAME_MAX, KEY_LISTS_MAX, TAP_HOLD_FLAVORS, TAP_HOLD_KEYCODES_MAX, TAP_HOLD_MAX, TAP_HOLD_TERM_MAX, TAP_HOLD_TERM_MIN } from './tapHolds';
 import { TAP_HOLD_ACTIONS_MAX } from './tapHoldActions';
 import { AUTO_REPEAT_DEFAULT, AUTO_REPEAT_LIMITS, TEXT_ROUTE_DEFAULT } from './factory';
@@ -23,6 +24,8 @@ import {
   type CustomAction,
   type CustomKeycode,
   type CapsWordRule,
+  type IndicatorLed,
+  type IndicatorState,
   type KeyAlias,
   type TapHoldSetting,
   type KeyList,
@@ -533,6 +536,35 @@ function readCapsWordRules(r: Reader, v: unknown, listIds: ReadonlySet<string>, 
   return out;
 }
 
+/** Indicator LEDs: a malformed LED or state is dropped with a warning; the pin is kept as typed (the generator checks it). */
+function readIndicatorLeds(r: Reader, v: unknown): IndicatorLed[] {
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v)) {
+    r.warn('firmware.indicatorLeds', 'expected an array — dropped');
+    return [];
+  }
+  if (v.length > INDICATOR_LEDS_MAX) r.warn('firmware.indicatorLeds', `too many LEDs (${v.length} > ${INDICATOR_LEDS_MAX}) — the rest is dropped`);
+  const out: IndicatorLed[] = [];
+  v.slice(0, INDICATOR_LEDS_MAX).forEach((x, i) => {
+    const p = `firmware.indicatorLeds[${i}]`;
+    if (typeof x !== 'object' || x === null || Array.isArray(x)) return r.warn(p, 'expected an object — dropped');
+    const o = x as Record<string, unknown>;
+    const states: IndicatorState[] = [];
+    (Array.isArray(o.states) ? o.states : []).forEach((s, j) => {
+      if ((INDICATOR_STATES as readonly unknown[]).includes(s) && !states.includes(s as IndicatorState)) states.push(s as IndicatorState);
+      else r.warn(`${p}.states[${j}]`, 'unknown or repeated state — dropped');
+    });
+    out.push({
+      id: r.id(o.id, `${p}.id`, 'led'),
+      side: r.oneOf(o.side, `${p}.side`, ['left', 'right'] as const, 'left'),
+      pin: r.str(o.pin, `${p}.pin`, '', 8).toUpperCase(),
+      activeLow: r.bool(o.activeLow ?? false, `${p}.activeLow`, false),
+      states,
+    });
+  });
+  return out;
+}
+
 function readFirmware(r: Reader, v: unknown): FirmwareConfig {
   const o = r.obj(v ?? {}, 'firmware');
   const keyboard = o.keyboard === null || o.keyboard === undefined ? null : r.str(o.keyboard, 'firmware.keyboard', '', 200);
@@ -609,6 +641,7 @@ function readFirmware(r: Reader, v: unknown): FirmwareConfig {
     bootloaderReboot: r.bool(o.bootloaderReboot ?? false, 'firmware.bootloaderReboot', false),
     tests: r.bool(o.tests ?? false, 'firmware.tests', false),
     runTests: r.bool(o.runTests ?? false, 'firmware.runTests', false),
+    indicatorLeds: readIndicatorLeds(r, o.indicatorLeds),
     autoRepeat: {
       delay: r.num(ar.delay, 'firmware.autoRepeat.delay', AUTO_REPEAT_LIMITS.delay.min, AUTO_REPEAT_LIMITS.delay.max, AUTO_REPEAT_DEFAULT.delay),
       rate: r.num(ar.rate, 'firmware.autoRepeat.rate', AUTO_REPEAT_LIMITS.rate.min, AUTO_REPEAT_LIMITS.rate.max, AUTO_REPEAT_DEFAULT.rate),

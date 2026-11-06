@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 18;
+export const PROJECT_SCHEMA_VERSION = 19;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -482,6 +482,27 @@ export interface FirmwareConfig {
    * it. Unset = QMK's own list, NAVI writes no caps-word code.
    */
   capsWordRules?: CapsWordRule[];
+  /**
+   * Indicator LEDs (since format 19): single LEDs on controller pins, each lit while any of its states is on.
+   * Empty = NAVI writes no LED code. Generated C: core/qmk/indicatorLeds.ts.
+   */
+  indicatorLeds: IndicatorLed[];
+}
+
+/** What can light an indicator LED. */
+export type IndicatorState = 'caps-lock' | 'caps-word' | 'oneshot-shift' | 'oneshot-ctrl' | 'oneshot-alt' | 'oneshot-gui' | 'toggled-layer' | 'own-code';
+
+/**
+ * One indicator LED: the pin (QMK name, GP25 / B0 / A15), the half it sits on (split boards only; a board that is not
+ * split ignores it), lit by a low pin instead of a high one, and the states that light it (any of them).
+ * 'own-code' = the user's C function navi_led_user(index) says so.
+ */
+export interface IndicatorLed {
+  id: string;
+  side: 'left' | 'right';
+  pin: string;
+  activeLow: boolean;
+  states: IndicatorState[];
 }
 
 /**
