@@ -6,11 +6,14 @@
  *   dance key's release: a layer change made while QMK handles a press makes QMK look that key up again on the new
  *   layer (process_record_quantum after preprocess_tap_dance, process_record_handler's store_or_get_action).
  *   A dance with no double tap and no tap-then-hold taps on release (on_each_release sets state->finished).
- * - every-tap: on_each_tap plays steps[(count - 1) % n] at once, by Shift / Ctrl held at that tap.
+ * - every-tap: on_each_tap plays steps[(count - 1) % n] at once, by Shift / Ctrl held at that tap; with a text route
+ *   (languages) its text types in the current language, as macros' does.
  * - own-c: the user's functions, ACTION_TAP_DANCE_FN_ADVANCED.
  */
-import type { MacroStep, TapDance, TapDanceStep } from '../project/types';
-import { tapDanceKind, tapDanceSends, tapOnlyDance } from '../project/tapDances';
+import type { AdvancedIssue } from '../features/advanced';
+import { TAP_DANCE_MAX_STEPS, type MacroStep, type TapDance } from '../project/types';
+import { tapDanceKind, tapOnlyDance } from '../project/tapDances';
+import { routedMacroStatements, type LanguagePlan } from './languages';
 
 export interface TapDanceC {
   /** Lines before tap_dance_actions[] (navi_send must come before them). */
@@ -25,6 +28,8 @@ export interface TapDanceC {
   sends: boolean;
   /** Generated names (own lines must not define them). */
   symbols: string[];
+  /** Warnings about the generated C (keys the own-program route can't carry). */
+  issues: AdvancedIssue[];
 }
 
 const VARIANT_COND = {
@@ -33,24 +38,97 @@ const VARIANT_COND = {
   ctrl: '!(mods & MOD_MASK_SHIFT) && (mods & MOD_MASK_CTRL)',
 } as const;
 
-const steps = (st: TapDanceStep) => [st.none, st.shift, st.ctrl, st.ctrlShift].filter((v): v is MacroStep[] => v !== undefined);
-const hasKeySteps = (list: MacroStep[], types: MacroStep['type'][]) => list.some((s) => types.includes(s.type));
+const hasText = (list: MacroStep[]) => list.some((s) => s.type === 'text');
 
-export function tapDanceCode(tds: TapDance[], kc: (v: number) => string, cString: (s: string) => string): TapDanceC {
-  const out: TapDanceC = { lines: [], actions: [], prototypes: [], keys: false, sends: false, symbols: [] };
+/** The cases of navi_td_every_tap's switch (state->index): each dance's steps by tap count and Shift / Ctrl. */
+function everyTapBody(everyTap: TapDance[], kc: (v: number) => string, cString: (s: string) => string, lang: LanguagePlan | null, issues: AdvancedIssue[]): string[] {
+  const c: string[] = [];
+  const key = (s: MacroStep): string => {
+    switch (s.type) {
+      case 'text':
+        return `send_string(${cString(s.text)});`;
+      case 'delay':
+        return `wait_ms(${s.ms});`;
+      case 'tap':
+        return `navi_td_tap(state->index, ${kc(s.keycode)});`;
+      case 'down':
+        return `navi_td_send(state->index, ${kc(s.keycode)}, true, 0);`;
+      case 'up':
+        return `navi_td_send(state->index, ${kc(s.keycode)}, false, 0);`;
+    }
+  };
+  for (const t of everyTap) {
+    const where = `TD(${t.name})`;
+    const unstreamed = new Set<string>();
+    const play = (list: MacroStep[], indent: string) =>
+      (lang ? routedMacroStatements(list, lang, key, cString, (s) => s.type !== 'text' && s.type !== 'delay' && unstreamed.add(kc(s.keycode))) : list.map(key)).map((l) => indent + l);
+    const list = (t.steps ?? []).slice(0, TAP_DANCE_MAX_STEPS);
+    c.push(`        case ${t.name}:`);
+    if (list.length) {
+      c.push(`            switch ((state->count - 1) % ${list.length}) {`);
+      list.forEach((st, i) => {
+        c.push(`                case ${i}:`);
+        for (const v of ['ctrlShift', 'shift', 'ctrl'] as const) {
+          const variant = st[v];
+          if (variant === undefined) continue;
+          if (!variant.length) {
+            c.push(`                    if (${VARIANT_COND[v]}) break; // ${v}: nothing`);
+            continue;
+          }
+          c.push(`                    if (${VARIANT_COND[v]}) {`, `                        navi_td_held_t held = navi_td_mods_off(${hasText(variant) ? 'MOD_MASK_CSAG' : 'MOD_MASK_CS'});`);
+          c.push(...play(variant, '                        '));
+          c.push('                        navi_td_mods_on(held);', '                        break;', '                    }');
+        }
+        const none = st.none ?? [];
+        // Shift / Ctrl held without a version of their own still apply to it (H7); GUI and Alt never do
+        if (hasText(none)) {
+          c.push('                    {', '                        navi_td_held_t held = navi_td_mods_off(MOD_MASK_AG);');
+          c.push(...play(none, '                        '));
+          c.push('                        navi_td_mods_on(held);', '                    }');
+        } else c.push(...play(none, '                    '));
+        c.push('                    break;');
+      });
+      c.push('            }');
+    }
+    c.push('            break;');
+    if (unstreamed.size) {
+      const keys = [...unstreamed].join(', ');
+      issues.push({
+        level: 'warning',
+        where,
+        message: {
+          en: `Your own program can't type ${keys}, so the keyboard presses it after the text: it may land before the program has finished typing. Put it before the first text, or use a basic key (with modifiers).`,
+          ru: `Ваша программа не может нажать ${keys}, поэтому клавиатура жмёт её после текста: она может сработать раньше, чем программа допечатает. Поставьте её до первого текста или используйте обычную клавишу (с модификаторами).`,
+        },
+      });
+    }
+  }
+  return c;
+}
+
+/**
+ * `lang`: the languages' plan (null: none). With a text route, every-tap text steps type in the current language
+ * like macros' (routedMacroStatements); in the own-program route the keys after the text join the program's stream.
+ */
+export function tapDanceCode(tds: TapDance[], kc: (v: number) => string, cString: (s: string) => string, lang: LanguagePlan | null = null): TapDanceC {
+  const out: TapDanceC = { lines: [], actions: [], prototypes: [], keys: false, sends: false, symbols: [], issues: [] };
   if (!tds.length) return out;
   const slots = tds.filter((t) => tapDanceKind(t) === 'slots');
   const everyTap = tds.filter((t) => tapDanceKind(t) === 'every-tap');
   const ownC = tds.filter((t) => tapDanceKind(t) === 'own-c');
-  const everySteps = everyTap.flatMap((t) => (t.steps ?? []).flatMap(steps));
   const tapOnly = slots.filter(tapOnlyDance);
-  out.sends = tds.some(tapDanceSends);
+  const everyBody = everyTap.length ? everyTapBody(everyTap, kc, cString, lang, out.issues) : [];
+  // What the every-tap C really plays as key events (keys streamed to the own program don't count).
+  const bodyText = everyBody.join('\n');
+  const everyTaps = bodyText.includes('navi_td_tap(');
+  const everySends = everyTaps || bodyText.includes('navi_td_send(');
+  out.sends = slots.length > 0 || everySends;
   out.keys = out.sends;
-  const needTap = slots.length > 0 || everySteps.some((l) => hasKeySteps(l, ['tap']));
-  const needSend = slots.length > 0 || everySteps.some((l) => hasKeySteps(l, ['tap', 'down', 'up']));
+  const needTap = slots.length > 0 || everyTaps;
+  const needSend = out.sends;
   const everyStep = everyTap.flatMap((t) => t.steps ?? []);
   const modsUsed = everyStep.some((st) => st.shift !== undefined || st.ctrl !== undefined || st.ctrlShift !== undefined);
-  const variants = everyStep.some((st) => st.shift?.length || st.ctrl?.length || st.ctrlShift?.length);
+  const modsOff = everyStep.some((st) => st.shift?.length || st.ctrl?.length || st.ctrlShift?.length || hasText(st.none ?? []));
   const c = out.lines;
   const sym = (...names: string[]) => out.symbols.push(...names);
   const maxIndex = Math.max(...tds.map((t) => t.index));
@@ -195,30 +273,32 @@ export function tapDanceCode(tds: TapDance[], kc: (v: number) => string, cString
         '',
       );
     }
-    if (variants) {
-      sym('navi_td_cs_t', 'navi_td_cs_off', 'navi_td_cs_on');
+    if (modsOff) {
+      sym('navi_td_held_t', 'navi_td_mods_off', 'navi_td_mods_on');
       c.push(
-        '// A step chosen by Shift / Ctrl plays without them (real, weak and one-shot); navi_td_cs_on puts them back.',
+        '// Mods let go while a step plays (real, weak and one-shot), navi_td_mods_on puts them back: Shift / Ctrl for a',
+        '// version they picked, and GUI / Alt too for a step with text (a home row mod that misfired would turn the text',
+        '// into shortcuts).',
         'typedef struct {',
         '    uint8_t mods, weak, oneshot;',
-        '} navi_td_cs_t;',
+        '} navi_td_held_t;',
         '',
-        'static navi_td_cs_t navi_td_cs_off(void) {',
-        '    navi_td_cs_t cs = {get_mods() & MOD_MASK_CS, get_weak_mods() & MOD_MASK_CS, 0};',
-        '    del_mods(cs.mods);',
-        '    del_weak_mods(cs.weak);',
+        'static navi_td_held_t navi_td_mods_off(uint8_t mask) {',
+        '    navi_td_held_t held = {get_mods() & mask, get_weak_mods() & mask, 0};',
+        '    del_mods(held.mods);',
+        '    del_weak_mods(held.weak);',
         '#ifndef NO_ACTION_ONESHOT',
-        '    cs.oneshot = get_oneshot_mods() & MOD_MASK_CS;',
-        '    del_oneshot_mods(cs.oneshot);',
+        '    held.oneshot = get_oneshot_mods() & mask;',
+        '    del_oneshot_mods(held.oneshot);',
         '#endif',
-        '    return cs;',
+        '    return held;',
         '}',
         '',
-        'static void navi_td_cs_on(navi_td_cs_t cs) {',
-        '    add_mods(cs.mods);',
-        '    add_weak_mods(cs.weak);',
+        'static void navi_td_mods_on(navi_td_held_t held) {',
+        '    add_mods(held.mods);',
+        '    add_weak_mods(held.weak);',
         '#ifndef NO_ACTION_ONESHOT',
-        '    add_oneshot_mods(cs.oneshot);',
+        '    add_oneshot_mods(held.oneshot);',
         '#endif',
         '    send_keyboard_report();',
         '}',
@@ -226,21 +306,6 @@ export function tapDanceCode(tds: TapDance[], kc: (v: number) => string, cString
       );
     }
     sym('navi_td_every_tap');
-    const play = (list: MacroStep[], indent: string) =>
-      list.map((s) => {
-        switch (s.type) {
-          case 'text':
-            return `${indent}send_string(${cString(s.text)});`;
-          case 'delay':
-            return `${indent}wait_ms(${s.ms});`;
-          case 'tap':
-            return `${indent}navi_td_tap(state->index, ${kc(s.keycode)});`;
-          case 'down':
-            return `${indent}navi_td_send(state->index, ${kc(s.keycode)}, true, 0);`;
-          case 'up':
-            return `${indent}navi_td_send(state->index, ${kc(s.keycode)}, false, 0);`;
-        }
-      });
     c.push(
       '// Every tap plays the next step at once (tap n: step (n - 1) % steps), by Shift / Ctrl held at that tap.',
       'static void navi_td_every_tap(tap_dance_state_t *state, void *user_data) {',
@@ -253,34 +318,10 @@ export function tapDanceCode(tds: TapDance[], kc: (v: number) => string, cString
       '    state->oneshot_mods = 0;',
       '#endif',
       '    switch (state->index) {',
+      ...everyBody,
+      '    }',
     );
-    for (const t of everyTap) {
-      const list = (t.steps ?? []).slice(0, 4);
-      c.push(`        case ${t.name}:`);
-      if (list.length) {
-        c.push(`            switch ((state->count - 1) % ${list.length}) {`);
-        list.forEach((st, i) => {
-          c.push(`                case ${i}:`);
-          for (const v of ['ctrlShift', 'shift', 'ctrl'] as const) {
-            const variant = st[v];
-            if (variant === undefined) continue;
-            if (!variant.length) {
-              c.push(`                    if (${VARIANT_COND[v]}) break; // ${v}: nothing`);
-              continue;
-            }
-            c.push(`                    if (${VARIANT_COND[v]}) {`, '                        navi_td_cs_t cs = navi_td_cs_off();');
-            c.push(...play(variant, '                        '));
-            c.push('                        navi_td_cs_on(cs);', '                        break;', '                    }');
-          }
-          c.push(...play(st.none ?? [], '                    '));
-          c.push('                    break;');
-        });
-        c.push('            }');
-      }
-      c.push('            break;');
-    }
-    c.push('    }');
-    if (everySteps.some((l) => hasKeySteps(l, ['tap', 'down', 'up']))) {
+    if (everySends) {
       c.push(
         '    // A key pressed above reached QMK\'s tap dance code, which ends the active dance on any other key\'s press, as if',
         '    // interrupted (preprocess_tap_dance; the mods it would add back are 0 above). This dance goes on.',

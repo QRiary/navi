@@ -161,6 +161,8 @@ export function languageHostProject(): Project {
   put(0, 20, q('QK_MACRO_0'));
   put(0, 21, q('QK_USER_0'));
   put(0, 22, q('TO(0)'));
+  put(0, 23, q('TD(0)'));
+  put(0, 24, q('LGUI_T(KC_S)'));
   put(3, 4, q('KC_B')); // the Russian layer
   put(2, 4, q('KC_C')); // the symbols layer, under the Russian one by number
   put(2, 10, q('S(KC_1)'));
@@ -176,6 +178,25 @@ export function languageHostProject(): Project {
     ],
     macros: [{ id: 'mc-0', index: 0, name: 'text', steps: [{ type: 'tap', keycode: q('KC_A') }, { type: 'text', text: 'hi' }, { type: 'tap', keycode: q('KC_B') }] }],
     customKeycodes: [{ id: 'ck', name: 'HELLO', description: '', action: { type: 'send-string', text: 'ok' } }],
+    tapDances: [
+      {
+        id: 'td-0',
+        index: 0,
+        name: 'TD_TEXT',
+        tap: 0,
+        hold: 0,
+        doubleTap: 0,
+        tapHold: 0,
+        kind: 'every-tap',
+        steps: [
+          {
+            none: [{ type: 'text', text: 'hi' }, { type: 'tap', keycode: q('KC_LEFT') }, { type: 'tap', keycode: q('S(KC_HOME)') }],
+            shift: [{ type: 'text', text: '->' }, { type: 'tap', keycode: q('KC_END') }],
+          },
+          { none: [{ type: 'tap', keycode: q('KC_X') }, { type: 'text', text: '2' }] },
+        ],
+      },
+    ],
     tapHolds: [
       {
         id: 'th',

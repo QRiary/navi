@@ -10,7 +10,7 @@ import { requiredFeatures } from '../features/required';
 import { createDilemmaProject } from '../project/factory';
 import { migrateProject } from '../project/migrate';
 import { activeKeymap, removeLayer } from '../project/ops';
-import { PROJECT_SCHEMA_VERSION, type MacroStep, type Project, type TapDance } from '../project/types';
+import { PROJECT_SCHEMA_VERSION, type Language, type MacroStep, type Project, type TapDance, type TextRoute } from '../project/types';
 import { serializeProject, validateProject } from '../project/validate';
 import { generateKeymap } from './generate';
 
@@ -60,7 +60,8 @@ describe('tap dance kinds: generator', () => {
     expect(c).toContain('.on_each_tap = navi_td_every_tap');
     expect(c).toContain('switch ((state->count - 1) % 2)');
     expect(c).toContain('send_string("->")');
-    expect(c).toContain('navi_td_cs_off');
+    expect(c).toContain('navi_td_mods_off(MOD_MASK_CSAG)'); // a version with text: all mods off
+    expect(c).toContain('navi_td_mods_off(MOD_MASK_AG)'); // no mods' version: GUI / Alt off, Shift / Ctrl kept (H7)
     expect(c).not.toContain('navi_send');
     expect(c).not.toContain('navi_td_keys');
     const k = file(project([everyKeys]), 'keymap.c');
@@ -69,7 +70,7 @@ describe('tap dance kinds: generator', () => {
     expect(k).toMatch(/state->finished +=  ?false;/);
     // the empty Ctrl variant: no helpers to switch mods off, just nothing
     expect(k).toMatch(/if \(.*MOD_MASK_CTRL.*\) break;/);
-    expect(k).not.toContain('navi_td_cs_off');
+    expect(k).not.toContain('navi_td_mods_off');
     expect(errors(project([everyText, everyKeys]))).toEqual([]);
   });
 
@@ -114,9 +115,11 @@ describe('tap dance kinds: checks', () => {
     expect(issues(td(0, 'X', { kind: 'every-tap', steps: [{ shift: [tap('TD(1)')] }] }))).toHaveLength(1);
     expect(issues(td(0, 'X', { tap: q('LT(1, KC_X)'), hold: q('QK_BOOT') }))).toEqual([]);
   });
-  it('every-tap with 0 or 5 steps', () => {
-    expect(issues(td(0, 'X', { kind: 'every-tap', steps: [] }))).toHaveLength(1);
-    expect(issues(td(0, 'X', { kind: 'every-tap', steps: Array.from({ length: 5 }, () => ({ none: [tap('KC_A')] })) }))).toHaveLength(1);
+  it('every-tap with 0 or 7 steps; 6 is fine', () => {
+    const n = (length: number) => td(0, 'X', { kind: 'every-tap', steps: Array.from({ length }, () => ({ none: [tap('KC_A')] })) });
+    expect(issues(n(0))).toHaveLength(1);
+    expect(issues(n(7))).toHaveLength(1);
+    expect(issues(n(6))).toEqual([]);
   });
   it('own C: none named, not an identifier, a name NAVI generates', () => {
     expect(issues(td(0, 'X', { kind: 'own-c', ownC: {} }))).toHaveLength(1);
@@ -151,7 +154,7 @@ describe('tap dance kinds: model', () => {
     };
     expect(bad({ kind: 'sometimes' })).toBeGreaterThan(0);
     expect(bad({ steps: [] })).toBeGreaterThan(0);
-    expect(bad({ steps: Array.from({ length: 5 }, () => ({})) })).toBeGreaterThan(0);
+    expect(bad({ steps: Array.from({ length: 7 }, () => ({})) })).toBeGreaterThan(0);
     expect(bad({ steps: [{ none: 'a' }] })).toBeGreaterThan(0);
     expect(bad({ steps: [{ none: [{ type: 'run', cmd: 'x' }] }] })).toBeGreaterThan(0);
     expect(bad({ kind: 'own-c', ownC: { onFinished: 'a b' } })).toBeGreaterThan(0);
@@ -163,5 +166,81 @@ describe('tap dance kinds: model', () => {
     const p0 = project([t]);
     const p = removeLayer(p0, activeKeymap(p0).id, spec, 1);
     expect(p.tapDances[0].steps).toEqual([{ none: [tap('MO(1)')], shift: [{ type: 'down', keycode: 0 }] }]);
+  });
+});
+
+describe('every-tap text in the language (step 14)', () => {
+  const EN: Language = { id: 'en', name: 'English', code: 'en', plainKeys: true };
+  const RU: Language = { id: 'ru', name: 'Russian', code: 'ru', plainKeys: false };
+  const withLanguages = (tds: TapDance[], route: TextRoute) => {
+    const p = project(tds);
+    return { ...p, languages: [EN, RU], firmware: { ...p.firmware, textRoute: route } };
+  };
+  const text = (t: string): MacroStep => ({ type: 'text', text: t });
+  // tap X (the keyboard's), "ab", Left, Shift+Home (a key with modifiers), right Ctrl+A down / up, 10 ms, "c"
+  const mixed = td(0, 'TD_M', {
+    kind: 'every-tap',
+    steps: [
+      {
+        none: [tap('KC_X'), text('ab'), tap('KC_LEFT'), tap('S(KC_HOME)'), { type: 'down', keycode: q('RCTL(KC_A)') }, { type: 'up', keycode: q('RCTL(KC_A)') }, { type: 'delay', ms: 10 }, text('c')],
+        shift: [text('->'), tap('KC_END')],
+      },
+    ],
+  });
+
+  it('own program: from the first text on, text and keys go to the program as one stream, split at delays', () => {
+    const c = file(withLanguages([mixed], 'own-program'), 'keymap.c');
+    expect(c).toContain(
+      [
+        '                        navi_td_tap(state->index, KC_X);',
+        '                        navi_send_text("ab" "\\001\\001\\120" "\\001\\002\\341" "\\001\\001\\112" "\\001\\003\\341" "\\001\\002\\344" "\\001\\002\\004" "\\001\\003\\004" "\\001\\003\\344");',
+        '                        wait_ms(10);',
+        '                        navi_send_text("c");',
+      ].join('\n'),
+    );
+    expect(c).toContain('navi_td_held_t held = navi_td_mods_off(MOD_MASK_CSAG);\n                        navi_send_text("->" "\\001\\001\\115");\n                        navi_td_mods_on(held);');
+    expect(errors(withLanguages([mixed], 'own-program'))).toEqual([]);
+  });
+
+  it('own program, every key in the stream: no key helpers left unused', () => {
+    const p = withLanguages([td(0, 'TD_S', { kind: 'every-tap', steps: [{ none: [text('a'), tap('KC_LEFT')] }] })], 'own-program');
+    const c = file(p, 'keymap.c');
+    expect(c).toContain('navi_send_text("a" "\\001\\001\\120");');
+    for (const fn of [...c.matchAll(/^static (?:void|bool|uint8_t|uint16_t|keypos_t) (\w+)[([]/gm)].map((m) => m[1])) {
+      expect(c.split(new RegExp(`\\b${fn}\\b`)).length - 1, fn).toBeGreaterThan(1);
+    }
+    expect(c).not.toContain('navi_td_tap');
+    expect(c).not.toContain('state->finished    = false;');
+  });
+
+  it('own program: a key the stream cannot carry is played by the keyboard after the text so far, with a warning', () => {
+    const p = withLanguages([td(0, 'TD_L', { kind: 'every-tap', steps: [{ none: [text('a'), tap('MO(2)'), text('b')] }] })], 'own-program');
+    const c = file(p, 'keymap.c');
+    expect(c).toContain('navi_send_text("a");\n                        navi_td_tap(state->index, MO(L_LAYER_2));\n                        navi_send_text("b");');
+    const w = gen(p).issues.filter((i) => i.level === 'warning' && i.where.includes('TD_L'));
+    expect(w).toHaveLength(1);
+    expect(w[0].message.en).toContain('MO(L_LAYER_2)');
+  });
+
+  it('Unicode route: text through navi_send_text, keys played by the keyboard', () => {
+    const c = file(withLanguages([mixed], 'wincompose'), 'keymap.c');
+    expect(c).toContain('navi_send_text("ab");\n                        navi_td_tap(state->index, KC_LEFT);');
+    expect(c).toContain('navi_send_text("->");');
+    expect(c).not.toContain('send_string("ab")');
+  });
+
+  it('no languages, or only plain-keys ones: send_string as before', () => {
+    expect(file(project([mixed]), 'keymap.c')).toContain('send_string("ab");');
+    const plain = { ...withLanguages([mixed], 'own-program'), languages: [EN] };
+    expect(file(plain, 'keymap.c')).toContain('send_string("ab");');
+  });
+
+  it('6 steps cycle by 6 and round-trip', () => {
+    const six = td(0, 'TD_6', { kind: 'every-tap', steps: Array.from({ length: 6 }, (_, i) => ({ none: [text(String(i))] })) });
+    const p = project([six]);
+    const c = file(p, 'keymap.c');
+    expect(c).toContain('switch ((state->count - 1) % 6)');
+    expect(c).toContain('send_string("5");');
+    expect(validateProject(JSON.parse(serializeProject(p))).project?.tapDances).toEqual(p.tapDances);
   });
 });
