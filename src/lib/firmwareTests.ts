@@ -10,7 +10,7 @@ const onWindows = () => typeof navigator !== 'undefined' && /Windows/i.test(navi
 
 /** Why the tests can't run for this project and QMK runner (null = they can): the tick's and the button's reason. */
 export function testsBlocker(project: Project, runner: QmkEnvironment['runner'] | undefined, windows = onWindows()): string | null {
-  if (!project.firmware.tests) return t('Needs “Write firmware tests” on Firmware → keymap files.', 'Нужна отметка «Записывать тесты прошивки» во вкладке «Прошивка → файлы keymap».');
+  if (!project.firmware.tests) return t('Needs “write firmware tests” on Firmware → keymap files.', 'Нужна отметка «писать тесты прошивки» во вкладке «Прошивка → файлы keymap».');
   if (runner && (runner.kind === 'msys' || (runner.kind === 'path' && windows)))
     return t('Needs QMK in WSL or on Linux: QMK MSYS can’t build QMK’s unit tests.', 'Нужен QMK в WSL или на Linux: QMK MSYS не собирает юнит-тесты QMK.');
   if (project.firmware.customReview)
@@ -44,7 +44,7 @@ export function testsResultSentence(r: FirmwareTestResult): string {
     case 'unsupported':
       return t('The firmware tests need QMK in WSL or on Linux.', 'Для тестов прошивки нужен QMK в WSL или на Linux.');
     case 'no-tests':
-      return t('No navi_tests.txt in the keymap folder: write the files with “Write firmware tests” on.', 'В папке keymap нет navi_tests.txt: запишите файлы с отметкой «Записывать тесты прошивки».');
+      return t('No navi_tests.txt in the keymap folder: write the files with “write firmware tests” on.', 'В папке keymap нет navi_tests.txt: запишите файлы с отметкой «писать тесты прошивки».');
     case 'error':
       return t(`The firmware tests didn’t finish: ${r.message}.`, `Тесты прошивки не завершились: ${r.message}.`);
   }

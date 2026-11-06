@@ -27,6 +27,21 @@ export const PROJECT_SETTING_ITEMS: readonly SettingItem[] = [
     section: () => `${t('Firmware', 'Прошивка')} › ${t('4 · Keymap files', '4 · Файлы keymap')}`,
     route: { section: 'firmware', tab: 'files' },
   },
+  {
+    key: 'firmware.runTests',
+    label: () => t('Run the firmware tests before flashing', 'Запускать тесты прошивки перед прошивкой'),
+    hint: () => t('navi_tests.txt played in QMK’s test framework on this PC', 'navi_tests.txt проигрывается в тестовой среде QMK на этом компьютере'),
+    keywords: 'navi_tests.txt test tests тест',
+    section: () => `${t('Firmware', 'Прошивка')} › ${t('6 · Flash', '6 · Прошить')}`,
+    route: { section: 'firmware', tab: 'flash' },
+  },
+  {
+    key: 'firmware.bootloaderReboot',
+    label: () => t('Let NAVI restart the keyboard into its bootloader', 'Разрешить NAVI перезагружать клавиатуру в загрузчик'),
+    keywords: 'bootloader reboot загрузчик перезагрузка',
+    section: () => `${t('Firmware', 'Прошивка')} › ${t('6 · Flash', '6 · Прошить')}`,
+    route: { section: 'firmware', tab: 'flash' },
+  },
 ];
 
 const palette = () => t('palette', 'палитра');

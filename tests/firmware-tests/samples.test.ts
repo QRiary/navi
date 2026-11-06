@@ -128,4 +128,17 @@ it.skipIf(!out)('writes the sample keymap folders for the firmware test runner',
   write(join(out!, 'pipeline'), pipeline('fw tests pipeline'), ['r0c0 => a', 'r0c1 => y', 'r0c2:300 => ⟨LSFT⟩'], own([]));
   write(join(out!, 'broken'), pipeline('fw tests broken'), ['r0c0 => a'], own(['    if (record->event.pressed) rgb_matrix_set_color(0, 255, 0, 0);']));
   write(join(out!, 'split'), split(), ['r0c1 r5c1 => qp']);
+  // NAVI's own navi_tests.txt (firmware.tests on): the generator's expectations must hold on the firmware it wrote.
+  writeGenerated(join(out!, 'generated-plain'), plain());
+  writeGenerated(join(out!, 'generated-split'), split());
 });
+
+function writeGenerated(dir: string, p: Project) {
+  const on = { ...p, firmware: { ...p.firmware, tests: true } };
+  const res = generateKeymap({ project: on, keymap: activeKeymap(on), spec, via: false, encoderCount: 0 });
+  const errors = res.issues.filter((i) => i.level === 'error');
+  if (errors.length) throw new Error(JSON.stringify(errors));
+  if (!res.files.some((f) => f.name === 'navi_tests.txt')) throw new Error('no navi_tests.txt generated');
+  mkdirSync(dir, { recursive: true });
+  for (const f of res.files) writeFileSync(join(dir, f.name), f.text);
+}

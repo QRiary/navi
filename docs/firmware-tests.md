@@ -1,6 +1,6 @@
 # Firmware tests (`navi_tests.txt`)
 
-With Firmware → Files → "Write firmware tests" on (`firmware.tests`), NAVI writes `navi_tests.txt` beside
+With Firmware → Keymap files → "write firmware tests" on (`firmware.tests`), NAVI writes `navi_tests.txt` beside
 `keymap.c`, with its other generated files (same write, same diff, same backup). It holds key-press scenarios
 and the output the project says each one must give. NAVI rewrites it on every write, so a change made in NAVI
 updates the tests along with the firmware; never edit it by hand.
@@ -100,7 +100,7 @@ tests" button. With the tick on, "Build + flash" runs the tests after writing th
 but a pass stops it before the keyboard is touched, with the mismatches (or the compiler errors) behind the error
 toast's details.
 
-**What it needs**: `navi_tests.txt` in the keymap folder ("Write firmware tests" on), and QMK in WSL or on Linux:
+**What it needs**: `navi_tests.txt` in the keymap folder ("write firmware tests" on), and QMK in WSL or on Linux:
 the test build is QMK's own `builddefs/build_test.mk` (GoogleTest, the host compiler, `fork()`), which QMK MSYS can't
 build.
 

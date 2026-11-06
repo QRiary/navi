@@ -12,6 +12,7 @@ import { testsBlocker, testsResultSentence } from '../../lib/firmwareTests';
 import { whyDisabled } from '../../lib/whyDisabled';
 import { toast } from '../../store/toastStore';
 import { InfoTip } from '../InfoTip';
+import { findAttr } from '../../lib/find';
 
 export function FirmwareTestsRow({ project }: { project: Project }) {
   const apply = useProjectStore((s) => s.apply);
@@ -33,7 +34,7 @@ export function FirmwareTestsRow({ project }: { project: Project }) {
   const result = lastTests &&!(job?.kind === 'tests' && job.running) ? testsResultSentence(lastTests) : null;
   return (
     <>
-      <div className="row" style={{ ['--row-cols' as string]: 'minmax(0,1.3fr) minmax(0,1fr) auto' }}>
+      <div className="row" {...findAttr('setting:firmware.runTests')} style={{ ['--row-cols' as string]: 'minmax(0,1.3fr) minmax(0,1fr) auto' }}>
         <span>
           {title}{' '}
           <InfoTip label={title}>

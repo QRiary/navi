@@ -128,7 +128,7 @@ function pageItems(): SearchItem[] {
       out.push({
         kind: 'page',
         title: `${title} › ${tabTitle}`,
-        text: join(bothLanguages(s.title), bothLanguages(tab.title), tab.group && bothLanguages(tab.group), tab.tip && bothLanguages(tab.tip), tab.keywords),
+        text: join(bothLanguages(s.title), bothLanguages(tab.title), tab.group && bothLanguages(tab.group), tab.tip && bothLanguages(tab.tip)),
         route: tabRoute(s.id, tab.id),
       });
     }

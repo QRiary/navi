@@ -29,7 +29,7 @@ describe('firmware tests', () => {
   it('blocked without “Write firmware tests”, on MSYS or qmk on Windows’ PATH, and while own code waits for “allow”', () => {
     expect(testsBlocker(with_({ tests: true }), wsl, true)).toBeNull();
     expect(testsBlocker(with_({ tests: true }), { kind: 'path', path: 'qmk' }, false)).toBeNull();
-    expect(testsBlocker(with_({ tests: false }), wsl, true)).toMatch(/Write firmware tests/);
+    expect(testsBlocker(with_({ tests: false }), wsl, true)).toMatch(/write firmware tests/);
     expect(testsBlocker(with_({ tests: true }), { kind: 'msys', path: 'C:/QMK_MSYS' }, true)).toMatch(/WSL or on Linux/);
     expect(testsBlocker(with_({ tests: true }), { kind: 'path', path: 'qmk' }, true)).toMatch(/WSL or on Linux/);
     expect(testsBlocker(with_({ tests: true, customReview: true }), wsl, true)).toMatch(/isn’t allowed yet/);
