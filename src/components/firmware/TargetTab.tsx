@@ -9,7 +9,10 @@ import { patchProject } from '../../core/project/ops';
 import { useProjectStore } from '../../store/projectStore';
 import { useQmkStore } from '../../store/qmkStore';
 import { toast } from '../../store/toastStore';
+import { QMK_DOCS } from '../../lib/qmkDocs';
+import { Hint } from '../InfoTip';
 import { OwnTarget } from './OwnTarget';
+import { ErrorDetails } from '../ErrorDetails';
 import { t } from '../../i18n';
 
 /** `file` relative to `dir` when it is inside it (either slash style), else unchanged. */
@@ -32,6 +35,7 @@ export function TargetTab() {
   const grantTrust = useQmkStore((s) => s.grantTrust);
   const revokeTrust = useQmkStore((s) => s.revokeTrust);
   const error = useQmkStore((s) => s.error);
+  const errorDetail = useQmkStore((s) => s.errorDetail);
   const [query, setQuery] = useState(project?.firmware.keyboard ?? '');
   const [keymap, setKeymap] = useState(project?.firmware.keymap ?? 'navi');
 
@@ -39,7 +43,8 @@ export function TargetTab() {
     if (env?.homeValid && !keyboards) void loadKeyboards();
   }, [env, keyboards, loadKeyboards]);
   useEffect(() => {
-    if (project?.firmware.keyboard && env?.homeValid && (sources?.keyboard !== project.firmware.keyboard || sources?.keymap !== project.firmware.keymap)) void loadSources(project.firmware.keyboard, project.firmware.keymap);
+    if (project?.firmware.keyboard && env?.homeValid && (sources?.keyboard !== project.firmware.keyboard || sources?.keymap !== project.firmware.keymap))
+      void loadSources(project.firmware.keyboard, project.firmware.keymap);
   }, [project?.firmware.keyboard, project?.firmware.keymap, env, sources?.keyboard, sources?.keymap, loadSources]);
 
   const matches = useMemo(() => {
@@ -52,7 +57,12 @@ export function TargetTab() {
   if (!env?.homeValid)
     return (
       <div className="page">
-        <p className="field-hint">{t('Set up QMK first (tab “environment”) to choose an existing target. Your own target can be prepared already:', 'Чтобы выбрать существующий target, сначала настройте QMK (вкладка «окружение»). Свой target можно подготовить уже сейчас:')}</p>
+        <p className="field-hint">
+          {t(
+            'Set up QMK first (tab “environment”) to choose an existing target. Your own target can be prepared already:',
+            'Чтобы выбрать существующий target, сначала настройте QMK (вкладка «окружение»). Свой target можно подготовить уже сейчас:',
+          )}
+        </p>
         <OwnTarget />
       </div>
     );
@@ -73,20 +83,23 @@ export function TargetTab() {
   const adoptAsCurrent = () => {
     if (!info) return;
     const at = new Date().toISOString();
-    apply((p) => {
-      const anim = ((info.info.rgb_matrix as Record<string, unknown> | undefined)?.animations ?? null) as Record<string, boolean> | null;
-      return {
-        ...p,
-        hardware: {
-          ...p.hardware,
-          processor: info.processor ?? p.hardware.processor,
-          bootloader: info.bootloader ?? p.hardware.bootloader,
-          facts: [...p.hardware.facts, { key: 'firmware.source', value: `${sources!.keyboard}:${keymap}`, evidence: 'source' as const, at }],
-        },
-        firmware: { ...p.firmware, flags: { ...p.firmware.flags, ...info.flags } },
-        lighting: anim ? { ...p.lighting, rgbMatrixEffects: effectListFromAnimations(anim), effectsEvidence: 'source' } : p.lighting,
-      };
-    }, t('firmware facts from source', 'факты из исходников'));
+    apply(
+      (p) => {
+        const anim = ((info.info.rgb_matrix as Record<string, unknown> | undefined)?.animations ?? null) as Record<string, boolean> | null;
+        return {
+          ...p,
+          hardware: {
+            ...p.hardware,
+            processor: info.processor ?? p.hardware.processor,
+            bootloader: info.bootloader ?? p.hardware.bootloader,
+            facts: [...p.hardware.facts, { key: 'firmware.source', value: `${sources!.keyboard}:${keymap}`, evidence: 'source' as const, at }],
+          },
+          firmware: { ...p.firmware, flags: { ...p.firmware.flags, ...info.flags } },
+          lighting: anim ? { ...p.lighting, rgbMatrixEffects: effectListFromAnimations(anim), effectsEvidence: 'source' } : p.lighting,
+        };
+      },
+      t('firmware facts from source', 'факты из исходников'),
+    );
     toast(t('Facts about the current firmware are taken from these sources', 'Факты о текущей прошивке взяты из этих исходников'));
   };
 
@@ -95,7 +108,17 @@ export function TargetTab() {
       <div className="grid-2">
         <section className="panel-box">
           <div className="panel-box-head">
-            <span className="cell-label">{t('keyboard target', 'клавиатура в QMK (target)')}</span>
+            <span className="cell-label">
+              <Hint
+                docs={QMK_DOCS.portingKeyboard}
+                tip={t(
+                  'A target is the name of a keyboard folder inside qmk_firmware/keyboards (for example bastardkb/dilemma/4x6_4). Pick the one that matches your board; QMK builds firmware for it.',
+                  'Target — имя папки клавиатуры в qmk_firmware/keyboards (например, bastardkb/dilemma/4x6_4). Выберите ту, что соответствует вашей плате; QMK соберёт для неё прошивку.',
+                )}
+              >
+                {t('keyboard target', 'клавиатура в QMK (target)')}
+              </Hint>
+            </span>
             <span className="kicker">{keyboards ? `${keyboards.length} ${t('in qmk_firmware', 'в qmk_firmware')}` : '…'}</span>
           </div>
           <div className="panel-box-body field">
@@ -113,7 +136,17 @@ export function TargetTab() {
               </div>
             )}
             <label className="field">
-              <span className="field-label">keymap</span>
+              <span className="field-label">
+                <Hint
+                  docs={QMK_DOCS.externalUserspace}
+                  tip={t(
+                    'The name of your keymap folder: keyboards/<target>/keymaps/<name> in qmk_firmware, or the same path in your External Userspace if you use one. NAVI writes keymap.c, rules.mk and config.h there.',
+                    'Имя папки вашей раскладки: keyboards/<target>/keymaps/<имя> в qmk_firmware или тот же путь в вашем External Userspace, если он есть. NAVI записывает туда keymap.c, rules.mk и config.h.',
+                  )}
+                >
+                  keymap
+                </Hint>
+              </span>
               <input
                 className="input"
                 value={keymap}
@@ -128,10 +161,15 @@ export function TargetTab() {
                 </>
               ) : (
                 <>
-                  {t('Your keymap lives in', 'Ваш keymap будет в')} <code>keyboards/{project.firmware.keyboard ?? '…'}/keymaps/{keymap}/</code>
+                  {t('Your keymap lives in', 'Ваш keymap будет в')}{' '}
+                  <code>
+                    keyboards/{project.firmware.keyboard ?? '…'}/keymaps/{keymap}/
+                  </code>
                 </>
               )}
-              {keymapSources?.exists ? t(' — the folder exists (files will be compared before writing).', ' — папка уже есть (файлы сравниваются перед записью).') : t(' — a new folder.', ' — новая папка.')}
+              {keymapSources?.exists
+                ? t(' — the folder exists (files will be compared before writing).', ' — папка уже есть (файлы сравниваются перед записью).')
+                : t(' — a new folder.', ' — новая папка.')}
             </p>
             {trust && (
               <>
@@ -157,8 +195,13 @@ export function TargetTab() {
                   </p>
                 ) : (
                   <>
-                    <div className="notice" style={{ borderColor: 'var(--danger-color)', display: 'block' }}>
-                      <p>{t("NAVI won't build this folder: these files contain code it can't check as safe (make would run it on this computer):", 'NAVI не будет собирать эту папку: в этих файлах есть код, который нельзя проверить как безопасный (make запустил бы его на этом компьютере):')}</p>
+                    <div className="notice" role="alert" style={{ borderColor: 'var(--danger-color)', display: 'block' }}>
+                      <p>
+                        {t(
+                          "NAVI won't build this folder: these files contain code it can't check as safe (make would run it on this computer):",
+                          'NAVI не будет собирать эту папку: в этих файлах есть код, который нельзя проверить как безопасный (make запустил бы его на этом компьютере):',
+                        )}
+                      </p>
                       {trust.issues.slice(0, 5).map((i) => (
                         <div key={i.file}>
                           <code>{relativeTo(trust.dir, i.file)}</code> — {i.reason}
@@ -171,7 +214,12 @@ export function TargetTab() {
                         {t('trust this folder…', 'доверять этой папке…')}
                       </button>
                     </div>
-                    <p className="field-hint">{t('Trust only a folder whose code you know. NAVI keeps the trust on this computer only; you can revoke it.', 'Доверяйте только папке, код которой вы знаете. NAVI хранит доверие только на этом компьютере; его можно отозвать.')}</p>
+                    <p className="field-hint">
+                      {t(
+                        'Trust only a folder whose code you know. NAVI keeps the trust on this computer only; you can revoke it.',
+                        'Доверяйте только папке, код которой вы знаете. NAVI хранит доверие только на этом компьютере; его можно отозвать.',
+                      )}
+                    </p>
                   </>
                 )}
               </>
@@ -188,15 +236,34 @@ export function TargetTab() {
                 <dl className="kv">
                   <dt>{t('name', 'название')}</dt>
                   <dd>{String(info.info.keyboard_name ?? sources!.keyboard)}</dd>
-                  <dt>{t('matrix', 'матрица')}</dt>
+                  <dt>
+                    <Hint
+                      docs={QMK_DOCS.howAMatrixWorks}
+                      tip={t(
+                        'Rows × columns the target’s firmware scans. It must equal the project’s matrix, or the keymap will not compile.',
+                        'Строки × столбцы, которые сканирует прошивка target. Должно совпадать с матрицей проекта, иначе раскладка не соберётся.',
+                      )}
+                    >
+                      {t('matrix', 'матрица')}
+                    </Hint>
+                  </dt>
                   <dd>
-                    {info.matrix ? `${info.matrix.rows} × ${info.matrix.cols}` : '?'}{' '}
-                    {matrixOk === false && <span className="badge badge--warn">{t('≠ project', '≠ проект')}</span>}
+                    {info.matrix ? `${info.matrix.rows} × ${info.matrix.cols}` : '?'} {matrixOk === false && <span className="badge badge--warn">{t('≠ project', '≠ проект')}</span>}
                     {matrixOk && <span className="badge badge--ok">= {t('project', 'проект')}</span>}
                   </dd>
                   <dt>MCU</dt>
                   <dd>{info.processor ?? '?'}</dd>
-                  <dt>{t('bootloader', 'загрузчик')}</dt>
+                  <dt>
+                    <Hint
+                      docs={QMK_DOCS.flashing}
+                      tip={t(
+                        'The bootloader the target is built for; it decides how the firmware is flashed (UF2 drive, DFU, Caterina…).',
+                        'Загрузчик, под который собирается target; от него зависит способ прошивки (UF2-диск, DFU, Caterina…).',
+                      )}
+                    >
+                      {t('bootloader', 'загрузчик')}
+                    </Hint>
+                  </dt>
                   <dd>{info.bootloader ?? '?'}</dd>
                   <dt>USB</dt>
                   <dd>
@@ -221,7 +288,7 @@ export function TargetTab() {
                   </p>
                 ))}
                 {sameUsb === false && (
-                  <div className="notice" style={{ borderColor: 'var(--danger-color)' }}>
+                  <div className="notice" role="alert" style={{ borderColor: 'var(--danger-color)' }}>
                     <span>
                       {t(
                         'These sources describe a keyboard with another USB ID. Flashing firmware built for another board can make your keyboard stop working until you flash the right firmware again (on RP2040 the bootloader in ROM cannot be damaged).',
@@ -235,13 +302,16 @@ export function TargetTab() {
                 </button>
               </>
             ) : (
-              <p className="field-hint">{error ?? t('Choose a keyboard target.', 'Выберите target клавиатуры.')}</p>
+              <div className="field-hint">
+                {error ?? t('Choose a keyboard target.', 'Выберите target клавиатуры.')}
+                <ErrorDetails text={error ? errorDetail : null} />
+              </div>
             )}
           </div>
         </section>
       </div>
       {project.hardware.usb.vid === 0xafc5 && (
-        <div className="notice">
+        <div className="notice" role="status">
           <span>
             {t(
               'Your keyboard (lucky_studio Dilemma_4X6) is a clone with its own firmware: it is not in QMK. The closest official target is bastardkb/dilemma/4x6_4 (Dilemma Max: same 10×6 matrix, RP2040 and key positions as on your photo). Not confirmed: the board pins and the column order of the right half (in the seller’s firmware the inner column is 0, in the official one it is 5 — the right half may come out mirrored). Before trying your build on the keyboard, save its current firmware (tab “flash”) — that copy brings everything back.',

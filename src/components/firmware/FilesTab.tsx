@@ -10,11 +10,15 @@ import { diffLines, diffStats } from '../../core/qmk/textDiff';
 import { activeKeymap } from '../../core/project/ops';
 import { navi } from '../../desktop/bridge';
 import { saveTextFile } from '../../lib/files';
+import { whyDisabled } from '../../lib/whyDisabled';
+import { Hint } from '../InfoTip';
 import { useProjectStore, useSpec } from '../../store/projectStore';
 import { useQmkStore } from '../../store/qmkStore';
-import { toast } from '../../store/toastStore';
+import { toast, toastError } from '../../store/toastStore';
 import { getLanguage, t } from '../../i18n';
 import { CustomLines } from './CustomLines';
+import { Modal } from '../Modal';
+import { SharedTabPanel, sharedPanelDomId, Tabs } from '../Tabs';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
@@ -72,7 +76,6 @@ export function FilesTab() {
   const errors = generated.issues.filter((i) => i.level === 'error');
   const matrixMismatch = sources?.info.matrix && (sources.info.matrix.rows !== project.hardware.matrix.rows || sources.info.matrix.cols !== project.hardware.matrix.cols);
   const rootName = keymapSources?.root === 'userspace' ? 'userspace' : 'qmk_firmware';
-  const canWrite = !!navi && !!env?.homeValid && !!project.firmware.keyboard && errors.length === 0 && !matrixMismatch;
   const via = viaInBuild(project);
   // Errors of the current file's own lines are already shown in the “own lines” panel.
   const otherIssues = generated.issues.filter((i) => !(customFile && i.where.startsWith(`${customFile} · own`)));
@@ -81,11 +84,23 @@ export function FilesTab() {
     if (!navi || !env?.home || !project.firmware.keyboard) return;
     setWriting(true);
     try {
-      const res = await navi.qmk.writeKeymap(env.home, env.userspace, project.firmware.keyboard, project.firmware.keymap, generated.files.map((f) => ({ name: f.name, text: f.text })));
+      const res = await navi.qmk.writeKeymap(
+        env.home,
+        env.userspace,
+        project.firmware.keyboard,
+        project.firmware.keymap,
+        generated.files.map((f) => ({ name: f.name, text: f.text })),
+      );
       toast(res.backup ? t(`Written. Backup: ${res.backup}`, `Записано. Резервная копия: ${res.backup}`) : t('Written (new keymap folder)', 'Записано (новая папка keymap)'));
       await loadSources(project.firmware.keyboard, project.firmware.keymap);
     } catch (err) {
-      toast((err as Error).message, 'error');
+      toastError(
+        t(
+          'Couldn’t write the keymap files. Nothing was changed; check the QMK folder is writable and try again.',
+          'Не удалось записать файлы раскладки. Ничего не изменено; проверьте, что в папку QMK можно писать, и повторите.',
+        ),
+        err,
+      );
     } finally {
       setWriting(false);
       setConfirm(false);
@@ -96,8 +111,27 @@ export function FilesTab() {
     <div className="page">
       <div className="toolbar">
         <div className="field-row">
-          <label className="checkbox" title={t('Off — pure QMK: everything is in these files, changes need a new build and flashing. On — VIA: the keymap can also be changed over USB without flashing.', 'Выкл. — чистый QMK: всё в этих файлах, изменения — новой сборкой и прошивкой. Вкл. — VIA: раскладку можно менять и по USB без перепрошивки.')}>
-            <input type="checkbox" checked={via} onChange={(e) => apply((p) => ({ ...p, firmware: { ...p.firmware, buildFeatures: { ...p.firmware.buildFeatures, via: e.target.checked } } }), 'VIA')} /> VIA <span className="kicker">{via ? t('on', 'вкл.') : t('off — pure QMK', 'выкл. — чистый QMK')}</span>
+          <label
+            className="checkbox"
+            title={t(
+              'Off — pure QMK: everything is in these files, changes need a new build and flashing. On — VIA: the keymap can also be changed over USB without flashing.',
+              'Выкл. — чистый QMK: всё в этих файлах, изменения — новой сборкой и прошивкой. Вкл. — VIA: раскладку можно менять и по USB без перепрошивки.',
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={via}
+              onChange={(e) => apply((p) => ({ ...p, firmware: { ...p.firmware, buildFeatures: { ...p.firmware.buildFeatures, via: e.target.checked } } }), 'VIA')}
+            />{' '}
+            <Hint
+              tip={t(
+                'VIA lets a program change the keymap over USB without flashing. Off, everything lives in these files (pure QMK) and a change needs a new build and flash.',
+                'VIA позволяет менять раскладку по USB без прошивки. Выключено — всё лежит в этих файлах (чистый QMK), и для изменения нужна новая сборка и прошивка.',
+              )}
+            >
+              VIA
+            </Hint>{' '}
+            <span className="kicker">{via ? t('on', 'вкл.') : t('off — pure QMK', 'выкл. — чистый QMK')}</span>
           </label>
           <label
             className="checkbox"
@@ -110,11 +144,28 @@ export function FilesTab() {
             <input
               type="checkbox"
               checked={pipelineOn}
-              onChange={(e) => apply((p) => ({ ...p, firmware: { ...p.firmware, pipeline: { headers: p.firmware.pipeline?.headers ?? [], enabled: e.target.checked } } }), t('own pipeline', 'свой pipeline'))}
+              onChange={(e) =>
+                apply((p) => ({ ...p, firmware: { ...p.firmware, pipeline: { headers: p.firmware.pipeline?.headers ?? [], enabled: e.target.checked } } }), t('own pipeline', 'свой pipeline'))
+              }
             />{' '}
-            {t('own pipeline', 'свой pipeline')} {!pipelineOn && <span className="kicker">{t('off', 'выкл.')}</span>}
+            <Hint
+              tip={t(
+                'NAVI-specific. Instead of putting everything into keymap.c, NAVI writes its hooks as *_navi functions plus navi.h, navi_rules.mk and navi_config.h. Your own rules.mk, config.h and QMK hooks include and call them, so your code stays yours.',
+                'Особенность NAVI. Вместо того чтобы класть всё в keymap.c, NAVI пишет свои хуки как функции *_navi и файлы navi.h, navi_rules.mk, navi_config.h. Ваши rules.mk, config.h и хуки QMK подключают и вызывают их, так что ваш код остаётся вашим.',
+              )}
+            >
+              {t('own pipeline', 'свой pipeline')}
+            </Hint>{' '}
+            {!pipelineOn && <span className="kicker">{t('off', 'выкл.')}</span>}
           </label>
-          {pipelineOn && <span className="kicker" style={{ flexBasis: '100%' }}>{t('NAVI writes keymap.c, navi.h, navi_rules.mk, navi_config.h — your rules.mk / config.h stay yours', 'NAVI пишет keymap.c, navi.h, navi_rules.mk, navi_config.h — ваши rules.mk / config.h остаются вашими')}</span>}
+          {pipelineOn && (
+            <span className="kicker" style={{ flexBasis: '100%' }}>
+              {t(
+                'NAVI writes keymap.c, navi.h, navi_rules.mk, navi_config.h — your rules.mk / config.h stay yours',
+                'NAVI пишет keymap.c, navi.h, navi_rules.mk, navi_config.h — ваши rules.mk / config.h остаются вашими',
+              )}
+            </span>
+          )}
           {pipelineOn && (
             <label className="field-row">
               <span className="field-label">{t('headers at the top of keymap.c', 'заголовки в начале keymap.c')}</span>
@@ -126,13 +177,16 @@ export function FilesTab() {
                 spellCheck={false}
                 onBlur={(e) => {
                   const headers = e.target.value.split(/\s+/).filter(Boolean).slice(0, 20);
-                  if (headers.join(' ') !== (pipeline?.headers ?? []).join(' ')) apply((p) => ({ ...p, firmware: { ...p.firmware, pipeline: { enabled: p.firmware.pipeline?.enabled ?? true, headers } } }), t('pipeline headers', 'заголовки pipeline'));
+                  if (headers.join(' ') !== (pipeline?.headers ?? []).join(' '))
+                    apply((p) => ({ ...p, firmware: { ...p.firmware, pipeline: { enabled: p.firmware.pipeline?.enabled ?? true, headers } } }), t('pipeline headers', 'заголовки pipeline'));
                 }}
               />
             </label>
           )}
           <span className="kicker">
-            {project.firmware.keyboard ? `${keymapSources ? `${rootName} · ` : ''}keyboards/${project.firmware.keyboard}/keymaps/${project.firmware.keymap}/` : t('no target chosen (tab “keyboard”)', 'target не выбран (вкладка «клавиатура»)')}
+            {project.firmware.keyboard
+              ? `${keymapSources ? `${rootName} · ` : ''}keyboards/${project.firmware.keyboard}/keymaps/${project.firmware.keymap}/`
+              : t('no target chosen (tab “keyboard”)', 'target не выбран (вкладка «клавиатура»)')}
           </span>
         </div>
         <div className="toolbar-actions">
@@ -142,53 +196,81 @@ export function FilesTab() {
           <button className="btn" onClick={() => void saveTextFile(current.name, current.text, [{ name: current.name, extensions: [current.name.split('.').pop()!] }])}>
             <Download {...ICON} /> {t('save as…', 'сохранить как…')}
           </button>
-          <button className="btn btn--primary" disabled={!canWrite || changedFiles.length === 0 || writing} onClick={() => setConfirm(true)}>
+          <button
+            className="btn btn--primary"
+            {...whyDisabled(
+              (!navi && t('Writing files needs the desktop app', 'Для записи файлов нужно настольное приложение')) ||
+                (!env?.homeValid && t('qmk_firmware not found: see the “setup” tab', 'qmk_firmware не найден: смотрите вкладку «окружение»')) ||
+                (!project.firmware.keyboard && t('Choose a keyboard target first (“target” tab)', 'Сначала выберите target клавиатуры (вкладка «target»)')) ||
+                (errors.length > 0 && t('Fix the errors listed below the files first', 'Сначала исправьте ошибки под файлами')) ||
+                (matrixMismatch && t('The target matrix differs from the project', 'Матрица target не совпадает с проектом')) ||
+                (changedFiles.length === 0 && t('The files on disk already match the project', 'Файлы на диске уже совпадают с проектом')) ||
+                (writing && t('Wait: writing…', 'Подождите: идёт запись…')),
+            )}
+            onClick={() => setConfirm(true)}
+          >
             <Save {...ICON} /> {t(`write to ${rootName}`, `записать в ${rootName}`)}
           </button>
         </div>
       </div>
       {matrixMismatch && (
-        <div className="notice" style={{ borderColor: 'var(--danger-color)' }}>
+        <div className="notice" role="alert" style={{ borderColor: 'var(--danger-color)' }}>
           <span>
-            {t('The target matrix', 'Матрица target')} {sources!.info.matrix!.rows}×{sources!.info.matrix!.cols} {t('differs from the project', 'не совпадает с проектом')} {project.hardware.matrix.rows}×{project.hardware.matrix.cols}{' '}
-            — {t('the keymap would not compile. Choose another target or fix the matrix.', 'keymap не соберётся. Выберите другой target или поправьте матрицу.')}
+            {t('The target matrix', 'Матрица target')} {sources!.info.matrix!.rows}×{sources!.info.matrix!.cols} {t('differs from the project', 'не совпадает с проектом')}{' '}
+            {project.hardware.matrix.rows}×{project.hardware.matrix.cols} —{' '}
+            {t('the keymap would not compile. Choose another target or fix the matrix.', 'keymap не соберётся. Выберите другой target или поправьте матрицу.')}
           </span>
         </div>
       )}
-      <div className="tabs" role="tablist">
-        {generated.files.map((f) => {
+      <Tabs
+        idBase="keymap-files"
+        panelId={sharedPanelDomId('keymap-files')}
+        label={t('Generated files', 'Сгенерированные файлы')}
+        current={file}
+        onSelect={setFile}
+        items={generated.files.map((f) => {
           const disk = keymapSources?.files.find((x) => x.name === f.name)?.text ?? null;
-          const st = disk === null ? t('new', 'новый') : disk === f.text ? t('same', 'без изм.') : (() => {
-            const d = diffStats(diffLines(disk, f.text));
-            return `+${d.added} −${d.removed}`;
-          })();
-          return (
-            <button key={f.name} className={`tab ${file === f.name ? 'is-active' : ''}`} onClick={() => setFile(f.name)}>
-              <FileCode2 size={12} strokeWidth={1.5} /> {f.name} <span className="kicker">{st}</span>
-            </button>
-          );
-        })}
-      </div>
-      {diff ? (
-        <div className="diff" aria-label={t('Changes', 'Изменения')}>
-          {diff.map((l, i) =>
-            l.kind === 'skip' ? (
-              <div key={i} className="d-hunk">
-                ⋯ {l.count} {t('unchanged lines', 'строк без изменений')}
-              </div>
-            ) : (
-              <div key={i} className={l.kind === 'add' ? 'd-add' : l.kind === 'del' ? 'd-del' : undefined}>
-                {l.kind === 'add' ? '+ ' : l.kind === 'del' ? '- ' : '  '}
-                {l.text}
-              </div>
+          const st =
+            disk === null
+              ? t('new', 'новый')
+              : disk === f.text
+                ? t('same', 'без изм.')
+                : (() => {
+                    const d = diffStats(diffLines(disk, f.text));
+                    return `+${d.added} −${d.removed}`;
+                  })();
+          return {
+            id: f.name,
+            label: (
+              <>
+                <FileCode2 size={12} strokeWidth={1.5} /> {f.name} <span className="kicker">{st}</span>
+              </>
             ),
-          )}
-        </div>
-      ) : (
-        <pre className="mono-block" style={{ maxHeight: '50vh', overflow: 'auto', whiteSpace: 'pre' }}>
-          {current.text}
-        </pre>
-      )}
+          };
+        })}
+      />
+      <SharedTabPanel idBase="keymap-files" current={file} className="tab-panel">
+        {diff ? (
+          <div className="diff" aria-label={t('Changes', 'Изменения')}>
+            {diff.map((l, i) =>
+              l.kind === 'skip' ? (
+                <div key={i} className="d-hunk">
+                  ⋯ {l.count} {t('unchanged lines', 'строк без изменений')}
+                </div>
+              ) : (
+                <div key={i} className={l.kind === 'add' ? 'd-add' : l.kind === 'del' ? 'd-del' : undefined}>
+                  {l.kind === 'add' ? '+ ' : l.kind === 'del' ? '- ' : '  '}
+                  {l.text}
+                </div>
+              ),
+            )}
+          </div>
+        ) : (
+          <pre className="mono-block" style={{ maxHeight: '50vh', overflow: 'auto', whiteSpace: 'pre' }}>
+            {current.text}
+          </pre>
+        )}
+      </SharedTabPanel>
       {customFile && <CustomLines file={customFile} generatedSymbols={generated.symbols} />}
       {otherIssues.length > 0 && (
         <ul className="issue-list" style={{ marginTop: 8 }}>
@@ -201,35 +283,35 @@ export function FilesTab() {
         </ul>
       )}
       {confirm && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true">
-          <div className="modal">
-            <div className="modal-head">
-              <h2>{t('write keymap files', 'запись файлов keymap')}</h2>
-            </div>
-            <div className="modal-body">
-              <p className="field-hint">
-                {t('These files will be written to', 'Будут записаны файлы в')} <code>{keymapSources?.dir}</code>:
-              </p>
-              <ul className="steps-list">
-                {changedFiles.map((f) => (
-                  <li key={f.name}>
-                    <strong>{f.name}</strong> — {keymapSources?.files.some((x) => x.name === f.name) ? t('replaced (old copy goes to backups)', 'заменяется (старая копия — в резервную папку)') : t('new file', 'новый файл')}
-                  </li>
-                ))}
-              </ul>
-              {pipelineOn && <p className="field-hint">{t("rules.mk and config.h are yours: NAVI doesn't touch them.", 'rules.mk и config.h ваши: NAVI их не трогает.')}</p>}
-              <p className="field-hint">{t('Other files in the folder are not touched.', 'Другие файлы в папке не трогаются.')}</p>
-            </div>
-            <div className="modal-foot">
-              <button className="btn" onClick={() => setConfirm(false)} disabled={writing}>
+        <Modal
+          title={t('write keymap files', 'запись файлов keymap')}
+          onClose={() => setConfirm(false)}
+          busy={writing}
+          footer={
+            <>
+              <button className="btn" onClick={() => setConfirm(false)} {...whyDisabled(writing && t('Wait: writing…', 'Подождите: идёт запись…'))}>
                 {t('cancel', 'отмена')}
               </button>
-              <button className="btn btn--primary" onClick={() => void write()} disabled={writing}>
+              <button className="btn btn--primary" onClick={() => void write()} {...whyDisabled(writing && t('Wait: writing…', 'Подождите: идёт запись…'))}>
                 {writing ? t('writing…', 'запись…') : t('write', 'записать')}
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p className="field-hint">
+            {t('These files will be written to', 'Будут записаны файлы в')} <code>{keymapSources?.dir}</code>:
+          </p>
+          <ul className="steps-list">
+            {changedFiles.map((f) => (
+              <li key={f.name}>
+                <strong>{f.name}</strong> —{' '}
+                {keymapSources?.files.some((x) => x.name === f.name) ? t('replaced (old copy goes to backups)', 'заменяется (старая копия — в резервную папку)') : t('new file', 'новый файл')}
+              </li>
+            ))}
+          </ul>
+          {pipelineOn && <p className="field-hint">{t("rules.mk and config.h are yours: NAVI doesn't touch them.", 'rules.mk и config.h ваши: NAVI их не трогает.')}</p>}
+          <p className="field-hint">{t('Other files in the folder are not touched.', 'Другие файлы в папке не трогаются.')}</p>
+        </Modal>
       )}
     </div>
   );

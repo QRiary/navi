@@ -4,19 +4,18 @@
  */
 import type { ReactNode } from 'react';
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
-import { BasicKeySelect } from '../keyboard/KeycodeComposer';
-import { KeycodeField } from '../advanced/common';
+import { basicKeyOnly, KeycodeField } from '../advanced/common';
 import type { MacroStep } from '../../core/project/types';
-import { useSpec } from '../../store/projectStore';
 import { t } from '../../i18n';
+import { deletedToast } from '../../lib/undoToast';
+import { whyDisabled } from '../../lib/whyDisabled';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
-/** basic: a picker of basic keys (VIA macros); any: any QMK keycode as an expression. */
+/** basic: basic keys only (VIA macros); any: any QMK keycode. */
 export type StepKeys = 'basic' | 'any';
 
 function StepEditor({ step, keys, onChange }: { step: MacroStep; keys: StepKeys; onChange: (s: MacroStep) => void }) {
-  const spec = useSpec();
   const typeSelect = (
     <select
       className="select"
@@ -41,9 +40,20 @@ function StepEditor({ step, keys, onChange }: { step: MacroStep; keys: StepKeys;
   return (
     <div className="field-row" style={{ flex: 1, flexWrap: 'nowrap', minWidth: 0 }}>
       {typeSelect}
-      {step.type === 'text' && <input className="input" style={{ flex: 1, minWidth: 0 }} value={step.text} onChange={(e) => onChange({ type: 'text', text: e.target.value })} placeholder="git status" aria-label={t('Text', 'Текст')} spellCheck={false} />}
-      {isKey && keys === 'basic' && <BasicKeySelect spec={spec} value={step.keycode} label={t('Key', 'Клавиша')} onChange={(keycode) => onChange({ type: step.type, keycode })} />}
-      {isKey && keys === 'any' && <KeycodeField value={step.keycode} label={t('Key', 'Клавиша')} onChange={(keycode) => onChange({ type: step.type, keycode })} />}
+      {step.type === 'text' && (
+        <input
+          className="input"
+          style={{ flex: 1, minWidth: 0 }}
+          value={step.text}
+          onChange={(e) => onChange({ type: 'text', text: e.target.value })}
+          placeholder="git status"
+          aria-label={t('Text', 'Текст')}
+          spellCheck={false}
+        />
+      )}
+      {isKey && (
+        <KeycodeField value={step.keycode} label={t('Key', 'Клавиша')} accept={keys === 'basic' ? basicKeyOnly : undefined} onChange={(keycode) => onChange({ type: step.type, keycode })} />
+      )}
       {step.type === 'delay' && (
         <label className="field-hint">
           <input className="input input--num" type="number" min={1} max={9999} value={step.ms} onChange={(e) => onChange({ type: 'delay', ms: Number(e.target.value) })} /> {t('ms', 'мс')}
@@ -70,7 +80,11 @@ export function MacroSteps({
   actions?: ReactNode;
   emptyHint?: ReactNode;
 }) {
-  const move = (i: number, j: number) => onChange(steps.map((x, k) => (k === i ? steps[j] : k === j ? steps[i] : x)), t('move step', 'перестановка'));
+  const move = (i: number, j: number) =>
+    onChange(
+      steps.map((x, k) => (k === i ? steps[j] : k === j ? steps[i] : x)),
+      t('move step', 'перестановка'),
+    );
   return (
     <>
       {steps.map((s, i) => (
@@ -78,19 +92,40 @@ export function MacroSteps({
           <span className="num kicker" style={{ width: 22 }}>
             {i + 1}
           </span>
-          <StepEditor step={s} keys={keys} onChange={(ns) => onChange(steps.map((x, j) => (j === i ? ns : x)), t('edit step', 'шаг макроса'), `${coalesceKey}:${i}`)} />
-          <button className="icon-btn" disabled={i === 0} aria-label={t('Up', 'Выше')} onClick={() => move(i, i - 1)}>
+          <StepEditor
+            step={s}
+            keys={keys}
+            onChange={(ns) =>
+              onChange(
+                steps.map((x, j) => (j === i ? ns : x)),
+                t('edit step', 'шаг макроса'),
+                `${coalesceKey}:${i}`,
+              )
+            }
+          />
+          <button className="icon-btn" {...whyDisabled(i === 0 && t('Already the first step', 'Уже первый шаг'))} aria-label={t('Up', 'Выше')} onClick={() => move(i, i - 1)}>
             <ArrowUp {...ICON} />
           </button>
-          <button className="icon-btn" disabled={i === steps.length - 1} aria-label={t('Down', 'Ниже')} onClick={() => move(i, i + 1)}>
+          <button className="icon-btn" {...whyDisabled(i === steps.length - 1 && t('Already the last step', 'Уже последний шаг'))} aria-label={t('Down', 'Ниже')} onClick={() => move(i, i + 1)}>
             <ArrowDown {...ICON} />
           </button>
-          <button className="icon-btn" aria-label={t('Delete step', 'Удалить шаг')} onClick={() => onChange(steps.filter((_, j) => j !== i), t('delete step', 'удаление шага'))}>
+          <button
+            className="icon-btn"
+            aria-label={t('Delete step', 'Удалить шаг')}
+            onClick={() => {
+              onChange(
+                steps.filter((_, j) => j !== i),
+                t('delete step', 'удаление шага'),
+              );
+              deletedToast(t('macro step', 'шаг макроса'));
+            }}
+          >
             <Trash2 {...ICON} />
           </button>
         </div>
       ))}
-      {steps.length === 0 && emptyHint && <p className="field-hint">{emptyHint}</p>}
+      {/* A text hint is a line; a block (an `EmptyState`) is shown as it is. */}
+      {steps.length === 0 && emptyHint && (typeof emptyHint === 'string' ? <p className="field-hint">{emptyHint}</p> : emptyHint)}
       <div className="field-row">
         <button className="btn" onClick={() => onChange([...steps, { type: 'text', text: '' }], t('add step', 'новый шаг'))}>
           <Plus {...ICON} /> {t('text', 'текст')}

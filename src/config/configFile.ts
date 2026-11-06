@@ -4,6 +4,7 @@ import {
   SETTINGS_ENUMS,
   SETTINGS_RANGES,
   THEME_ALIASES,
+  allPresets,
   THEME_PRESETS,
   type AppSettings,
 } from './theme.config';
@@ -186,7 +187,7 @@ function mergeChecked(
       issue(t(`allowed: ${list}; now: ${JSON.stringify(value)}`, `допустимо: ${list}; сейчас: ${JSON.stringify(value)}`));
       continue;
     }
-    if (path === 'theme' && !THEME_PRESETS.some((p) => p.id === value)) {
+    if (path === 'theme' && !allPresets().some((p) => p.id === value)) {
       const renamed = THEME_ALIASES[value as string];
       if (renamed) {
         issue(
@@ -198,8 +199,14 @@ function mergeChecked(
         );
         target[key] = renamed;
       } else {
-        const ids = THEME_PRESETS.map((p) => `"${p.id}"`).join(' | ');
-        issue(t(`no palette "${value}". Available: ${ids}`, `нет палитры "${value}". Есть: ${ids}`));
+        // Only a warning, and the value is kept: an own theme may not be loaded yet (its file is read after the
+        // config at start) or its file was removed; until then the first palette is used (getPreset).
+        const ids = allPresets().map((p) => `"${p.id}"`).join(' | ');
+        issue(
+          t(`no palette "${value}", using "${THEME_PRESETS[0].id}". Available: ${ids}`, `нет палитры "${value}", используется "${THEME_PRESETS[0].id}". Есть: ${ids}`),
+          'warning',
+        );
+        target[key] = value;
       }
       continue;
     }
@@ -229,7 +236,7 @@ function humanizeJsonError(message: string): string {
  * The key is a parameter name ("theme") or a path with a section ("layout.sidebarWidth"): if the parameter
  * is not in the text yet, it is added inside its section.
  */
-export function setConfigValue(text: string, key: string, value: string | boolean | number): string {
+export function setConfigValue(text: string, key: string, value: string | boolean | number | null): string {
   const parts = key.split('.');
   const name = parts.pop()!;
   const section = parts.pop();

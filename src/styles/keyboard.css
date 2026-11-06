@@ -9,6 +9,7 @@
 .editor {
   display: grid;
   grid-template-rows: auto minmax(220px, 1fr) auto minmax(180px, var(--picker-height, 38%));
+  grid-template-columns: minmax(0, 1fr);
   height: 100%;
   min-height: 0;
 }
@@ -18,7 +19,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 8px 14px;
+  padding: 8px var(--pad);
   border-bottom: var(--border);
 }
 
@@ -33,24 +34,25 @@
 .layer-tabs {
   display: flex;
   align-items: stretch;
+  flex-wrap: wrap;
   gap: 0;
-  border: var(--border);
+  min-width: 0;
+  max-width: 100%;
+  /* Tabs that don't fit go to a second row; the outer edge comes from the tabs' own borders. */
+  padding: 1px 0 0 1px;
 }
 
 .layer-tab {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   height: 28px;
-  padding: 0 10px;
-  border-right: var(--border);
+  margin: -1px 0 0 -1px;
+  padding: 0 12px;
+  border: var(--border);
   font-size: var(--fs-xs);
   color: var(--text-secondary);
   white-space: nowrap;
-}
-
-.layer-tab:last-child {
-  border-right: 0;
 }
 
 .layer-tab:hover {
@@ -64,8 +66,11 @@
 }
 
 .layer-tab-num {
-  font-size: var(--fs-2xs);
-  opacity: 0.6;
+  font-size: var(--fs-xs);
+}
+
+.layer-tab:not(.is-active) .layer-tab-num {
+  color: var(--text-label);
 }
 
 .layer-swatch {
@@ -84,8 +89,8 @@
   display: inline-grid;
   place-items: center;
   height: 28px;
-  padding: 0 9px;
-  font-size: var(--fs-2xs);
+  padding: 0 8px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.08em;
   text-transform: lowercase;
   color: var(--text-label);
@@ -107,7 +112,7 @@
 
 .zoom-value {
   min-width: 46px;
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   text-align: center;
   color: var(--text-label);
   font-variant-numeric: tabular-nums;
@@ -136,19 +141,18 @@
 }
 
 .kb-key-shape {
-  fill: var(--cell-background);
-  stroke: var(--border-color);
+  fill: var(--key-background);
+  stroke: var(--key-border);
   stroke-width: 1px;
   vector-effect: non-scaling-stroke;
   rx: var(--key-radius);
-  transition:
-    fill var(--dur) var(--ease),
-    stroke var(--dur) var(--ease);
+  /* No fill/stroke transition: SVG paint can't run on the compositor, so each frame of it re-rasters the whole
+     drawing (measured 31 ms of GPU raster per click vs 1.3 ms without), and clicking or hovering across keys lags. */
 }
 
 .kb-key:hover .kb-key-shape {
   stroke: var(--text-label);
-  fill: var(--hover-background);
+  fill: color-mix(in srgb, var(--key-background) 92%, var(--text-primary));
 }
 
 .kb-key text {
@@ -176,7 +180,7 @@
 }
 
 .kb-key-sep {
-  stroke: var(--border-color);
+  stroke: var(--key-border);
   stroke-width: 1px;
   vector-effect: non-scaling-stroke;
 }
@@ -239,7 +243,7 @@
 
 .kb-key--mod-tap .kb-key-shape,
 .kb-key--layer-tap .kb-key-shape {
-  stroke: color-mix(in srgb, var(--text-label) 80%, var(--border-color));
+  stroke: color-mix(in srgb, var(--text-label) 80%, var(--key-border));
 }
 
 .kb-key--modifier .kb-key-main,
@@ -282,7 +286,7 @@
   left: 12px;
   bottom: 10px;
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
 }
 
@@ -291,7 +295,7 @@
 }
 
 .kb-key.is-pressed .kb-key-shape {
-  fill: color-mix(in srgb, var(--meter-to) 35%, var(--cell-background));
+  fill: color-mix(in srgb, var(--meter-to) 35%, var(--key-background));
   stroke: var(--meter-to);
 }
 
@@ -300,7 +304,7 @@
 }
 
 .kb-key.is-changed .kb-key-shape {
-  stroke: color-mix(in srgb, var(--meter-from) 70%, var(--border-color));
+  stroke: color-mix(in srgb, var(--meter-from) 70%, var(--key-border));
 }
 
 .kb-key.is-drag-source {
@@ -329,8 +333,8 @@
 }
 
 .kb-encoder-cap {
-  fill: var(--cell-background);
-  stroke: var(--border-color);
+  fill: var(--key-background);
+  stroke: var(--key-border);
   vector-effect: non-scaling-stroke;
 }
 
@@ -345,8 +349,8 @@
 }
 
 .kb-encoder-dir rect {
-  fill: var(--cell-background);
-  stroke: var(--border-color);
+  fill: var(--key-background);
+  stroke: var(--key-border);
   vector-effect: non-scaling-stroke;
 }
 
@@ -399,7 +403,7 @@
   bottom: 10px;
   display: flex;
   gap: 12px;
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   color: var(--text-label);
   pointer-events: none;
 }
@@ -408,7 +412,7 @@
   display: inline-block;
   width: 10px;
   height: 10px;
-  margin-right: 5px;
+  margin-right: 4px;
   vertical-align: -1px;
   border: 1px solid var(--border-color);
 }
@@ -455,7 +459,7 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  padding: 8px 6px;
+  padding: 8px;
   border-right: var(--border);
 }
 
@@ -463,7 +467,7 @@
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  padding: 5px 10px;
+  padding: 8px 12px;
   font-size: var(--fs-xs);
   color: var(--text-secondary);
   text-align: left;
@@ -481,7 +485,11 @@
 
 .picker-cat-count {
   font-size: var(--fs-2xs);
-  opacity: 0.6;
+  color: var(--text-label);
+}
+
+.picker-cat.is-active .picker-cat-count {
+  color: inherit;
 }
 
 .picker-main {
@@ -493,7 +501,7 @@
 .picker-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 8px 12px;
   border-bottom: var(--border);
 }
@@ -501,8 +509,8 @@
 .picker-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
-  gap: 6px;
-  padding: 10px 12px 16px;
+  gap: 8px;
+  padding: 12px 12px 16px;
   overflow-y: auto;
   align-content: start;
 }
@@ -514,7 +522,7 @@
   justify-content: center;
   gap: 2px;
   min-height: 46px;
-  padding: 5px 6px;
+  padding: 4px 8px;
   border: var(--border);
   background: var(--cell-background);
   text-align: center;
@@ -543,7 +551,7 @@
 }
 
 .kc-tile-name {
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--text-label);
   white-space: nowrap;
   overflow: hidden;
@@ -568,7 +576,7 @@
 }
 
 .picker-empty {
-  padding: 18px 12px;
+  padding: 16px 12px;
   font-size: var(--fs-xs);
   color: var(--text-label);
 }
@@ -600,7 +608,7 @@
 }
 
 .expr-input .expr-result {
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   color: var(--text-label);
   white-space: nowrap;
 }
@@ -613,6 +621,48 @@
   color: var(--danger-color);
 }
 
+/* Keycode field: the QMK box, what it means, the catalog and "from the keyboard" buttons */
+.kc-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.kc-field .expr-input .expr-result {
+  overflow: hidden;
+  max-width: 180px;
+  text-overflow: ellipsis;
+}
+
+.kc-field .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.kc-popover {
+  position: fixed;
+  z-index: 310;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  border: var(--panel-border-width) solid var(--text-label);
+  background: var(--panel-background);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+/* A raw QMK expression under a readable name (Key inspector, write plan, diff) */
+.qmk-sub {
+  display: block;
+  color: var(--text-label);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+}
+
+.qmk-sub--inline {
+  display: inline;
+  margin-left: 8px;
+}
+
 /* ── Key chips: keys and key lists as compact chips, a field at the end adds one ── */
 .key-chips {
   display: flex;
@@ -620,7 +670,7 @@
   align-items: center;
   gap: 4px;
   min-width: 0;
-  padding: 3px 0;
+  padding: 4px 0;
 }
 
 .key-chip {
@@ -628,13 +678,13 @@
   align-items: center;
   gap: 2px;
   height: 24px;
-  padding: 0 2px 0 7px;
+  padding: 0 2px 0 8px;
   border: var(--border);
   border-radius: var(--panel-radius);
   background: var(--cell-background);
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   white-space: nowrap;
 }
 
@@ -663,13 +713,13 @@
 .key-chip-add input {
   width: 92px;
   height: 24px;
-  padding: 0 7px;
+  padding: 0 8px;
   border: var(--panel-border-width) dashed var(--border-color);
   border-radius: var(--panel-radius);
   background: transparent;
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   outline: none;
 }
 
@@ -681,6 +731,32 @@
 .key-chip-add.is-error input {
   border-style: solid;
   border-color: var(--danger-color);
+}
+
+/* The "+ key" box: the box, what the typed keycode means (like KeycodeField's), the catalog button */
+.key-chip-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.key-chip-add .expr-result {
+  overflow: hidden;
+  max-width: 180px;
+  color: var(--text-label);
+  font-size: var(--fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.key-chip-add.is-error .expr-result {
+  color: var(--danger-color);
+}
+
+.key-chip-add .icon-btn {
+  width: 24px;
+  height: 24px;
 }
 
 /* A line under a row (tap-hold: the hold keys): label, then the chips using the full width. */
@@ -702,7 +778,7 @@
 
 .key-chips .select {
   height: 24px;
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
 }
 
 /* ── Inspector: fields and rows ────────────────────────────────────── */
@@ -710,11 +786,11 @@
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .field-label {
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   font-weight: 500;
   letter-spacing: var(--label-spacing);
   text-transform: uppercase;
@@ -785,7 +861,7 @@
 .kv {
   display: grid;
   grid-template-columns: minmax(90px, auto) minmax(0, 1fr);
-  gap: 5px 12px;
+  gap: 4px 12px;
   font-size: var(--fs-xs);
 }
 
@@ -793,7 +869,7 @@
   color: var(--text-label);
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   padding-top: 2px;
 }
 
@@ -806,7 +882,7 @@
 .big-keycode {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   padding: 12px;
   border: var(--border);
   background: var(--cell-background);
@@ -829,7 +905,7 @@
 .big-keycode-text {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -854,7 +930,7 @@
   grid-template-columns: 28px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 4px 8px;
   border-bottom: var(--panel-border-width) solid color-mix(in srgb, var(--border-color) 55%, transparent);
   font-size: var(--fs-xs);
   text-align: left;
@@ -888,10 +964,23 @@
   color: var(--text-label);
 }
 
+.layer-stack-row > span:nth-child(2) {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.big-keycode-text .big-keycode-name {
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
 .status-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   font-size: var(--fs-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1002,7 +1091,7 @@
   place-items: center;
   min-width: 30px;
   height: 30px;
-  padding: 0 6px;
+  padding: 0 8px;
   border: var(--border);
   font-size: var(--fs-xs);
   color: var(--text-secondary);
@@ -1022,7 +1111,7 @@
 .deck-sep {
   width: 1px;
   height: 26px;
-  margin: 0 6px;
+  margin: 0 8px;
   background: var(--border-color);
 }
 
@@ -1038,13 +1127,25 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
 }
 
 .save-state span {
+  max-width: 100%;
   color: var(--text-label);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* In a narrow window the project name gives way, not the buttons beside it */
+.deck-cell--right > * {
+  flex-shrink: 0;
+}
+
+.deck-cell--right > .save-state {
+  flex-shrink: 1;
 }
 
 .save-state--dirty strong {
@@ -1055,14 +1156,14 @@
 
 .panel-box {
   border: var(--border);
-  background: var(--cell-background);
+  background: var(--card-background);
 }
 
 .panel-box-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   padding: 8px 12px;
   border-bottom: var(--border);
 }
@@ -1080,7 +1181,7 @@
   display: grid;
   grid-template-columns: var(--row-cols, 32px minmax(0, 1fr) auto);
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-height: 38px;
   padding: 4px 12px;
   border-bottom: var(--panel-border-width) solid color-mix(in srgb, var(--border-color) 55%, transparent);
@@ -1130,9 +1231,9 @@
 .log {
   height: min(52vh, 560px);
   overflow: auto;
-  padding: 10px 12px;
+  padding: 12px;
   border: var(--border);
-  background: var(--cell-background);
+  background: var(--card-background);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   line-height: 1.55;
@@ -1160,14 +1261,14 @@
   max-height: 46vh;
   overflow: auto;
   border: var(--border);
-  background: var(--cell-background);
+  background: var(--card-background);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   line-height: 1.5;
 }
 
 .diff div {
-  padding: 0 10px;
+  padding: 0 12px;
   white-space: pre;
 }
 
@@ -1221,17 +1322,22 @@
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
 }
 
+/* The dialog box itself takes focus on open (so the title is read first); its border already marks it. */
+.modal:focus {
+  outline: none;
+}
+
 .modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px 10px 16px;
+  gap: 8px;
+  padding: 8px 12px 8px 16px;
   border-bottom: var(--border);
 }
 
 .modal-head h2 {
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   font-weight: 500;
   letter-spacing: var(--label-spacing);
   text-transform: uppercase;
@@ -1250,7 +1356,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 12px 16px;
   border-top: var(--border);
 }
 
@@ -1269,10 +1375,10 @@
 
 .steps-list {
   margin: 0;
-  padding-left: 18px;
+  padding-left: 20px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   font-size: var(--fs-xs);
   line-height: 1.6;
   color: var(--text-secondary);
@@ -1283,9 +1389,9 @@
 }
 
 .mono-block {
-  padding: 10px 12px;
+  padding: 12px;
   border: var(--border);
-  background: var(--cell-background);
+  background: var(--card-background);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   white-space: pre-wrap;
@@ -1293,9 +1399,9 @@
 }
 
 .chip {
-  padding: 4px 9px;
+  padding: 4px 8px;
   border: var(--border);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   letter-spacing: 0.06em;
   color: var(--text-secondary);
 }
@@ -1323,4 +1429,81 @@
 
 .issue-list {
   font-size: var(--fs-xs);
+}
+
+/* "How to get here": routes to a layer (components/layers/LayerRoutes.tsx). */
+.layer-routes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.layer-routes.is-compact {
+  font-size: var(--fs-xs);
+}
+
+.route-effect {
+  color: var(--text-secondary);
+}
+
+/* Text color for contrast on every palette; the accent only in the underline. */
+.route-layer {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-color);
+  text-underline-offset: 3px;
+}
+
+.route-layer:hover,
+:where([data-focus-ring]) .route-layer:focus-visible {
+  text-decoration-thickness: 2px;
+}
+
+/* Firmware → Features: five columns (feature, now, known from, your build, needed by). In a narrow box the
+   three fixed-width columns would squeeze the two text columns to a few letters, so each row becomes two lines:
+   feature and "needed by" on top, the three settings under them. */
+.features-table {
+  container-type: inline-size;
+}
+
+.features-table > .row {
+  grid-template-columns: minmax(0, 1.4fr) 130px 150px 116px minmax(0, 1fr);
+}
+
+@container (max-width: 759px) {
+  .features-table > .row {
+    grid-template-columns: 130px 150px minmax(116px, 1fr);
+    grid-template-areas:
+      'feature feature needed'
+      'now known build';
+    row-gap: 4px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .features-table > .row > :nth-child(1) {
+    grid-area: feature;
+  }
+
+  .features-table > .row > :nth-child(2) {
+    grid-area: now;
+  }
+
+  .features-table > .row > :nth-child(3) {
+    grid-area: known;
+  }
+
+  .features-table > .row > :nth-child(4) {
+    grid-area: build;
+  }
+
+  .features-table > .row > :nth-child(5) {
+    grid-area: needed;
+  }
 }

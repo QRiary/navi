@@ -3,8 +3,8 @@
  *  THEME CONFIG — palettes and the settings schema of NAVI (the palettes are the same as in the CARRIER player).
  * ═══════════════════════════════════════════════════════════════════════
  *
- *  • THEME_PRESETS     — ready-made palettes. Add your own — it becomes available
- *                         in the config ("theme": "your-id") and in the preset list.
+ *  • THEME_PRESETS     — built-in palettes. The user's own themes (Settings → palette → save) are
+ *                         added at run time (setOwnPresets); allPresets() is both.
  *  • AppSettings       — all settings. Exactly this structure is written in the config
  *                         in the app (Settings → Config). Every field is described
  *                         with comments in default.config.jsonc.
@@ -24,12 +24,18 @@ export interface ThemePalette {
   background: string;
   /** Panel background (sidebar, main area, bottom deck). */
   panel: string;
-  /** Background of cells inside panels and input fields. */
+  /** Background of input fields, buttons and other controls. */
   cell: string;
+  /** Background of boxes inside panels (tables, lists, logs) that hold the controls. A preset without it uses `cell`. */
+  card: string;
   /** Hover highlight. */
   hover: string;
   /** Borders. */
   border: string;
+  /** Keycap fill in keyboard drawings (keys and encoders). A preset without it uses `cell`. */
+  key: string;
+  /** Keycap outline in keyboard drawings. A preset without it uses `border`. */
+  keyBorder: string;
   /** Main text. */
   text: string;
   /** Secondary text. */
@@ -51,7 +57,17 @@ export interface ThemePreset {
   name: string;
   /** Description in two languages: { en, ru }. */
   description: { en: string; ru: string };
-  palette: ThemePalette;
+  palette: PresetPalette;
+  /** The user's own theme (src/theme/userThemes.ts), not a built-in palette. */
+  own?: boolean;
+}
+
+/** A preset's colors: the box and key colors may be left out, then they follow `cell` and `border`. */
+export type PresetPalette = Omit<ThemePalette, 'card' | 'key' | 'keyBorder'> & Partial<Pick<ThemePalette, 'card' | 'key' | 'keyBorder'>>;
+
+/** Fills the box and key colors a palette left out from `cell` and `border`. */
+export function completePalette(p: PresetPalette): ThemePalette {
+  return { ...p, card: p.card ?? p.cell, key: p.key ?? p.cell, keyBorder: p.keyBorder ?? p.border };
 }
 
 export const THEME_PRESETS: ThemePreset[] = [
@@ -68,7 +84,7 @@ export const THEME_PRESETS: ThemePreset[] = [
       border: '#262626',
       text: '#e8e8e8',
       textDim: '#9a9a9a',
-      label: '#6a6a6a',
+      label: '#878787',
       accent: '#e8e8e8',
       accentText: '#050505',
       meterFrom: '#6ec6ff',
@@ -89,7 +105,7 @@ export const THEME_PRESETS: ThemePreset[] = [
       border: '#1a281a',
       text: '#b8f5b0',
       textDim: '#6fa86a',
-      label: '#4a6e47',
+      label: '#718d6f',
       accent: '#9cff8f',
       accentText: '#031003',
       meterFrom: '#3cff7a',
@@ -110,7 +126,7 @@ export const THEME_PRESETS: ThemePreset[] = [
       border: '#2c2210',
       text: '#ffcf7a',
       textDim: '#b88f4a',
-      label: '#7a5f30',
+      label: '#957f59',
       accent: '#ffb000',
       accentText: '#120c00',
       meterFrom: '#ff8a00',
@@ -131,7 +147,7 @@ export const THEME_PRESETS: ThemePreset[] = [
       border: '#2c1212',
       text: '#ead6d6',
       textDim: '#a07f7f',
-      label: '#6e4a4a',
+      label: '#927777',
       accent: '#ff3b4e',
       accentText: '#140203',
       meterFrom: '#ff3b4e',
@@ -152,12 +168,12 @@ export const THEME_PRESETS: ThemePreset[] = [
       border: '#c9c3b6',
       text: '#161512',
       textDim: '#5a554b',
-      label: '#8a8476',
+      label: '#656056',
       accent: '#161512',
       accentText: '#f2efe8',
-      meterFrom: '#2b6cb0',
-      meterTo: '#2f9e6b',
-      danger: '#c0262d',
+      meterFrom: '#2763a1',
+      meterTo: '#206d4a',
+      danger: '#ba252c',
     },
   },
 ];
@@ -193,8 +209,11 @@ export const PALETTE_KEYS = [
   'background',
   'panel',
   'cell',
+  'card',
   'hover',
   'border',
+  'key',
+  'keyBorder',
   'text',
   'textDim',
   'label',
@@ -217,7 +236,7 @@ export interface AppSettings {
     asciiFont: AsciiFont;
     asciiFontSmall: AsciiFont;
   };
-  /** Palette id from THEME_PRESETS. */
+  /** Palette id: a built-in one or the user's own theme (allPresets). */
   theme: string;
   /** Palette color overrides. null — take from the palette. */
   colors: Partial<Record<PaletteKey, string | null>>;
@@ -230,6 +249,8 @@ export interface AppSettings {
     statusLine: boolean;
     sidebarWidth: number;
     inspectorWidth: number;
+    /** Interface size: the window's zoom factor (Settings → main, Ctrl+= / Ctrl+- / Ctrl+0, Ctrl+wheel), 0.8…2. */
+    zoom: number;
   };
   shape: {
     /** Panel corner radius, px. */
@@ -309,6 +330,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     statusLine: true,
     sidebarWidth: 232,
     inspectorWidth: 340,
+    zoom: 1,
   },
   shape: { panelRadius: 0, keyRadius: 2 },
   typography: { font: 'mono', scale: 1 },
@@ -355,6 +377,7 @@ export const PANEL_WIDTH_LIMITS: Record<'sidebarWidth' | 'inspectorWidth', [numb
 export const SETTINGS_RANGES: Record<string, [number, number]> = {
   'layout.sidebarWidth': PANEL_WIDTH_LIMITS.sidebarWidth,
   'layout.inspectorWidth': PANEL_WIDTH_LIMITS.inspectorWidth,
+  'layout.zoom': [0.8, 2],
   'shape.panelRadius': [0, 32],
   'shape.keyRadius': [0, 30],
   'typography.scale': [0.8, 1.3],
@@ -368,7 +391,19 @@ export const SETTINGS_RANGES: Record<string, [number, number]> = {
   'editor.snap': [0, 1],
 };
 
+let ownPresets: ThemePreset[] = [];
+
+/** The user's own themes, set by src/store/themesStore.ts (before the config is parsed). */
+export function setOwnPresets(presets: ThemePreset[]) {
+  ownPresets = presets;
+}
+
+/** Built-in palettes first, then the user's own themes. */
+export function allPresets(): ThemePreset[] {
+  return ownPresets.length ? [...THEME_PRESETS, ...ownPresets] : THEME_PRESETS;
+}
+
 export function getPreset(id: string): ThemePreset {
   const realId = THEME_ALIASES[id] ?? id;
-  return THEME_PRESETS.find((p) => p.id === realId) ?? THEME_PRESETS[0];
+  return allPresets().find((p) => p.id === realId) ?? THEME_PRESETS[0];
 }

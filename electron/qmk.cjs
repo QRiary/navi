@@ -238,6 +238,26 @@ function keyboardTargets(relFiles) {
   return out.sort();
 }
 
+/** fs.existsSync without blocking the main process. */
+async function exists(p) {
+  try {
+    await fs.promises.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** safety.readTextIfExists without blocking the main process: null when there is no such file. */
+async function readTextIfExistsAsync(file) {
+  try {
+    return await fs.promises.readFile(file, 'utf8');
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
 /** All keyboard targets: folders with keyboard.json (or info.json + rules.mk for old ones). */
 async function listKeyboards(home) {
   if (!isQmkHome(home)) throw new Error('not a qmk_firmware folder');
@@ -276,8 +296,8 @@ async function listKeyboards(home) {
   return out;
 }
 
-/** Keyboard definition files along the folder chain (as QMK merges them) + every keymap along the path. */
-function readKeyboard(home, userspace, kb) {
+/** Keyboard definition files along the folder chain (as QMK merges them) + every keymap along the path. Async: see readOwnCode. */
+async function readKeyboard(home, userspace, kb) {
   checkKb(kb);
   const root = path.join(home, 'keyboards');
   const parts = kb.split('/');
@@ -287,19 +307,25 @@ function readKeyboard(home, userspace, kb) {
     const rel = parts.slice(0, i).join('/');
     const dir = joinInside(root, ...parts.slice(0, i));
     for (const name of ['info.json', 'keyboard.json', 'rules.mk', 'config.h', 'post_rules.mk', 'post_config.h']) {
-      const text = readTextIfExists(path.join(dir, name));
+      const text = await readTextIfExistsAsync(path.join(dir, name));
       if (text !== null && text.length < MAX_SOURCE) files.push({ path: `${rel}/${name}`, text });
     }
     for (const [rootName, base] of [['firmware', root], ['userspace', userspace ? path.join(userspace, 'keyboards') : null]]) {
       if (!base) continue;
       const kmDir = joinInside(base, ...parts.slice(0, i), 'keymaps');
-      if (!fs.existsSync(kmDir)) continue;
-      for (const e of fs.readdirSync(kmDir, { withFileTypes: true })) {
-        if (e.isDirectory()) keymaps.push({ name: e.name, at: rel, root: rootName, files: fs.readdirSync(path.join(kmDir, e.name)) });
+      let entries;
+      try {
+        entries = await fs.promises.readdir(kmDir, { withFileTypes: true });
+      } catch (err) {
+        if (err && err.code === 'ENOENT') continue; // no keymaps folder here
+        throw err;
+      }
+      for (const e of entries) {
+        if (e.isDirectory()) keymaps.push({ name: e.name, at: rel, root: rootName, files: await fs.promises.readdir(path.join(kmDir, e.name)) });
       }
     }
   }
-  if (!fs.existsSync(joinInside(root, ...parts))) throw new Error(`keyboard “${kb}” not found`);
+  if (!(await exists(joinInside(root, ...parts)))) throw new Error(`keyboard “${kb}” not found`);
   return { files, keymaps };
 }
 
@@ -334,22 +360,24 @@ function buildScanFolders(home, userspace, kb, km) {
 }
 
 /** null = build, string = refusal. Trust is looked up on the keymap folder and covers its users/<keymap> folders. */
-function checkTrust(store, home, userspace, kb, km) {
+async function checkTrust(store, home, userspace, kb, km) {
   const folders = buildScanFolders(home, userspace, kb, km);
-  return trustRefusal({ issues: scanFolders(folders), trusted: store.isTrusted(folders[0]) });
+  return trustRefusal({ issues: await scanFolders(folders), trusted: store.isTrusted(folders[0]) });
 }
 
-function readKeymap(home, userspace, kb, km) {
-  const { dir, exists, root } = keymapDir(home, userspace, kb, km);
+/** Async: see readOwnCode. */
+async function readKeymap(home, userspace, kb, km) {
+  const { dir, exists: found, root } = keymapDir(home, userspace, kb, km);
   const files = [];
-  if (exists) {
-    for (const name of fs.readdirSync(dir)) {
+  if (found) {
+    for (const name of await fs.promises.readdir(dir)) {
       const full = path.join(dir, name);
-      if (!fs.statSync(full).isFile() || fs.statSync(full).size > MAX_SOURCE) continue;
-      files.push({ name, text: fs.readFileSync(full, 'utf8') });
+      const st = await fs.promises.stat(full);
+      if (!st.isFile() || st.size > MAX_SOURCE) continue;
+      files.push({ name, text: await fs.promises.readFile(full, 'utf8') });
     }
   }
-  return { dir, exists, root, files };
+  return { dir, exists: found, root, files };
 }
 
 /** C-like files the user's own code can be in (any of them can be #included or built). */
@@ -362,19 +390,21 @@ const OWN_CODE_MAX_FILES = 5000;
  * The user's own C in the folders the build uses (buildScanFolders): every C-like file, NAVI's keymap.c / navi.h at
  * the top of the keymap folder left out. Paths are relative to the keymap folder (users/<keymap>/… for the others).
  * Read-only and lenient: links, .git, big, binary or unreadable files are skipped (the build gate reports those).
+ * Async on purpose: it runs whenever a tap-hold key is selected, and a sync walk over \\wsl.localhost (~350 ms for a
+ * real userspace) blocked the main process, so the whole window (clicks, scrolling) froze while reads queued up.
  */
-function readOwnCode(home, userspace, kb, km) {
+async function readOwnCode(home, userspace, kb, km) {
   const folders = buildScanFolders(home, userspace, kb, km);
   const out = [];
   let count = 0;
-  folders.forEach((folder, i) => {
+  for (const [i, folder] of folders.entries()) {
     const prefix = i === 0 ? '' : `users/${km}/`;
     const stack = [folder];
     while (stack.length && count < OWN_CODE_MAX_FILES) {
       const cur = stack.pop();
       let st;
       try {
-        st = fs.lstatSync(cur);
+        st = await fs.promises.lstat(cur);
       } catch {
         continue;
       }
@@ -383,7 +413,7 @@ function readOwnCode(home, userspace, kb, km) {
       if (st.isDirectory()) {
         if (cur !== folder && path.basename(cur) === '.git') continue;
         try {
-          for (const name of fs.readdirSync(cur).sort().reverse()) stack.push(path.join(cur, name));
+          for (const name of (await fs.promises.readdir(cur)).sort().reverse()) stack.push(path.join(cur, name));
         } catch {
           /* unreadable folder: skipped */
         }
@@ -392,13 +422,13 @@ function readOwnCode(home, userspace, kb, km) {
       if (!st.isFile() || !OWN_CODE_EXT.test(cur) || st.size > MAX_SOURCE || (i === 0 && NAVI_WRITTEN.has(rel))) continue;
       count++;
       try {
-        const text = fs.readFileSync(cur, 'utf8');
+        const text = await fs.promises.readFile(cur, 'utf8');
         if (!text.includes('\0')) out.push({ path: prefix + rel, text });
       } catch {
         /* unreadable file: skipped */
       }
     }
-  });
+  }
   return out;
 }
 
@@ -646,7 +676,7 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
     checkKb(keyboard);
     checkKm(keymap);
     // The user's own files in an untrusted folder must pass the allowlist, or make would run them.
-    const untrusted = checkTrust(trust, home, userspace, keyboard, keymap);
+    const untrusted = await checkTrust(trust, home, userspace, keyboard, keymap);
     if (untrusted) throw new Error(untrusted);
     // QMK must build the folder the user sees: ask it (dry run) before the real build.
     const dry = await runQmk(settings, ['compile', '-n', '-kb', validateArg(keyboard), '-km', validateArg(keymap)], { cwd: home, timeoutMs: 60000 });
@@ -702,13 +732,13 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
 
   // ── Trusted folders ──
   ipcMain.handle('navi:trust:list', () => trust.list());
-  ipcMain.handle('navi:trust:state', (_e, home, userspace, kb, km) => {
+  ipcMain.handle('navi:trust:state', async (_e, home, userspace, kb, km) => {
     validatePath(home);
     const us = checkUserspace(userspace);
     checkKb(kb);
     checkKm(km);
     const folders = buildScanFolders(home, us, kb, km);
-    return { dir: folders[0], trusted: trust.isTrusted(folders[0]), issues: scanFolders(folders) };
+    return { dir: folders[0], trusted: trust.isTrusted(folders[0]), issues: await scanFolders(folders) };
   });
   /** The grant is confirmed by a dialog the main process shows, so the interface alone cannot trust a folder. */
   // The folders come from the build target, not from the interface: the dialog names everything the trust covers.

@@ -10,6 +10,7 @@ import { decode, encode, type Decoded } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
 import { newId } from '../layout/geometry';
 import { KC_NO, KC_TRNS, makeLayer } from './factory';
+import { layerTarget } from './layerRefs';
 import { mapTapDanceKeycodes } from './tapDances';
 import type { EncoderAction, Geometry, HoldAction, KeyGeom, Keymap, Layer, MatrixPos, Project, TapHoldAction } from './types';
 
@@ -233,8 +234,8 @@ function remapAllLayerRefs(p: Project, keymapId: string, spec: KeycodeSpec, mapp
   // otherwise its label would land on every KC_NO (or on the plain tap key of an LT).
   const refsDeleted = (v: number) => {
     if (replaced.has(v)) return !kept.has(replaced.get(v) ?? -1);
-    const d = decode(spec, v);
-    return (d.kind === 'layer' || d.kind === 'layer-tap' || d.kind === 'layer-mod') && mapping(d.layer) === null;
+    const target = layerTarget(spec, v);
+    return target !== null && mapping(target.layer) === null;
   };
   const keyAliases = p.keyAliases.filter((a) => !refsDeleted(a.keycode)).map((a) => ({ ...a, keycode: fix(a.keycode) }));
   // Tap-hold settings follow their keycode the same way; hold keys pointing at a deleted layer are dropped.

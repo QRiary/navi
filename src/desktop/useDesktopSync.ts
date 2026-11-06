@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useSettingsStore } from '../store/settingsStore';
-import { toast } from '../store/toastStore';
+import { useThemesStore } from '../store/themesStore';
+import { toast, toastError } from '../store/toastStore';
 import { navi } from './bridge';
 import { t } from '../i18n';
 import { resolvePalette } from '../theme/applyTheme';
@@ -15,11 +16,20 @@ export function useDesktopSync() {
     let lastSynced: string | null = null;
     let disposed = false;
 
+    // Own themes: the files in %APPDATA%\NAVI\themes replace the cached list.
+    void useThemesStore
+      .getState()
+      .load()
+      .then((broken) => {
+        if (broken.length) toastError(t('Some theme files could not be read and are not shown', 'Некоторые файлы тем не читаются и не показаны'), broken.map((id) => `themes\\${id}.navi-theme.json`).join('\n'));
+      })
+      .catch((err) => toastError(t('Could not read your themes', 'Не удалось прочитать ваши темы'), err));
+
     const applyFromFile = (text: string, source: 'start' | 'change') => {
       lastSynced = text;
       const issues = useSettingsStore.getState().applyConfig(text);
       const error = issues.find((i) => i.level === 'error');
-      if (error) toast(`user.config.jsonc${error.line ? t(`, line ${error.line}`, `, строка ${error.line}`) : ''}: ${error.message}`, 'error');
+      if (error) toastError(t('user.config.jsonc has an error, so the changes were not applied. Fix the file and save it again.', 'В user.config.jsonc ошибка, поэтому изменения не применены. Исправьте файл и сохраните снова.'), `${error.line ? `line ${error.line}: ` : ''}${error.message}`);
       else if (source === 'change') toast(t('Config updated from file', 'Конфиг обновлён из файла'));
     };
 

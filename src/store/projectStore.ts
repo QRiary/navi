@@ -20,7 +20,7 @@ import { newId } from '../core/layout/geometry';
 import { projectRepo } from '../platform/projectRepo';
 import { navi, type LinkedFileState, type Revision, type StoredSummary } from '../desktop/bridge';
 import { t } from '../i18n';
-import { toast } from './toastStore';
+import { toast, toastError } from './toastStore';
 
 const HISTORY_LIMIT = 200;
 const COALESCE_MS = 900;
@@ -76,6 +76,8 @@ export interface ProjectState {
   dismissLinkConflict(): void;
   revertToSaved(): void;
   remove(id: string): Promise<void>;
+  /** Undo of `remove`: the project is back in the list (not opened). false when it could not be brought back. */
+  restoreRemoved(id: string): Promise<boolean>;
   close(): void;
   revisions(): Promise<Revision[]>;
   /** Open a previous version as the current state (a change that can be undone). */
@@ -218,7 +220,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
           try {
             await checkLink(await navi.links.state(id));
           } catch (err) {
-            toast(t(`Linked file: ${(err as Error).message}`, `Связанный файл: ${(err as Error).message}`), 'error');
+            toastError(t('Couldn’t check the linked file. Open Projects → current to relink it.', 'Не удалось проверить связанный файл. Перепривяжите его в «Проекты → текущий».'), err);
           }
         }
         return true;
@@ -345,7 +347,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     revertToSaved() {
       const { saved } = get();
       if (!saved) return;
-      get().apply(() => saved, 'revert to saved');
+      get().apply(() => saved, t('back to the saved version', 'возврат к сохранённой версии'));
     },
 
     async remove(id) {
@@ -355,6 +357,12 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
         rememberLast(null);
       }
       await get().refreshList();
+    },
+
+    async restoreRemoved(id) {
+      const ok = await projectRepo.restore(id);
+      await get().refreshList();
+      return ok;
     },
 
     close() {
@@ -386,14 +394,25 @@ export function useSpec(): KeycodeSpec {
 }
 
 /** Save (Ctrl+S, the save button) and say what happened to the linked file. */
-export async function saveProject(): Promise<void> {
+/** Writes the draft right away instead of after the usual delay (the window is about to close). */
+export async function flushDraft(): Promise<void> {
+  if (draftTimer) clearTimeout(draftTimer);
+  draftTimer = null;
+  const { project, saved } = useProjectStore.getState();
+  if (project && isDirty({ project, saved })) await projectRepo.saveDraft(project.id, serializeProject(project));
+}
+
+/** Save with a toast for the outcome; the result, or null when saving failed. */
+export async function saveProject(): Promise<SaveResult | null> {
   try {
     const result = await useProjectStore.getState().save();
     if (result === 'saved') toast(t('Project saved', 'Проект сохранён'));
     else if (result === 'file-missing') toast(t('Saved in NAVI, but the linked file is not found: relink or unlink it in Projects → current', 'Сохранено в NAVI, но связанный файл не найден: перепривяжите или отвяжите его в «Проекты → текущий»'), 'error');
     else toast(t('Saved in NAVI. The linked file changed outside NAVI: choose which version to keep', 'Сохранено в NAVI. Связанный файл изменился вне NAVI: выберите, какую версию оставить'));
+    return result;
   } catch (err) {
-    toast((err as Error).message, 'error');
+    toastError(t('Couldn’t save the project. Check the disk has space and try again.', 'Не удалось сохранить проект. Проверьте место на диске и повторите.'), err);
+    return null;
   }
 }
 

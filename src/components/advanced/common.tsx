@@ -2,60 +2,199 @@
  * Shared parts of the Advanced section: a validated keycode field, a list of problems, a badge
  * “does the feature work in the current firmware and is it on in your build”.
  */
-import { useState, type ReactNode } from 'react';
-import { tryParseQmk } from '../../core/keycodes/codec';
-import { keyLabel } from '../../core/keycodes/labels';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Keyboard, LayoutGrid } from 'lucide-react';
+import { decode, tryParseQmk } from '../../core/keycodes/codec';
+import { friendlyName, type FriendlyName } from '../../core/keycodes/friendly';
+import type { LabelContext } from '../../core/keycodes/labels';
+import type { KeycodeSpec } from '../../core/keycodes/spec';
+import { selectedKeycode } from '../../lib/keymapActions';
+import { useEditorStore } from '../../store/editorStore';
+import { KeycodePopover } from '../keyboard/KeycodePopover';
 import type { AdvancedIssue } from '../../core/features/advanced';
-import { featureStatus, type FeatureId } from '../../core/features/registry';
+import { buildNote } from '../../core/features/buildNote';
+import type { FeatureId } from '../../core/features/registry';
+import { whyDisabled } from '../../lib/whyDisabled';
 import type { CustomAction, Project } from '../../core/project/types';
 import { hardwareFacts } from '../../lib/hardwareFacts';
 import { useLabelContext } from '../../lib/projectContext';
 import { href } from '../../lib/router';
 import { useSpec } from '../../store/projectStore';
-import { StatusChip } from '../inspector/KeyInspector';
 import { getLanguage, t } from '../../i18n';
 
-/** Keycode field: a validated QMK expression. */
-export function KeycodeField({ value, onChange, label }: { value: number; onChange: (v: number) => void; label: string }) {
+/**
+ * Keycode field: a validated QMK expression, what it means next to it ("Space · hold Num", "unknown" or the parse
+ * error), a button opening the keycode catalog, and (`fromKeyboard`) one taking the keycode of the key selected on
+ * the Keyboard page's shown layer. `accept` limits what the field takes: it returns why a keycode is refused (shown
+ * as the field's error), or null.
+ */
+export function KeycodeField({
+  value,
+  onChange,
+  label,
+  fromKeyboard = true,
+  accept,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  label: string;
+  fromKeyboard?: boolean;
+  accept?: (v: number) => string | null;
+}) {
   const spec = useSpec();
   const labelCtx = useLabelContext();
-  const qmk = labelCtx ? keyLabel(spec, value, labelCtx).qmk : '';
+  const name = labelCtx ? friendlyName(spec, value, labelCtx) : null;
+  const qmk = name?.qmk ?? '';
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const selection = useEditorStore((s) => s.selection);
+  const layer = useEditorStore((s) => s.layer);
+  // Recomputed when the selection or the shown layer changes (the store getter reads them).
+  const selected = useMemo(() => (fromKeyboard ? selectedKeycode() : null), [fromKeyboard, selection, layer, labelCtx]);
   const shown = text ?? (value ? qmk : '');
+  const preview = (() => {
+    if (error) return error;
+    if (text !== null) return typedMeaning(spec, labelCtx, text);
+    return value && name ? keyMeaning(spec, name, value) : '';
+  })();
   return (
-    <form
-      className={`expr-input ${error ? 'is-error' : ''}`}
-      style={{ minWidth: 150 }}
-      onSubmit={(e) => {
-        e.preventDefault();
-        commit();
-      }}
-    >
-      <input value={shown} placeholder="KC_NO" aria-label={label} spellCheck={false} onChange={(e) => setText(e.target.value)} onBlur={() => commit()} />
-      {error && <span className="expr-result">{error}</span>}
-    </form>
+    <span className="kc-field">
+      <form
+        className={`expr-input ${error ? 'is-error' : ''}`}
+        style={{ minWidth: 96 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          commit();
+        }}
+      >
+        <input
+          value={shown}
+          placeholder="KC_NO"
+          aria-label={label}
+          spellCheck={false}
+          title={name && value ? `${name.text}\n${name.qmk}` : undefined}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => commit()}
+        />
+        {preview && (
+          <span className="expr-result" title={preview}>
+            {preview}
+          </span>
+        )}
+      </form>
+      <CatalogButton current={value} onPick={set} />
+      {fromKeyboard && (
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label={t('Take the selected key', 'Взять выбранную клавишу')}
+          {...whyDisabled(
+            !selected && t('Select a key on the Keyboard page to take its keycode', 'Выберите клавишу на странице «Клавиатура», чтобы взять её keycode'),
+            selected && labelCtx
+              ? t(
+                  `Take the key selected on the Keyboard page (layer ${selected.layer}): ${friendlyName(spec, selected.keycode, labelCtx).text}`,
+                  `Взять клавишу, выбранную на странице «Клавиатура» (слой ${selected.layer}): ${friendlyName(spec, selected.keycode, labelCtx).text}`,
+                )
+              : undefined,
+          )}
+          onClick={() => selected && set(selected.keycode)}
+        >
+          <Keyboard size={14} strokeWidth={1.5} />
+        </button>
+      )}
+    </span>
   );
+  function set(v: number) {
+    const refused = accept?.(v);
+    if (refused) return setError(refused); // a typed text stays for fixing; a catalog pick leaves the value as it was
+    onChange(v);
+    setText(null);
+    setError(null);
+  }
   function commit() {
     if (text === null) return;
-    if (!text.trim()) {
-      onChange(0);
-      setText(null);
-      setError(null);
-      return;
-    }
+    if (!text.trim()) return set(0);
     const r = tryParseQmk(spec, text);
     if ('error' in r) setError(r.error);
-    else {
-      onChange(r.value);
-      setText(null);
-      setError(null);
-    }
+    else set(r.value);
   }
+}
+
+/** What a keycode means, for the preview next to a QMK box: its readable name, “unknown”, or nothing when the name is the expression itself. */
+function keyMeaning(spec: KeycodeSpec, n: FriendlyName, v: number): string {
+  if (n.text !== n.qmk) return n.text;
+  return decode(spec, v).kind === 'unknown' ? t('unknown', 'неизвестно') : '';
+}
+
+/** The preview of what is being typed into a QMK box (a parse error shows only once it is committed). */
+export function typedMeaning(spec: KeycodeSpec, labelCtx: LabelContext | null, text: string): string {
+  if (!text.trim() || !labelCtx) return '';
+  const r = tryParseQmk(spec, text);
+  return 'value' in r ? keyMeaning(spec, friendlyName(spec, r.value, labelCtx), r.value) : '';
+}
+
+/** The catalog button of a keycode box: opens the keycode picker under itself; a pick calls `onPick` and closes it. */
+export function CatalogButton({ current, onPick, blocked }: { current: number; onPick: (v: number) => void; blocked?: string | false }) {
+  const [picking, setPicking] = useState(false);
+  const pickBtn = useRef<HTMLButtonElement>(null);
+  const closePicker = useCallback(() => setPicking(false), []);
+  return (
+    <>
+      <button
+        ref={pickBtn}
+        type="button"
+        className="icon-btn"
+        aria-label={t('Pick from the catalog', 'Выбрать из каталога')}
+        aria-expanded={picking}
+        {...whyDisabled(blocked, t('Pick from the catalog', 'Выбрать из каталога'))}
+        onClick={() => setPicking((p) => !p)}
+      >
+        <LayoutGrid size={14} strokeWidth={1.5} />
+      </button>
+      {picking && (
+        <KeycodePopover
+          anchor={pickBtn}
+          current={current}
+          onClose={closePicker}
+          onPick={(v) => {
+            onPick(v);
+            setPicking(false);
+          }}
+        />
+      )}
+    </>
+  );
 }
 
 /** One item of a chip list: a key (shown as its QMK name) or a named key list. */
 export type KeyChip = { kind: 'key'; value: number } | { kind: 'list'; id: string; name: string };
+
+/** For `KeycodeField.accept`: only a basic key (0x00–0xFF), the only kind QMK takes with modifiers and VIA in a macro. */
+export const basicKeyOnly = (v: number): string | null =>
+  v > 0xff ? t('Basic keys only: letters, digits, symbols, F-keys…', 'Только обычные клавиши: буквы, цифры, символы, F-клавиши…') : null;
+
+/** The character of a code point, or nothing for a control character, a lone surrogate or one past Unicode. */
+const printable = (cp: number) => (cp >= 0x20 && !(cp >= 0x7f && cp < 0xa0) && !(cp >= 0xd800 && cp <= 0xdfff) && cp <= 0x10ffff ? String.fromCodePoint(cp) : '');
+
+/**
+ * One character of text (a Unicode key, a Unicode map entry), shown large: the current one; typing replaces it (the
+ * last character typed counts), so there's no need to delete the old one first.
+ */
+export function CharInput({ codepoint, onChange }: { codepoint: number | null; onChange: (cp: number) => void }) {
+  return (
+    <input
+      className="input"
+      style={{ width: 52, textAlign: 'center', fontSize: 'var(--fs-lg, 18px)' }}
+      value={codepoint === null ? '' : printable(codepoint)}
+      aria-label={t('Character', 'Символ')}
+      onFocus={(e) => e.target.select()}
+      onChange={(e) => {
+        const cp = [...e.target.value].pop()?.codePointAt(0);
+        if (cp !== undefined) onChange(cp);
+      }}
+    />
+  );
+}
 
 /**
  * Keys as compact chips (× removes one) with a field at the end that adds a key on Enter; `extra` sits after it
@@ -66,14 +205,15 @@ export function KeyChips({
   onRemove,
   onAdd,
   label,
-  disabled,
+  full,
   extra,
 }: {
   items: KeyChip[];
   onRemove: (index: number) => void;
   onAdd: (v: number) => void;
   label: string;
-  disabled?: boolean;
+  /** Why no key can be added (the list is full): disables the “+ key” box with this as its tooltip. */
+  full?: string | false;
   extra?: ReactNode;
 }) {
   const spec = useSpec();
@@ -88,15 +228,16 @@ export function KeyChips({
     setText('');
     setError(null);
   };
+  const preview = error ?? typedMeaning(spec, labelCtx, text);
   return (
     <div className="key-chips">
       {items.map((c, i) => (
         <span
           key={c.kind === 'list' ? `l:${c.id}` : `k:${i}`}
           className={`key-chip ${c.kind === 'list' ? 'key-chip--list' : ''}`}
-          title={c.kind === 'list' ? t('key list', 'список клавиш') : undefined}
+          title={c.kind === 'list' ? t('key list', 'список клавиш') : labelCtx ? friendlyName(spec, c.value, labelCtx).qmk : undefined}
         >
-          {c.kind === 'list' ? c.name || '—' : labelCtx ? keyLabel(spec, c.value, labelCtx).qmk || 'KC_NO' : ''}
+          {c.kind === 'list' ? c.name || '—' : labelCtx ? friendlyName(spec, c.value, labelCtx).text : ''}
           <button className="key-chip-x" aria-label={t('Remove', 'Убрать')} onClick={() => onRemove(i)}>
             ×
           </button>
@@ -114,11 +255,16 @@ export function KeyChips({
           placeholder={t('+ key', '+ клавиша')}
           aria-label={label}
           spellCheck={false}
-          disabled={disabled}
-          title={error ?? undefined}
+          {...whyDisabled(full, error ?? undefined)}
           onChange={(e) => setText(e.target.value)}
           onBlur={add}
         />
+        {preview && (
+          <span className="expr-result" title={preview}>
+            {preview}
+          </span>
+        )}
+        <CatalogButton current={0} onPick={onAdd} blocked={full} />
       </form>
       {extra}
     </div>
@@ -140,16 +286,18 @@ export function IssueList({ issues }: { issues: AdvancedIssue[] }) {
   );
 }
 
-export function FeatureNote({ project, feature }: { project: Project; feature: FeatureId }) {
-  const st = featureStatus(feature, project.firmware.flags, hardwareFacts(project));
+/**
+ * The firmware-status sentence at the top of an Advanced tab: is the feature in the user's build, why, and what it
+ * takes to work on the keyboard (`buildNote`). `firstUse` finishes "…turns on by itself when you …".
+ */
+export function FeatureNote({ project, feature, firstUse }: { project: Project; feature: FeatureId; firstUse?: { en: string; ru: string } }) {
+  const spec = useSpec();
+  const note = buildNote(project, feature, spec, hardwareFacts(project), firstUse);
   const lang = getLanguage();
-  const build = project.firmware.buildFeatures[feature];
   return (
-    <div className="notice">
+    <div className="notice" role="status">
       <span>
-        {t('Current firmware', 'Текущая прошивка')}: <StatusChip state={st.state} likely={st.likely} text={lang === 'ru' ? st.reason.ru : st.reason.en} /> · {t('your build', 'ваша сборка')}:{' '}
-        <strong>{build ? t('enabled', 'включено') : t('off', 'выключено')}</strong> ( <a href={href({ section: 'firmware', tab: 'features' })}>{t('change', 'изменить')}</a> ) —{' '}
-        {t('defined in keymap.c, works after building and flashing your firmware.', 'задаётся в keymap.c, работает после сборки и прошивки вашей прошивки.')}
+        {lang === 'ru' ? note.text.ru : note.text.en} <a href={href({ section: 'firmware', tab: 'features' })}>{t('Firmware features', 'Функции прошивки')}</a>
       </span>
     </div>
   );

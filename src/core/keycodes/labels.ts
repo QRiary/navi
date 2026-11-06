@@ -15,6 +15,8 @@ export interface LabelContext extends CodecOptions {
   /** Computer layout for the second label: 'russian' → KC_Q also shows the Cyrillic letter. */
   hostLanguage?: string;
   layerName?: (layer: number) => string | undefined;
+  /** The layer's full name for readable text (`layerName` is only the short ones that fit on a key). */
+  layerTitle?: (layer: number) => string | undefined;
   tapDanceName?: (index: number) => string | undefined;
   macroName?: (index: number) => string | undefined;
   customName?: (value: number) => string | undefined;

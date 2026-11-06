@@ -161,13 +161,29 @@ export interface NaviBridge {
   info(): Promise<NaviInfo>;
   readConfig(): Promise<string | null>;
   writeConfig(text: string): Promise<void>;
+  /** The user's own themes: <userData>/themes/<id>.navi-theme.json (electron/themes.cjs). */
+  themes: {
+    list(): Promise<{ id: string; text: string }[]>;
+    write(id: string, text: string): Promise<void>;
+    /** Moves the file to themes/.trash; its text, or null when there was none. */
+    remove(id: string): Promise<string | null>;
+  };
   onConfigChanged(cb: (text: string) => void): () => void;
   setTitleBarColors(colors: { color: string; symbolColor: string }): Promise<void>;
+  /** Interface size: the window's zoom factor (0.8…2). */
+  setZoom(factor: number): Promise<void>;
+  /** Ctrl+= / Ctrl+- / Ctrl+0 pressed: +1 / -1 / 0 (reset). */
+  onZoomStep(cb: (step: 1 | -1 | 0) => void): () => void;
   openPath(which: 'data' | 'projects' | 'firmware' | 'config'): Promise<string>;
   openExternal(url: string): Promise<void>;
   saveFile(opts: { name: string; text: string; filters?: { name: string; extensions: string[] }[] }): Promise<string | null>;
   openFile(opts: { filters?: { name: string; extensions: string[] }[] }): Promise<{ name: string; path: string; text: string } | null>;
   probeResult(result: unknown): Promise<void>;
+  /** Tells the main process the interface language (context menu, fallback close box) and unsaved state (electron/closeGuard.cjs). */
+  reportUiState(update: { language?: 'en' | 'ru'; dirty?: boolean }): Promise<void>;
+  /** The window is being closed with unsaved changes: show the dialog, answer 'shown' at once, then 'close' or 'stay'. */
+  onCloseRequest(cb: () => void): () => void;
+  answerClose(choice: 'shown' | 'close' | 'stay'): Promise<void>;
   projects: {
     list(): Promise<StoredSummary[]>;
     read(id: string): Promise<{ saved: string | null; draft: string | null }>;
@@ -177,6 +193,8 @@ export interface NaviBridge {
     revisions(id: string): Promise<Revision[]>;
     readRevision(id: string, file: string): Promise<string>;
     remove(id: string): Promise<void>;
+    /** Undo of remove: the project comes back from the trash (not its file link). false when there is nothing to restore. */
+    restore(id: string): Promise<boolean>;
   };
   qmk: {
     detect(settings: QmkSettings): Promise<QmkEnvironment>;

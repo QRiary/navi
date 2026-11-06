@@ -36,6 +36,8 @@ export interface EditorState {
   pressed: Set<string>;
   /** Highlighted positions (result of the “where is it assigned” search). */
   highlight: MatrixPos[];
+  /** The layer tab under the mouse: the keys leading to that layer are highlighted on the shown layer. */
+  hoverLayer: number | null;
 
   setLayer(layer: number): void;
   select(ids: string[], mode?: 'replace' | 'toggle' | 'add'): void;
@@ -51,6 +53,7 @@ export interface EditorState {
   setQuery(query: string): void;
   setPressed(p: Set<string>): void;
   setHighlight(h: MatrixPos[]): void;
+  setHoverLayer(layer: number | null): void;
 }
 
 const PICKER_KEY = 'navi.editor.picker';
@@ -78,6 +81,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   pickerQuery: '',
   pressed: new Set(),
   highlight: [],
+  hoverLayer: null,
 
   setLayer: (layer) => set({ layer, highlight: [] }),
   select: (ids, mode = 'replace') => {
@@ -112,4 +116,5 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   setQuery: (pickerQuery) => set({ pickerQuery }),
   setPressed: (pressed) => set({ pressed }),
   setHighlight: (highlight) => set({ highlight }),
+  setHoverLayer: (hoverLayer) => set({ hoverLayer }),
 }));

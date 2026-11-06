@@ -8,6 +8,7 @@ import { checkCustom, hasCustomCode, type CustomFile } from '../../core/qmk/cust
 import { patchProject } from '../../core/project/ops';
 import { useProjectStore } from '../../store/projectStore';
 import { getLanguage, t } from '../../i18n';
+import { Hint } from '../InfoTip';
 
 const HINT: Record<CustomFile, { en: string; ru: string; placeholder: string }> = {
   'config.h': {
@@ -54,14 +55,22 @@ export function CustomLines({ file, generatedSymbols }: { file: CustomFile; gene
     <div className="panel-box" style={{ marginTop: 'var(--gap)' }}>
       <div className="panel-box-head">
         <span className="cell-label">
-          {t(`your own lines · ${file}`, `свои строки · ${file}`)} {lines > 0 && <span className="badge">{lines}</span>}
+          <Hint
+            tip={t(
+              'Your own code added at the end of the generated file. NAVI checks it line by line and again right before writing; a line that could run a program is rejected. Code that came with an imported project is held until you read it and press “allow”.',
+              'Ваш собственный код в конце сгенерированного файла. NAVI проверяет его построчно и ещё раз прямо перед записью; строка, способная запустить программу, отклоняется. Код из импортированного проекта не используется, пока вы не прочитаете его и не нажмёте «разрешить».',
+            )}
+          >
+            {t(`your own lines · ${file}`, `свои строки · ${file}`)}
+          </Hint>{' '}
+          {lines > 0 && <span className="badge">{lines}</span>}
         </span>
         <button className="btn" onClick={() => setOpen(!open)} aria-expanded={open || review}>
           <SquarePen size={14} strokeWidth={1.5} /> {open || review ? t('hide', 'скрыть') : text ? t('edit', 'изменить') : t('add', 'добавить')}
         </button>
       </div>
       {review && (
-        <div className="notice" style={{ borderColor: 'var(--danger-color)', margin: '8px 12px' }}>
+        <div className="notice" role="alert" style={{ borderColor: 'var(--danger-color)', margin: '8px 12px' }}>
           <span>
             {t(
               'This code came with an imported project and is not used yet. Read it (all three files): it is compiled into the firmware and runs on the keyboard — a keyboard can type anything into your computer.',

@@ -25,7 +25,7 @@ beforeEach(() => {
 });
 
 describe('readOwnCode', () => {
-  it('reads the C-like files of the keymap folder and users/<keymap>, not NAVI’s keymap.c / navi.h', () => {
+  it('reads the C-like files of the keymap folder and users/<keymap>, not NAVI’s keymap.c / navi.h', async () => {
     const dir = path.join(user, 'keyboards', 'acme', 'split', 'keymaps', 'mine');
     put(path.join(dir, 'keymap.c'), 'generated');
     put(path.join(dir, 'navi.h'), 'generated');
@@ -38,12 +38,19 @@ describe('readOwnCode', () => {
     put(path.join(dir, '.git', 'x.c'), 'git');
     put(path.join(dir, 'blob.c'), 'a\0b');
     put(path.join(user, 'users', 'mine', 'mine.c'), 'user code');
-    const files = readOwnCode(home, user, 'acme/split', 'mine');
+    const files = await readOwnCode(home, user, 'acme/split', 'mine');
     expect(files.map((f) => f.path).sort()).toEqual(['combos.def', 'config.h', 'general/key_log.c', 'general/keymap.c', 'users/mine/mine.c']);
     expect(files.find((f) => f.path === 'general/key_log.c').text).toBe('case 0xC3:');
   });
 
-  it('a target without a keymap folder has no own code', () => {
-    expect(readOwnCode(home, user, 'acme/split', 'none')).toEqual([]);
+  it('a target without a keymap folder has no own code', async () => {
+    expect(await readOwnCode(home, user, 'acme/split', 'none')).toEqual([]);
+  });
+
+  // It runs on every tap-hold key selected; a sync walk over \\wsl.localhost froze the whole window (main process).
+  it('reads asynchronously, never blocking the main process', async () => {
+    const p = readOwnCode(home, user, 'acme/split', 'mine');
+    expect(p).toBeInstanceOf(Promise);
+    await p;
   });
 });

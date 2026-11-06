@@ -100,8 +100,9 @@ function createTrustStore(file) {
  * .git is skipped; a link anywhere is an issue (make would follow it out of the folder); a file too big to read is an
  * issue; a file with a NUL byte is skipped as binary unless it is a .mk file; *.mk gets the make check, every other
  * file the C check (any text file can be #included).
+ * Async: over \\wsl.localhost the walk takes ~400ms, and sync fs in the main process freezes the whole window.
  */
-function scanFolders(folders) {
+async function scanFolders(folders) {
   const issues = [];
   let count = 0;
   for (const folder of folders) {
@@ -110,7 +111,7 @@ function scanFolders(folders) {
       const cur = stack.pop();
       let st;
       try {
-        st = fs.lstatSync(cur);
+        st = await fs.promises.lstat(cur);
       } catch (err) {
         if (err && err.code === 'ENOENT' && cur === folder) continue;
         issues.push({ file: cur, reason: 'cannot be read' });
@@ -124,7 +125,7 @@ function scanFolders(folders) {
         if (cur !== folder && path.basename(cur) === '.git') continue;
         let names;
         try {
-          names = fs.readdirSync(cur);
+          names = await fs.promises.readdir(cur);
         } catch {
           issues.push({ file: cur, reason: 'cannot be read' });
           continue;
@@ -146,7 +147,7 @@ function scanFolders(folders) {
       }
       let buf;
       try {
-        buf = fs.readFileSync(cur);
+        buf = await fs.promises.readFile(cur);
       } catch {
         issues.push({ file: cur, reason: 'cannot be read' });
         continue;

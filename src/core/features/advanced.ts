@@ -100,6 +100,17 @@ export function comboRefOf(keymap: Keymap, layer: number): number {
   return typeof ref === 'number' && ref < keymap.layers.length ? ref : 0;
 }
 
+/**
+ * Combos tab layer filter: `'all'` = every combo, `'every'` = combos not limited to layers, a number = combos limited
+ * to layers that include it (unlimited ones work there too, but aren't listed: the filter finds layer-only combos).
+ */
+export type ComboLayerFilter = 'all' | 'every' | number;
+export function combosOnLayer(combos: readonly Combo[], filter: ComboLayerFilter): Combo[] {
+  if (filter === 'all') return [...combos];
+  if (filter === 'every') return combos.filter((c) => !c.layers?.length);
+  return combos.filter((c) => c.layers?.includes(filter));
+}
+
 /** Some layer reads combo keys from another layer than 0: no COMBO_ONLY_FROM_LAYER, combo_ref_from_layer instead. */
 export const comboRefsMixed = (keymap: Keymap) => keymap.layers.some((_, i) => comboRefOf(keymap, i) !== 0);
 
@@ -136,6 +147,35 @@ export function qmkCombos(keymap: Keymap, cols: number, combo: Combo): QmkCombo[
   }
   return [...groups.values()].map((g, i) => ({ combo, name: i === 0 ? combo.name : `${combo.name}_${i + 1}`, keys: g.keys, layers: !limit && g.layers.length === count ? null : g.layers }));
 }
+
+/**
+ * A C-name piece for a key: its readable name when that is plain ASCII with a letter or digit ("Space · hold Num" →
+ * SPACE_HOLD_NUM, "Ctrl+Z" → CTRL_Z), else its QMK expression without KC_ ("!" → KC_EXLM → EXLM).
+ */
+export function comboNamePart(text: string, qmk: string): string {
+  const clean = (s: string) =>
+    s
+      .replace(/^KC_/, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 16)
+      .replace(/_+$/, '');
+  const readable = /^[\x20-\x7e·]+$/.test(text) && /[A-Za-z0-9]/.test(text) && !text.includes('(');
+  return (readable ? clean(text) : '') || clean(qmk);
+}
+
+/** NAVI's default combo name: CM_<keys>_<result>, unique among `taken` (_2, _3…). */
+export function comboAutoName(keyParts: string[], resultPart: string | null, taken: ReadonlySet<string>): string {
+  const base = ['CM', ...keyParts, ...(resultPart ? [resultPart] : [])].filter(Boolean).join('_').slice(0, 48).replace(/_+$/, '');
+  if (!taken.has(base)) return base;
+  let n = 2;
+  while (taken.has(`${base}_${n}`)) n++;
+  return `${base}_${n}`;
+}
+
+/** Names NAVI gave by default before CM_… (combo_0, combo_1…): they follow the keys like an auto name. */
+export const isOldDefaultComboName = (name: string) => /^combo_\d+$/.test(name);
 
 export function checkCombos(project: Project, combos: Combo[]): AdvancedIssue[] {
   const out: AdvancedIssue[] = [];

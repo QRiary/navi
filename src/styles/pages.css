@@ -14,7 +14,22 @@
 }
 
 .section {
-  margin-top: calc(22px * var(--space));
+  margin-top: calc(24px * var(--space));
+}
+
+/* Blocks inside a section (head, hint, box, field row) never touch each other. */
+.section > * + * {
+  margin-top: 12px;
+}
+
+.lang-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lang-switch > .cell-label {
+  margin-right: 4px;
 }
 
 .section-head {
@@ -22,7 +37,6 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
   padding-bottom: 8px;
   border-bottom: var(--border);
 }
@@ -40,11 +54,11 @@
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
 .chip {
-  padding: 5px 10px;
+  padding: 4px 8px;
   border: var(--border);
   font-size: var(--fs-xs);
   color: var(--text-secondary);
@@ -56,6 +70,7 @@
   border-color: var(--accent-color);
 }
 
+/* Tab bars (components/Tabs.tsx). Labels keep the case they are written in. */
 .tabs {
   display: flex;
   flex-wrap: wrap;
@@ -63,13 +78,62 @@
   border-bottom: var(--border);
 }
 
+/* A page's main bar stays on top of the scrolling page; opaque even with a see-through panel color. */
+.tabs--sticky {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin-top: 0;
+  padding-top: 4px; /* the same 4px above as before, kept when stuck under the top bar */
+  background:
+    linear-gradient(var(--panel-background), var(--panel-background)),
+    var(--app-background);
+}
+
+/*
+ * A cluster of tabs under a quiet caption (Advanced: keys / codes / behavior), like a ribbon group: the caption
+ * sits above its tabs so it takes no width in the row, a thin line splits the clusters. A narrow window wraps
+ * whole clusters.
+ */
+.tabs-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.tabs-group + .tabs-group {
+  border-left: var(--border);
+}
+
+.tabs-group-row {
+  display: flex;
+}
+
+.tabs-caption {
+  padding: 0 12px 4px;
+  font-size: var(--fs-xs);
+  letter-spacing: var(--label-spacing);
+  text-transform: uppercase;
+  color: var(--text-label);
+  user-select: none;
+}
+
 .tab {
   position: relative;
-  padding: 8px 14px;
+  padding: 8px 12px;
   font-size: var(--fs-xs);
-  letter-spacing: 0.1em;
-  text-transform: lowercase;
-  color: var(--text-label);
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.tab-panel:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8px * var(--space));
+}
+
+/* Hardware → Geometry: the editor fills the page under the bar. */
+.hw-fill-panel {
+  height: 100%;
 }
 
 .tab:hover {
@@ -87,14 +151,14 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px 16px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .toolbar-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   margin-left: auto;
 }
 
@@ -132,7 +196,7 @@
 .code-gutter {
   flex: none;
   min-width: 44px;
-  padding: 10px 8px 10px 0;
+  padding: 12px 8px 12px 0;
   border-right: var(--border);
   overflow: hidden;
   text-align: right;
@@ -149,7 +213,7 @@
 .code-input {
   flex: 1;
   min-width: 0;
-  padding: 10px 14px;
+  padding: 12px 16px;
   border: 0;
   outline: 0;
   resize: none;
@@ -163,7 +227,7 @@
 }
 
 .config-status {
-  margin-top: 10px;
+  margin-top: 12px;
   font-size: var(--fs-xs);
 }
 
@@ -183,10 +247,10 @@
 .issue {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 10px;
-  padding: 6px 10px;
+  gap: 4px 12px;
+  padding: 8px 12px;
   border-left: 2px solid var(--danger-color);
-  background: var(--cell-background);
+  background: var(--card-background);
   color: var(--text-secondary);
 }
 
@@ -213,7 +277,7 @@
   width: 46px;
   height: 24px;
   border: var(--border);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-label);
@@ -237,17 +301,48 @@
 .theme-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   padding: 12px;
-  border: 1px solid;
+  border: 1px solid var(--border-color);
   text-align: left;
+}
+
+.theme-card.is-active {
+  border-color: var(--text-primary);
+}
+
+/* The card's own button (preview, name, description); own themes add .theme-actions under it */
+.theme-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.theme-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: auto;
+}
+
+/* Removing is apart from rename / export, on the right */
+.theme-actions .theme-remove {
+  margin-left: auto;
+}
+
+.theme-actions .theme-remove:hover:not(:disabled):not([aria-disabled="true"]) {
+  color: var(--danger-color);
+}
+
+.theme-desc.is-unsaved {
+  color: var(--text-primary);
 }
 
 .theme-preview {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 10px;
+  gap: 4px;
+  padding: 12px;
   margin-bottom: 4px;
   border: 1px solid;
 }
@@ -272,5 +367,205 @@
 }
 
 .theme-desc {
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
+}
+
+/*
+ * Combos tab (components/advanced/CombosTab.tsx): the keyboard and the open combo stick under the page's tab bar
+ * (`--sticky-tabs-h`, set by Tabs), the list scrolls under them. Too low a window or a stacked layout: not sticky,
+ * the block would cover most of the list.
+ */
+.combo-top {
+  position: sticky;
+  top: var(--sticky-tabs-h, 0px);
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr);
+  align-items: start;
+  gap: var(--gap);
+  padding: 8px 0;
+  background:
+    linear-gradient(var(--panel-background), var(--panel-background)),
+    var(--app-background);
+}
+
+@media (max-height: 760px), (max-width: 1100px) {
+  .combo-top {
+    position: static;
+  }
+}
+
+@media (max-width: 1100px) {
+  .combo-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.combo-board .panel-box-head {
+  min-height: 48px;
+}
+
+.combo-board.is-picking {
+  border-color: var(--text-primary);
+}
+
+.combo-pick-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  width: 100%;
+  font-size: var(--fs-xs);
+}
+
+.combo-pick-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.kb-preview--interactive .kb-key[role='button'] {
+  cursor: pointer;
+  outline: none;
+}
+
+.kb-preview--interactive .kb-key[role='button']:hover .kb-key-shape {
+  stroke: var(--text-label);
+}
+
+:where([data-focus-ring]) .kb-preview--interactive .kb-key[role='button']:focus-visible .kb-key-shape {
+  stroke: var(--text-primary);
+  stroke-width: 2px;
+}
+
+/* How many combos use a key: a quiet number in the key's top-right corner. */
+.kb-preview-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-anchor: end;
+  dominant-baseline: middle;
+  fill: var(--text-secondary);
+  pointer-events: none;
+}
+
+.kb-key.is-selected .kb-preview-badge {
+  fill: var(--accent-contrast);
+}
+
+.combo-editor--empty {
+  padding: 12px;
+}
+
+.combo-fields {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.combo-keys,
+.combo-layers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-xs);
+}
+
+.combo-toolbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.combo-search {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 200px;
+  color: var(--text-label);
+}
+
+.combo-search .input {
+  flex: 1;
+}
+
+.combo-layer-filter {
+  width: auto;
+  max-width: 240px;
+}
+
+.combo-row {
+  --row-cols: minmax(0, 1fr) minmax(0, auto);
+  text-align: left;
+}
+
+.combo-none,
+.combo-hidden {
+  padding: 12px;
+}
+
+.combo-advanced > summary {
+  cursor: pointer;
+  border-bottom: 0;
+}
+
+.combo-advanced[open] > summary {
+  border-bottom: var(--border);
+}
+
+.combo-advanced-hint {
+  padding: 8px 12px 0;
+}
+
+.combo-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A tab's filter box (ListFilter): the box takes the line, the count and the tab's buttons follow it. */
+.list-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.list-filter {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 200px;
+  max-width: 480px;
+  color: var(--text-label);
+}
+
+.list-filter .input {
+  flex: 1;
+}
+
+/* The item a search jump landed on flashes for a moment. */
+.is-found {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+  animation: found-flash 1.6s ease-out;
+}
+
+@keyframes found-flash {
+  0%,
+  40% {
+    outline-color: var(--accent-color);
+    background-color: color-mix(in srgb, var(--accent-color) 18%, transparent);
+  }
+  100% {
+    outline-color: transparent;
+  }
+}
+
+[data-motion='reduced'] .is-found {
+  animation: none;
 }

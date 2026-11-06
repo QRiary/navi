@@ -4,10 +4,13 @@ import { activeKeymap } from '../core/project/ops';
 import { useEditorStore } from '../store/editorStore';
 import { saveProject, useProjectStore } from '../store/projectStore';
 import type { Route } from './router';
+import { nativeClipboardNow } from './clipboardTarget';
+import { anyModalOpen } from '../components/Modal';
+import { useFindStore } from './find';
 
 /**
  * Shortcuts. The physical key is checked (e.code), so they work with a Russian layout too.
- *  Ctrl+S — save, Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z) — undo/redo;
+ *  Ctrl+S — save, Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z) — undo/redo, Ctrl+K / Ctrl+F — search everywhere;
  *  in the Keyboard section: Del/Backspace — empty, T — transparent, Ctrl+C/V, Esc — clear the selection,
  *  Alt+0…9 — layer, Ctrl+A — select all keys.
  */
@@ -18,9 +21,17 @@ export function useShortcuts(route: Route) {
       const typing = !!target?.closest('input, textarea, select, [contenteditable="true"]');
       const ctrl = e.ctrlKey || e.metaKey;
       const store = useProjectStore.getState();
+      // A dialog is open: the project behind it is not edited (the dialog handles its own keys).
+      if (anyModalOpen()) return;
       if (ctrl && e.code === 'KeyS') {
         e.preventDefault();
         if (store.project) void saveProject();
+        return;
+      }
+      // Ctrl+K and Ctrl+F both open the global search (the owner's pick: one search, two habits).
+      if (ctrl && !e.altKey && !e.shiftKey && (e.code === 'KeyK' || e.code === 'KeyF')) {
+        e.preventDefault();
+        useFindStore.getState().setOpen(true);
         return;
       }
       if (typing) return;
@@ -44,6 +55,8 @@ export function useShortcuts(route: Route) {
         }
         return;
       }
+      // Selected text or a focused control outside the keys: copy/paste/select all stay native.
+      if (ctrl && ['KeyC', 'KeyV', 'KeyX', 'KeyA'].includes(e.code) && nativeClipboardNow()) return;
       if (ctrl && e.code === 'KeyC') {
         if (copySelection()) e.preventDefault();
         return;
