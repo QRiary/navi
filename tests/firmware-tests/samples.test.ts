@@ -6,6 +6,7 @@
  *   plain     4 x 10: taps, a held mod-tap, a layer-tap hold, a combo, mouse / media / Ctrl keys, one wrong expectation
  *   pipeline  own pipeline: the user's rules.mk, config.h and own.c (turns KC_X into "y") compile with NAVI's files
  *   broken    own pipeline whose own.c calls an RGB Matrix function: the test build has no RGB Matrix, so it can't build
+ *   switcher  the task switcher key: plain, and own pipeline with "layer keys on top" (switcher-on-top)
  *   split     the Dilemma template (a split board, RGB Matrix, bootloader reboot), the user's rules.mk turning
  *             SPLIT_KEYBOARD on and own lines asking which half they run on
  */
@@ -14,14 +15,16 @@ import { join } from 'node:path';
 import { it } from 'vitest';
 import { parseQmk } from '../../src/core/keycodes/codec';
 import { loadSpec } from '../../src/core/keycodes/spec';
+import { TASK_SWITCHER_NAME, taskSwitcherKeycode } from '../../src/core/keycodes/taskSwitcher';
 import { createBlankProject, createDilemmaProject } from '../../src/core/project/factory';
 import { activeKeymap, setKeycodes } from '../../src/core/project/ops';
+import { ensureTapHold } from '../../src/core/project/tapHoldActions';
 import type { Project } from '../../src/core/project/types';
 import { generateKeymap } from '../../src/core/qmk/generate';
 
 const out = process.env.NAVI_FW_TESTS_OUT;
 const spec = loadSpec('latest');
-const q = (s: string) => parseQmk(spec, s);
+const q = (s: string) => (s === TASK_SWITCHER_NAME ? taskSwitcherKeycode(spec) : parseQmk(spec, s));
 
 function withKeys(p: Project, keys: [layer: number, row: number, col: number, keycode: string][]): Project {
   const id = activeKeymap(p).id;
@@ -104,6 +107,70 @@ function pipeline(name: string): Project {
   return { ...p, firmware: { ...p.firmware, pipeline: { enabled: true, headers: [] } } };
 }
 
+/**
+ * The task switcher key: on the base layer (r0c6) and on layer 1 (r0c0), reached by holding LT(1, KC_SPC) at r0c1 or
+ * MO(1) at r0c8, a tap dance's hold (r0c9) or a tap-hold key holding layer 1 + Shift (r1c9). r0c7 is MO(2) (layer 2
+ * over layer 1, a layer hidden under "layer keys on top").
+ */
+export const SWITCHER_TESTS = [
+  'r0c6 => ⟨C-A-TAB⟩',
+  'r0c6 r0c6 r0c6 => ⟨C-A-TAB⟩⟨TAB⟩⟨TAB⟩',
+  'r0c6 r0c4 r0c6 => ⟨C-A-TAB⟩⟨ESC⟩⟨C-A-TAB⟩',
+  'r0c6 r0c5 r0c6 => ⟨C-A-TAB⟩⟨ENT⟩⟨C-A-TAB⟩',
+  '+r0c2 r0c6 r0c6 -r0c2 => ⟨C-S-A-TAB⟩⟨S-TAB⟩',
+  'r0c3 r0c6 r0c6 => ⟨C-S-A-TAB⟩⟨TAB⟩',
+  '+r0c1 wait:250 r0c0 -r0c1 => ⟨C-A-TAB⟩⟨ENT⟩',
+  '+r0c1 wait:250 r0c0 r0c0 r1c0 -r0c1 => ⟨C-A-TAB⟩⟨TAB⟩⟨LEFT⟩⟨ENT⟩',
+  '+r0c1 wait:250 +r0c2 r0c0 r0c0 -r0c2 -r0c1 => ⟨C-S-A-TAB⟩⟨S-TAB⟩⟨ENT⟩',
+  '+r0c1 wait:250 r0c0 r0c4 -r0c1 => ⟨C-A-TAB⟩⟨ESC⟩',
+  '+r0c8 r0c0 -r0c8 => ⟨C-A-TAB⟩⟨ENT⟩',
+  'r0c6 +r0c8 r1c0 -r0c8 => ⟨C-A-TAB⟩⟨LEFT⟩',
+  '+r0c1 wait:250 r0c0 +r0c7 -r0c7 -r0c1 => ⟨C-A-TAB⟩⟨ENT⟩',
+  '+r0c1 wait:250 r0c0 +r0c7 -r0c1 r1c1 -r0c7 => ⟨C-A-TAB⟩⟨ENT⟩z',
+  '+r0c9 wait:250 r0c0 -r0c9 => ⟨C-A-TAB⟩⟨ENT⟩',
+  '+r1c9 wait:250 r0c0 -r1c9 => ⟨C-S-A-TAB⟩⟨ENT⟩',
+  'r0c1 r0c0 => ␣a',
+];
+
+function switcher(name: string, onTop: boolean, pipe: boolean): Project {
+  const p = withKeys(createBlankProject(name, 4, 10, false), [
+    [0, 0, 0, 'KC_A'],
+    [0, 0, 1, 'LT(1, KC_SPC)'],
+    [0, 0, 2, 'KC_LSFT'],
+    [0, 0, 3, 'OSM(MOD_LSFT)'],
+    [0, 0, 4, 'KC_ESC'],
+    [0, 0, 5, 'KC_ENT'],
+    [0, 0, 6, 'NAVI_TASK_SWITCH'],
+    [0, 0, 7, 'MO(2)'],
+    [0, 0, 8, 'MO(1)'],
+    [0, 0, 9, 'TD(0)'],
+    [1, 0, 0, 'NAVI_TASK_SWITCH'],
+    [1, 1, 0, 'KC_LEFT'],
+    [2, 1, 1, 'KC_Z'],
+  ]);
+  // r1c9: a tap-hold key whose hold is layer 1 + Shift (a stand-in LT, NAVI plays the hold).
+  const th = ensureTapHold(spec, p, q('KC_B'), { type: 'layer', layer: 1, mods: 0x02 });
+  const withTh = setKeycodes(th.project, activeKeymap(th.project).id, 0, [[1, 9]], th.keycode);
+  const tapDances = [{ id: 'td-0', index: 0, name: 'TD_LAYER', tap: q('KC_B'), hold: q('MO(1)'), doubleTap: 0, tapHold: 0 }];
+  return { ...withTh, tapDances, firmware: { ...withTh.firmware, layerKeysOnTop: onTop, ...(pipe ? { pipeline: { enabled: true, headers: [] } } : {}) } };
+}
+
+const SWITCHER_OWN_C = [
+  ownC([]),
+  'bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {',
+  '    return pre_process_record_navi(keycode, record);',
+  '}',
+  '',
+  'void housekeeping_task_user(void) {',
+  '    housekeeping_task_navi();',
+  '}',
+  '',
+  'layer_state_t layer_state_set_user(layer_state_t state) {',
+  '    return layer_state_set_navi(state);',
+  '}',
+  '',
+].join('\n');
+
 function split(): Project {
   const p = withKeys(createDilemmaProject('fw tests split'), [
     [0, 0, 1, 'KC_Q'],
@@ -128,6 +195,14 @@ it.skipIf(!out)('writes the sample keymap folders for the firmware test runner',
   write(join(out!, 'pipeline'), pipeline('fw tests pipeline'), ['r0c0 => a', 'r0c1 => y', 'r0c2:300 => ⟨LSFT⟩'], own([]));
   write(join(out!, 'broken'), pipeline('fw tests broken'), ['r0c0 => a'], own(['    if (record->event.pressed) rgb_matrix_set_color(0, 255, 0, 0);']));
   write(join(out!, 'split'), split(), ['r0c1 r5c1 => qp']);
+  write(join(out!, 'switcher'), switcher('fw tests switcher', false, false), SWITCHER_TESTS);
+  write(join(out!, 'switcher-on-top'), switcher('fw tests switcher on top', true, true), SWITCHER_TESTS, {
+    'rules.mk': PIPELINE_RULES,
+    'config.h': PIPELINE_CONFIG,
+    'own.c': SWITCHER_OWN_C,
+  });
+  writeGenerated(join(out!, 'generated-switcher'), switcher('fw tests switcher generated', false, false));
+  writeGenerated(join(out!, 'generated-switcher-on-top'), switcher('fw tests switcher generated on top', true, false));
   // NAVI's own navi_tests.txt (firmware.tests on): the generator's expectations must hold on the firmware it wrote.
   writeGenerated(join(out!, 'generated-plain'), plain());
   writeGenerated(join(out!, 'generated-split'), split());

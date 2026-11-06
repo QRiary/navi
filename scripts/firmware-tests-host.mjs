@@ -52,7 +52,12 @@ try {
   const split = await play('split', 10, 6);
   check('split: a split board builds as one matrix and both halves type', split.status === 'pass' && split.passed === 1, split);
 
-  for (const [name, rows, cols] of [['generated-plain', 4, 10], ['generated-split', 10, 6]]) {
+  for (const name of ['switcher', 'switcher-on-top']) {
+    const sw = await play(name, 4, 10);
+    check(`${name}: the task switcher key opens, moves, goes back with Shift, closes and picks on the layer key's release`, sw.status === 'pass' && sw.passed === 17, sw);
+  }
+
+  for (const [name, rows, cols] of [['generated-plain', 4, 10], ['generated-split', 10, 6], ['generated-switcher', 4, 10], ['generated-switcher-on-top', 4, 10]]) {
     const gen = await play(name, rows, cols);
     check(`${name}: NAVI's own navi_tests.txt passes whole on the firmware it wrote`, gen.status === 'pass' && gen.passed > 0, gen);
   }
