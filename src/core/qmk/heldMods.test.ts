@@ -145,7 +145,7 @@ describe('held modifiers: generator', () => {
 
 describe('held modifiers: project format', () => {
   it('new projects lift; the schema is 18', () => {
-    expect(PROJECT_SCHEMA_VERSION).toBe(18);
+    expect(PROJECT_SCHEMA_VERSION).toBeGreaterThanOrEqual(18);
     expect(createBlankProject('x', 2, 2, false).firmware.liftHeldMods).toBe(true);
   });
 

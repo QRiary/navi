@@ -18,6 +18,7 @@
  */
 import type { KeycodeSpec } from '../keycodes/spec';
 import { isTypingLayer, languageCName, languageKeycodes, languageKeyOf, plainLanguageIndex, usesTextRoute } from '../project/languages';
+import { isTextStep, textArg } from '../project/textSteps';
 import type { Keymap, MacroStep, Project, TextRoute } from '../project/types';
 
 const hex = (v: number) => `0x${v.toString(16).toUpperCase().padStart(4, '0')}`;
@@ -479,8 +480,8 @@ export function routedMacroStatements(
   /** The C statement that types a text argument (default navi_send_text). */
   textCall: (arg: string) => string = (arg) => `navi_send_text(${arg});`,
 ): string[] {
-  if (!plan.routed || !steps.some((s) => s.type === 'text')) return steps.map(normal);
-  if (!plan.program) return steps.map((s) => (s.type === 'text' ? textCall(cString(s.text)) : normal(s)));
+  if (!plan.routed || !steps.some(isTextStep)) return steps.map(normal);
+  if (!plan.program) return steps.map((s) => (isTextStep(s) ? textCall(textArg(s, cString)) : normal(s)));
   const out: string[] = [];
   let stream: string[] = [];
   let started = false;
@@ -489,13 +490,14 @@ export function routedMacroStatements(
     stream = [];
   };
   for (const s of steps) {
-    if (!started && s.type !== 'text') {
+    if (!started && !isTextStep(s)) {
       out.push(normal(s));
       continue;
     }
     started = true;
-    if (s.type === 'text') {
-      if (s.text) stream.push(cString(s.text));
+    if (isTextStep(s)) {
+      // A secret's define is a string literal too: it joins the stream by C's literal concatenation.
+      if (s.type === 'secret' || s.text) stream.push(textArg(s, cString));
     } else if (s.type === 'delay') {
       flush();
       out.push(`wait_ms(${s.ms});`);

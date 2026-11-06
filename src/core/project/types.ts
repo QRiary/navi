@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 18;
+export const PROJECT_SCHEMA_VERSION = 19;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -205,7 +205,12 @@ export type MacroStep =
   | { type: 'tap'; keycode: number }
   | { type: 'down'; keycode: number }
   | { type: 'up'; keycode: number }
-  | { type: 'delay'; ms: number };
+  | { type: 'delay'; ms: number }
+  /**
+   * Secret text: types the value of the C define `name` (a quoted string) from the project's secrets header
+   * (firmware.secretsHeader), which the user keeps beside keymap.c. NAVI stores and shows only the name.
+   */
+  | { type: 'secret'; name: string };
 
 /** Held real modifiers while NAVI types text: let go for the text (`lift`) or left as they are (`keep`). */
 export type HeldMods = 'lift' | 'keep';
@@ -444,6 +449,11 @@ export interface FirmwareConfig {
    * headers — the user's header files included at the top of keymap.c, in order (relative paths, ≤ 20).
    */
   pipeline?: { enabled: boolean; headers: string[] };
+  /**
+   * The header that defines the secret text steps' values (since format 19): a relative path in the keymap folder.
+   * The user writes it; NAVI only names it in keymap.c (included when it exists) and never reads, writes or shows it.
+   */
+  secretsHeader: string;
   /**
    * Layer keys bring their layer to the top: the layer turned on last wins and every layer above it (by number)
    * is hidden while it is on. NAVI's own setting (generated layer_state_set_user / layer_state_set_navi), not a define.

@@ -287,7 +287,7 @@ function projectItems(project: Project, spec: KeycodeSpec, ctx: LabelContext): S
   }
 
   for (const m of project.macros) {
-    const steps = m.steps.flatMap((st) => (st.type === 'text' ? [st.text] : st.type === 'delay' ? [] : [kn(st.keycode).text]));
+    const steps = m.steps.flatMap((st) => (st.type === 'text' ? [st.text] : st.type === 'secret' ? [st.name] : st.type === 'delay' ? [] : [kn(st.keycode).text]));
     out.push({
       kind: 'macro',
       title: m.name || `MC_${m.index}`,

@@ -28,6 +28,14 @@ export const PROJECT_SETTING_ITEMS: readonly SettingItem[] = [
     route: { section: 'firmware', tab: 'files' },
   },
   {
+    key: 'firmware.secretsHeader',
+    label: () => t('secrets header', 'заголовок секретов'),
+    hint: () => t('the header with the defines secret text steps type (passwords stay out of the project)', 'заголовок с define, которые набирают шаги «секретный текст» (пароли остаются вне проекта)'),
+    keywords: 'secret secrets.h password define секрет пароль',
+    section: () => `${t('Firmware', 'Прошивка')} › ${t('4 · Keymap files', '4 · Файлы keymap')}`,
+    route: { section: 'firmware', tab: 'files' },
+  },
+  {
     key: 'firmware.runTests',
     label: () => t('Run the firmware tests before flashing', 'Запускать тесты прошивки перед прошивкой'),
     hint: () => t('navi_tests.txt played in QMK’s test framework on this PC', 'navi_tests.txt проигрывается в тестовой среде QMK на этом компьютере'),

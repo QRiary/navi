@@ -19,6 +19,7 @@ import { effectiveTapHolds } from '../project/tapHolds';
 import { tapHoldActionLookup, type OwnCodeFile } from '../project/tapHoldActions';
 import { cleanC } from './customCode';
 import { tapDanceKind } from '../project/tapDances';
+import { isTextStep } from '../project/textSteps';
 import type { HoldAction, Keymap, MacroStep, MatrixPos, Project, TapDance } from '../project/types';
 import { layerIdentifiers } from './generate';
 import { liftOf, liftSetting } from './heldMods';
@@ -271,6 +272,8 @@ function macroOps(steps: MacroStep[], lift: boolean): Op[] | Why {
   const ops: Op[] = [];
   for (const s of steps) {
     if (s.type === 'delay') continue;
+    // NAVI never knows a secret's value (secretText.ts), so it can't say what the keys type.
+    if (s.type === 'secret') return { why: 'secret text: its value is in your secrets header, which NAVI never reads' };
     if (s.type === 'text') {
       const t = textOps(s.text);
       if (isWhy(t)) return t;
@@ -802,7 +805,7 @@ function danceTests(c: Ctx, td: TapDance, at: { route: Route; pos: MatrixPos }, 
     for (let n = 1; n <= steps.length; n++) {
       const st = steps[n - 1];
       if (!st.none) return skip(`tap ${n}`, 'no step without modifiers');
-      const ops = macroOps(st.none, liftSetting(c.project) && st.none.some((x) => x.type === 'text'));
+      const ops = macroOps(st.none, liftSetting(c.project) && st.none.some(isTextStep));
       if (isWhy(ops)) return skip(`tap ${n}`, ops.why);
       played.push(...ops);
       lines.push([[n === 1 ? s : `${s}*${n}`], [...played]]);

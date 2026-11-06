@@ -34,6 +34,8 @@ import { checkTapHolds, effectiveTapHolds } from '../project/tapHolds';
 import { checkTapHoldActions, effectiveTapHoldActions, projectOwnCodeRefs, type OwnCodeFile } from '../project/tapHoldActions';
 import { anyHoldsOn, caseLines, comboEventCode, hasHoldKeys, keyListsCode, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, naviSendCode, replayTracked, standInCheckCode, tapHoldsCode, type StandIn } from './tapHold';
 import { tapDanceCode } from './tapDance';
+import { checkSecrets, secretsCode } from './secretText';
+import { isTextStep, textArg } from '../project/textSteps';
 import { layoutMacro, renderLayers, textLayout } from './layoutText';
 import { FIRMWARE_TESTS_FILE, firmwareTestsFile } from './firmwareTests';
 
@@ -158,7 +160,8 @@ function macroStatement(s: MacroStep): string {
   {
     switch (s.type) {
       case 'text':
-        return `send_string(${cString(s.text)});`;
+      case 'secret':
+        return `send_string(${textArg(s, cString)});`;
       case 'delay':
         return `wait_ms(${s.ms});`;
       case 'tap':
@@ -215,7 +218,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const macroBody = (m: Macro) => {
     const lift = lifts(m.heldMods);
     if (!lang) return liftedBlock(macroStatements(m.steps), lift);
-    if (lang.program && m.steps.some((s) => s.type === 'text')) {
+    if (lang.program && m.steps.some(isTextStep)) {
       return routedMacroStatements(m.steps, lang, macroStatement, cString, undefined, (arg) => `navi_type_text(${arg}, ${lift});`);
     }
     return liftedBlock(routedMacroStatements(m.steps, lang, macroStatement, cString, undefined, (arg) => `navi_type_text(${arg}, false);`), lift);
@@ -260,6 +263,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   issues.push(...checkTapHoldActions(spec, project, projectOwnCodeRefs(spec, project, ownCode)));
   issues.push(...checkLanguages(project, keymap));
   issues.push(...tdC.issues);
+  issues.push(...checkSecrets(spec, project, via, new Set([...tdReserved, ...aliases.defines.map((a) => a.cName)])));
   const langNames = new Map(project.languages.map((l) => [l.id, `NAVI_LANG_${languageCName(l)}`]));
   const tapHold = planTapHolds(effectiveTapHolds(spec, project), kc, project.keyLists, (id) => langNames.get(id));
   const tracked = replayTracked(tapHold);
@@ -314,11 +318,15 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   // NAVI restarts the keyboard into its bootloader on a Raw HID packet; VIA owns raw_hid_receive when it is on.
   const rebootOn = project.firmware.bootloaderReboot === true;
   if (rebootOn && !via && !pipeline) c.push('#include "raw_hid.h"');
+  // Secret text: the user's header and a fallback for each define (secretText.ts), before anything types them.
+  const secrets = secretsCode(project);
+  if (!pipeline && secrets.length) c.push('', ...secrets);
   // navi.h (own pipeline): the enums and *_navi prototypes, includable from the user's other .c files too.
   const h: string[] = [];
   if (pipeline) {
     c.push('#include "navi.h"');
     for (const name of headers) c.push(`#include "${name}"`);
+    if (secrets.length) c.push('', ...secrets);
     c.push('');
     h.push(`// ${HEADER(project)}`);
     h.push('// NAVI part of the keymap (own pipeline mode): layer/keycode enums and the *_navi functions defined in keymap.c.');
