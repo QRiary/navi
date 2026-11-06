@@ -50,18 +50,33 @@ export function effectiveTapHolds(spec: KeycodeSpec, project: Project): TapHoldS
 }
 
 /** How many settings point to this key list. */
-export const keyListUsage = (project: Project, id: string) => project.tapHolds.filter((s) => s.holdOnLists?.includes(id)).length;
+export const keyListUsage = (project: Project, id: string) =>
+  project.tapHolds.filter((s) => s.holdOnLists?.includes(id) || s.holdOnByLanguage?.some((g) => g.lists?.includes(id))).length;
 
-/** A key list deleted: gone from every setting that pointed to it. */
+/** A key list deleted: gone from every setting that pointed to it (its per-language hold keys too). */
 export function removeKeyList(project: Project, id: string): Project {
   return {
     ...project,
     keyLists: project.keyLists.filter((l) => l.id !== id),
     tapHolds: project.tapHolds.map((s) => {
-      if (!s.holdOnLists?.includes(id)) return s;
-      const rest = s.holdOnLists.filter((x) => x !== id);
-      const { holdOnLists: _, ...other } = s;
-      return rest.length ? { ...other, holdOnLists: rest } : other;
+      let next = s;
+      if (s.holdOnLists?.includes(id)) {
+        const rest = s.holdOnLists.filter((x) => x !== id);
+        const { holdOnLists: _, ...other } = s;
+        next = rest.length ? { ...other, holdOnLists: rest } : other;
+      }
+      if (next.holdOnByLanguage?.some((g) => g.lists?.includes(id))) {
+        next = {
+          ...next,
+          holdOnByLanguage: next.holdOnByLanguage.map((g) => {
+            if (!g.lists?.includes(id)) return g;
+            const lists = g.lists.filter((x) => x !== id);
+            const { lists: _, ...other } = g;
+            return lists.length ? { ...other, lists } : other;
+          }),
+        };
+      }
+      return next;
     }),
   };
 }
@@ -147,6 +162,11 @@ export function checkTapHolds(spec: KeycodeSpec, project: Project): AdvancedIssu
       err(`At most ${HOLD_ON_KEYS_MAX} “hold when pressed” keys.`, `Не больше ${HOLD_ON_KEYS_MAX} клавиш «удержание при нажатии».`);
     }
     for (const id of s.holdOnLists ?? []) if (!project.keyLists.some((l) => l.id === id)) err('Points to a key list that no longer exists.', 'Ссылается на список клавиш, которого больше нет.');
+    for (const g of s.holdOnByLanguage ?? []) {
+      if (!project.languages.some((l) => l.id === g.language)) err('Hold keys point to a language that no longer exists.', 'Клавиши удержания ссылаются на язык, которого больше нет.');
+      if (g.keys.length > HOLD_ON_KEYS_MAX) err(`At most ${HOLD_ON_KEYS_MAX} “hold when pressed” keys per language.`, `Не больше ${HOLD_ON_KEYS_MAX} клавиш «удержание при нажатии» на язык.`);
+      for (const id of g.lists ?? []) if (!project.keyLists.some((l) => l.id === id)) err('Points to a key list that no longer exists.', 'Ссылается на список клавиш, которого больше нет.');
+    }
   });
   const names = new Set<string>();
   project.keyLists.forEach((l, i) => {

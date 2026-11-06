@@ -14,7 +14,8 @@ export interface RepeatCase {
 
 export const REPEAT_SYMBOLS = ['navi_repeat', 'navi_repeat_action', 'navi_repeat_cb', 'navi_repeat_keycode', 'navi_repeat_token'];
 
-export function autoRepeatCode({ delay, rate, cases }: { delay: number; rate: number; cases: RepeatCase[] }): string[] {
+/** `fallback`: statements for any other keycode (Languages' symbol keys, typed from navi_symbol_text). */
+export function autoRepeatCode({ delay, rate, cases, fallback }: { delay: number; rate: number; cases: RepeatCase[]; fallback?: string[] }): string[] {
   const out = [
     `// ── Auto repeat (NAVI additions): a held key runs its action again after ${delay} ms, then every ${rate} ms ──`,
     '// One key repeats at a time: the one pressed last. Releasing it stops the repeat.',
@@ -29,6 +30,7 @@ export function autoRepeatCode({ delay, rate, cases }: { delay: number; rate: nu
     for (const st of k.body) out.push(`            ${st}`);
     out.push('            break;');
   }
+  if (fallback) out.push('        default:', ...fallback.map((st) => `            ${st}`), '            break;');
   out.push(
     '    }',
     '}',

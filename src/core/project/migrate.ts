@@ -6,7 +6,7 @@
  *  3) add a test with an old file (project.test.ts).
  * Files NEWER than the app do not open (so unknown fields are not lost).
  */
-import { AUTO_REPEAT_DEFAULT } from './factory';
+import { AUTO_REPEAT_DEFAULT, TEXT_ROUTE_DEFAULT } from './factory';
 import { PROJECT_SCHEMA_VERSION } from './types';
 
 type Data = Record<string, unknown>;
@@ -56,6 +56,14 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
     const f = d.firmware;
     if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 12 }; // validate reports it
     return { ...d, schemaVersion: 12, firmware: { ...(f as Data), autoRepeat: { ...AUTO_REPEAT_DEFAULT } } };
+  },
+  // 12 → 13: languages (none in older files) and the text route (the default); a layer's `typing` and a tap-hold
+  // setting's per-language hold keys are optional.
+  12: (d) => {
+    const f = d.firmware;
+    const languages = Array.isArray(d.languages) ? d.languages : [];
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 13, languages }; // validate reports it
+    return { ...d, schemaVersion: 13, languages, firmware: { ...(f as Data), textRoute: TEXT_ROUTE_DEFAULT } };
   },
 };
 

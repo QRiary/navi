@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 12;
+export const PROJECT_SCHEMA_VERSION = 13;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -178,6 +178,11 @@ export interface Layer {
    * Unset = layer 0. A key transparent here uses the setting of the layer it falls through to.
    */
   comboRef?: number | 'self';
+  /**
+   * A typing layer (Advanced → Languages): its keys go to the OS layout as they are, in every language. Unset = on for
+   * layer 0 and any layer a language turns on, off for the rest (project/languages.ts `isTypingLayer`).
+   */
+  typing?: boolean;
   /** Keycodes row by row: keys[row * cols + col]. Length = rows × cols. */
   keys: number[];
   /** Encoder actions by encoder number. */
@@ -340,6 +345,17 @@ export interface TapHoldSetting {
   holdOnKeys?: number[];
   /** Key lists (KeyList.id) whose keys also make it a hold at once (since format 11). */
   holdOnLists?: string[];
+  /** Hold keys that count only while one language is active (since format 13). */
+  holdOnByLanguage?: LanguageHoldKeys[];
+}
+
+/** Hold keys of a tap-hold setting that count only in one language. */
+export interface LanguageHoldKeys {
+  /** Language.id */
+  language: string;
+  keys: number[];
+  /** KeyList ids */
+  lists?: string[];
 }
 
 /** A named list of keycodes that tap-hold settings point to instead of repeating the keys (since format 11). */
@@ -432,6 +448,31 @@ export interface FirmwareConfig {
    * repeats. NAVI's own C code in keymap.c, not a define.
    */
   autoRepeat: { delay: number; rate: number };
+  /** How text is typed outside a plain-keys language (since format 13; used only with such a language). */
+  textRoute: TextRoute;
+}
+
+// ── Languages ─────────────────────────────────────────────────────────
+
+/**
+ * How text is typed in a language that doesn't type with plain keys: one route per firmware (Advanced → Languages).
+ * own-program: the user's C hands it to their own PC program; the others are QMK Unicode input modes.
+ */
+export const TEXT_ROUTES = ['own-program', 'wincompose', 'alt-codes', 'linux'] as const;
+export type TextRoute = (typeof TEXT_ROUTES)[number];
+
+/** A language the keyboard types in (since format 13). The first one is active at power-on. */
+export interface Language {
+  id: string;
+  name: string;
+  /** Short code, lower case: the C names NAVI_LANG_<CODE>, NAVI_TO_<CODE>, NAVI_TOGGLE_<CODE>. */
+  code: string;
+  /** Types with plain keys (English): no text goes through the route. */
+  plainKeys: boolean;
+  /** A layer that is on while the language is active (turned on under what shows). */
+  layer?: number;
+  /** The OS shortcut that switches the computer to this language (routes without a PC program). */
+  osShortcut?: number;
 }
 
 // ── Project ───────────────────────────────────────────────────────────
@@ -465,6 +506,8 @@ export interface Project {
   leaderSequences: LeaderSequence[];
   /** Character table for UM(i)/UP(i,j) (UNICODEMAP): index = position in the list. */
   unicodeMap: UnicodeEntry[];
+  /** Languages the keyboard types in (since format 13). */
+  languages: Language[];
   lighting: LightingConfig;
   firmware: FirmwareConfig;
   /** Linked keyboard (for hints when connecting). */

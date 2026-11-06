@@ -39,8 +39,8 @@ describe('schema 11', () => {
     v10.schemaVersion = 10;
     delete v10.keyLists;
     v10.tapHolds = [{ id: 'a', keycode: q('LSFT_T(KC_F)'), tappingTerm: 180, holdOnKeys: [q('KC_SLSH')] }];
-    expect(PROJECT_SCHEMA_VERSION).toBe(12);
-    expect(migrateProject(v10)).toMatchObject({ from: 10, data: { schemaVersion: 12, keyLists: [] } });
+    expect(PROJECT_SCHEMA_VERSION).toBeGreaterThanOrEqual(12);
+    expect(migrateProject(v10)).toMatchObject({ from: 10, data: { schemaVersion: PROJECT_SCHEMA_VERSION, keyLists: [] } });
     const { project, issues } = validateProject(v10);
     expect(issues.filter((i) => i.level === 'error')).toEqual([]);
     expect(project!.tapHolds).toEqual([{ id: 'a', keycodes: [q('LSFT_T(KC_F)')], tappingTerm: 180, holdOnKeys: [q('KC_SLSH')] }]);
