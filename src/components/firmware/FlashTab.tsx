@@ -19,7 +19,7 @@ import { BootloaderHelp } from '../device/BootloaderHelp';
 import { BuildLog } from './BuildLog';
 import { BootloaderRebootRow } from './BootloaderRebootRow';
 import { QMK_DOCS } from '../../lib/qmkDocs';
-import { expectedUsb, waitForKeyboardBack } from '../../lib/flashSteps';
+import { acceptNoBackup, expectedUsb, hasBoardBackup, noBackupAccepted, waitForKeyboardBack } from '../../lib/flashSteps';
 import { whyDisabled } from '../../lib/whyDisabled';
 import { EmptyState } from '../EmptyState';
 import { Hint } from '../InfoTip';
@@ -65,6 +65,8 @@ export function FlashTab({ active = true }: { active?: boolean }) {
   const [step, setStep] = useState<FlashStep>({ phase: 'idle' });
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [confirmUnverified, setConfirmUnverified] = useState(false);
+  /** Drive root whose “flash” was pressed once without a backup of the board: the next press flashes. */
+  const [confirmNoBackup, setConfirmNoBackup] = useState<string | null>(null);
   const [backingUp, setBackingUp] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -120,6 +122,22 @@ export function FlashTab({ active = true }: { active?: boolean }) {
       return;
     }
     setConfirmUnverified(false);
+    // No backup of this board (and it was never flashed without one): the firmware on it may be the only copy.
+    // Restoring a backup needs no question.
+    if (fw.source !== 'backup' && !hasBackup(drive) && !noBackupAccepted(drive.boardId)) {
+      if (confirmNoBackup !== drive.root) {
+        setConfirmNoBackup(drive.root);
+        toast(
+          t(
+            'No saved copy of this board’s current firmware: press “flash anyway” to flash without one (asked once for this board type).',
+            'Нет сохранённой копии текущей прошивки этой платы: нажмите «всё равно прошить», чтобы прошить без неё (спрашивается один раз для этого типа платы).',
+          ),
+        );
+        return;
+      }
+      acceptNoBackup(drive.boardId);
+    }
+    setConfirmNoBackup(null);
     setPolling(false);
     setStep({ phase: 'flashing', detail: drive.root });
     try {
@@ -180,8 +198,21 @@ export function FlashTab({ active = true }: { active?: boolean }) {
     }
   };
 
+  /** A copy saved by picotool (the RP2040 / RP2350 ROM shows no CURRENT.UF2) becomes this board's backup. */
+  const importBackup = async (drive: Uf2Drive) => {
+    try {
+      const info = await navi!.flash.importBackup(drive.root);
+      if (!info) return;
+      await refreshFirmware();
+      setConfirmNoBackup(null);
+      toast(t(`Added as this board’s backup: ${info.file}`, `Добавлено как копия прошивки этой платы: ${info.file}`));
+    } catch (err) {
+      toastError(t('Couldn’t add the saved copy.', 'Не удалось добавить сохранённую копию.'), err);
+    }
+  };
+
   const busy = step.phase === 'flashing' || step.phase === 'waiting' || backingUp !== null;
-  const hasBackup = (d: Uf2Drive) => firmware.some((f) => f.source === 'backup' && f.boardId === d.boardId);
+  const hasBackup = (d: Uf2Drive) => hasBoardBackup(firmware, d.boardId);
 
   return (
     <div className="page">
@@ -290,8 +321,8 @@ export function FlashTab({ active = true }: { active?: boolean }) {
                     {...whyDisabled(
                       (!d.current &&
                         t(
-                          'This bootloader can’t read the board’s current firmware: its drive has no CURRENT.UF2 (the RP2040 / RP2350 boot ROM never shows one).',
-                          'Этот загрузчик не умеет читать текущую прошивку платы: на его диске нет CURRENT.UF2 (загрузчик RP2040 / RP2350 его не показывает).',
+                          'This bootloader can’t read the board’s current firmware: its drive has no CURRENT.UF2 (the RP2040 / RP2350 boot ROM never shows one). Save it with picotool and add the copy below.',
+                          'Этот загрузчик не умеет читать текущую прошивку платы: на его диске нет CURRENT.UF2 (загрузчик RP2040 / RP2350 его не показывает). Сохраните её программой picotool и добавьте копию ниже.',
                         )) ||
                         (busy && t('Wait: a flash or backup is running', 'Подождите: идёт прошивка или копирование')),
                       t(
@@ -304,7 +335,7 @@ export function FlashTab({ active = true }: { active?: boolean }) {
                     <Archive {...ICON} /> {backingUp === d.root ? t('saving…', 'сохраняю…') : t('save current firmware', 'сохранить текущую прошивку')}
                   </button>
                   <button
-                    className={`btn btn--primary ${confirmUnverified ? 'btn--danger' : ''}`}
+                    className={`btn btn--primary ${confirmUnverified || confirmNoBackup === d.root ? 'btn--danger' : ''}`}
                     {...whyDisabled(
                       (!fw && t('Select a firmware file in the archive first', 'Сначала выберите файл прошивки в архиве')) ||
                         (fw?.format !== 'uf2' && t('This drive takes .uf2 files only; pick a .uf2 firmware', 'Этот диск принимает только .uf2; выберите прошивку .uf2')) ||
@@ -312,7 +343,7 @@ export function FlashTab({ active = true }: { active?: boolean }) {
                     )}
                     onClick={() => void flashUf2(d)}
                   >
-                    <Zap {...ICON} /> {confirmUnverified ? t('flash anyway', 'всё равно прошить') : t('flash', 'прошить')}
+                    <Zap {...ICON} /> {confirmUnverified || confirmNoBackup === d.root ? t('flash anyway', 'всё равно прошить') : t('flash', 'прошить')}
                   </button>
                 </div>
                 {d.current && !hasBackup(d) && (
@@ -322,6 +353,24 @@ export function FlashTab({ active = true }: { active?: boolean }) {
                       'Сначала сохраните текущую прошивку: это единственный способ вернуть ту, что стояла с завода (исходников продавца нет).',
                     )}
                   </p>
+                )}
+                {!d.current && !hasBackup(d) && (
+                  <div className="field-hint" style={{ display: 'grid', gap: 8, justifyItems: 'start' }}>
+                    <p>
+                      {t(
+                        'This bootloader can’t save the board’s current firmware. If it came from a seller and you may want it back, save it before the first flash with picotool (Raspberry Pi’s tool), for every half, while the half is in this bootloader:',
+                        'Этот загрузчик не умеет сохранять текущую прошивку платы. Если она от продавца и может понадобиться, сохраните её до первой прошивки программой picotool (от Raspberry Pi), для каждой половины, пока половина в этом загрузчике:',
+                      )}{' '}
+                      <code>picotool save -a half.uf2</code>
+                      {t(
+                        '. Then add the file here: it becomes this board’s backup, which can be flashed back. NAVI can’t tell the halves apart, so save both first.',
+                        '. Потом добавьте файл сюда: он станет копией прошивки этой платы, и её можно будет прошить обратно. NAVI не различает половины, поэтому сначала сохраните обе.',
+                      )}
+                    </p>
+                    <button className="btn" {...whyDisabled(busy && t('Wait: a flash or backup is running', 'Подождите: идёт прошивка или копирование'))} onClick={() => void importBackup(d)}>
+                      <Upload {...ICON} /> {t('add a saved copy…', 'добавить сохранённую копию…')}
+                    </button>
+                  </div>
                 )}
                 {backingUp === d.root && progress && (
                   <div className="progress">

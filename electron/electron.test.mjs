@@ -10,7 +10,7 @@ const { safeId, insideDir, joinInside, writeFileAtomic, safeFileName, unsafeSour
 const { createProjectStore } = require('./projects.cjs');
 const { validateArg, validatePath, toMsysPath, qmkCommand } = require('./runner.cjs');
 const { describeFirmware, scanUf2, archiveFirmware, listFirmware, firmwarePath, findBuiltFirmware } = require('./qmk.cjs');
-const { checkUf2, UF2_FAMILIES, BOOTLOADERS, backupCurrentUf2 } = require('./flash.cjs');
+const { checkUf2, UF2_FAMILIES, BOOTLOADERS, backupCurrentUf2, importBackupUf2 } = require('./flash.cjs');
 
 let tmp;
 beforeEach(() => {
@@ -184,6 +184,29 @@ describe('firmware', () => {
     expect(checkUf2(notUf2, drive)).toMatchObject({ ok: false, reason: 'not-uf2' });
     expect(UF2_FAMILIES['RPI-RP2']).toEqual([0xe48bff56]);
     expect(BOOTLOADERS.some(([type, vid, pid]) => type === 'stm32-dfu' && vid === '0483' && pid === 'df11')).toBe(true);
+  });
+
+  it('a picotool copy is added as the backup of the board on the drive; a wrong file is refused', () => {
+    const dir = path.join(tmp, 'fw');
+    const drive = { root: 'E:\\', boardId: 'RPI-RP2', model: 'Raspberry Pi RP2' };
+    const left = path.join(tmp, 'left half.uf2');
+    fs.writeFileSync(left, uf2(0xe48bff56));
+    const info = importBackupUf2(drive, left, dir);
+    expect(info).toMatchObject({ source: 'backup', boardId: 'RPI-RP2', format: 'uf2', originalPath: left, flash: { blocks: 1, bytes: 256 } });
+    expect(info.file).toMatch(/^backup-\d{4}-\d{2}-\d{2}-RPI-RP2-left_half\.uf2$/);
+    expect(listFirmware(dir).map((x) => x.id)).toEqual([info.id]);
+    // restoring it later passes the flash check as this board's backup
+    expect(checkUf2(firmwarePath(dir, info.id), drive, info)).toMatchObject({ ok: true });
+    const rp2350 = path.join(tmp, 'other.uf2');
+    fs.writeFileSync(rp2350, uf2(0xe48bff59));
+    expect(() => importBackupUf2(drive, rp2350, dir)).toThrow(/chip family/);
+    const notUf2 = path.join(tmp, 'text.uf2');
+    fs.writeFileSync(notUf2, 'hello');
+    expect(() => importBackupUf2(drive, notUf2, dir)).toThrow(/not a UF2/);
+    const bin = path.join(tmp, 'dump.bin');
+    fs.writeFileSync(bin, uf2(0xe48bff56));
+    expect(() => importBackupUf2(drive, bin, dir)).toThrow(/\.uf2/);
+    expect(listFirmware(dir)).toHaveLength(1);
   });
 
   it('archive: copy with sha256, list, paths only inside the archive', () => {
