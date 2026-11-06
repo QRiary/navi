@@ -463,7 +463,8 @@
 .deck {
   grid-area: deck;
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(320px, 1.4fr) minmax(240px, 1fr);
+  /* the right cell (save state, save, build + flash, to keyboard) never gets narrower than its buttons */
+  grid-template-columns: minmax(240px, 1fr) minmax(320px, 1.4fr) minmax(min-content, 1fr);
   gap: 8px;
   padding: 8px;
 }
@@ -516,7 +517,7 @@
   }
   .deck {
     /* the right cell holds the save state and two buttons: it needs the room more than the center */
-    grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.2fr) minmax(300px, 1.2fr);
+    grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.2fr) minmax(min-content, 1.2fr);
   }
 }
 

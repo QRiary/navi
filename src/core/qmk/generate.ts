@@ -18,6 +18,7 @@ import { configParams, configValueType } from './configParams';
 import { autoRepeatCode, REPEAT_SYMBOLS, type RepeatCase } from './autoRepeat';
 import { capsWordCode } from './capsWord';
 import { CAPS_WORD_QMK_DEFAULT } from '../project/capsWord';
+import { BOOTLOADER_HELPER_C, bootloaderHookC, bootloaderPipelineHookC } from './bootloaderReboot';
 import { layerOnTopCallback, layerOnTopState, layerOnTopStubs } from './layerOnTop';
 import { languageDecl, languageEarlyCode, languageKeyName, languagePrototypes, languageRecordLines, languageSwitchCode, languageSymbolCode, languageViaMacroLines, LANGUAGE_SYMBOLS, planLanguages, routedMacroStatements, ROUTE_UNICODE_MODE } from './languages';
 import { checkLanguages, languageCName } from '../project/languages';
@@ -284,6 +285,9 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   c.push(`// ${HEADER(project)}`);
   c.push(`// Keyboard matrix ${rows}×${cols}, ${keymap.layers.length} layers, QMK keycodes ${spec.version}.`);
   c.push('#include QMK_KEYBOARD_H');
+  // NAVI restarts the keyboard into its bootloader on a Raw HID packet; VIA owns raw_hid_receive when it is on.
+  const rebootOn = project.firmware.bootloaderReboot === true;
+  if (rebootOn && !via && !pipeline) c.push('#include "raw_hid.h"');
   // navi.h (own pipeline): the enums and *_navi prototypes, includable from the user's other .c files too.
   const h: string[] = [];
   if (pipeline) {
@@ -622,6 +626,11 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push('');
   }
 
+  if (rebootOn) {
+    c.push(...BOOTLOADER_HELPER_C);
+    if (via || !pipeline) c.push(...bootloaderHookC(via));
+  }
+
   // Which hooks the project fills (in both modes the same conditions as above).
   const hookUsed: Record<keyof typeof NAVI_HOOKS, boolean> = {
     process_record_user: recordHook,
@@ -641,6 +650,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   };
   if (pipeline) {
     // Every *_navi function always exists, so the user's calls keep compiling as the project changes.
+    c.push('// Call it first from your raw_hid_receive: if (navi_raw_hid_receive(data, length)) return;', ...bootloaderPipelineHookC(rebootOn && !via), '');
     const allStubs: { hook: keyof typeof NAVI_HOOKS; guard?: string; lines: string[] }[] = [
       { hook: 'process_record_user', lines: ['bool process_record_navi(uint16_t keycode, keyrecord_t *record) {', '    return true;', '}'] },
       { hook: 'get_tapping_term', lines: ['uint16_t get_tapping_term_navi(uint16_t keycode, keyrecord_t *record) {', '    return TAPPING_TERM;', '}'] },
@@ -689,6 +699,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     h.push('bool caps_word_press_navi(uint16_t keycode);');
     h.push('layer_state_t navi_layers_on(void); // layers turned on, hidden ones included');
     h.push('void navi_layer_off(uint8_t layer); // also turns off a hidden layer');
+    h.push('// Call it first from your raw_hid_receive: if (navi_raw_hid_receive(data, length)) return; (true = NAVI\'s own packet, handled)');
+    h.push('bool navi_raw_hid_receive(uint8_t *data, uint8_t length);');
     h.push('bool navi_is_stand_in(uint16_t keycode); // a stand-in MT / LT of a tap-hold key with actions: its base key is not its tap');
     if (lang) h.push(...languagePrototypes(lang));
     h.push('');
@@ -709,6 +721,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (hasTd) rules.TAP_DANCE_ENABLE = 'yes';
   if (repeating) rules.DEFERRED_EXEC_ENABLE = 'yes';
   if (capsRules) rules.CAPS_WORD_ENABLE = 'yes';
+  // With VIA on, VIA already turns raw HID on.
+  if (rebootOn && !via) rules.RAW_ENABLE = 'yes';
   if (hasCombos) rules.COMBO_ENABLE = 'yes';
   if (hasOverrides) rules.KEY_OVERRIDE_ENABLE = 'yes';
   if (hasEncoders) rules.ENCODER_MAP_ENABLE = 'yes';
@@ -825,8 +839,11 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   }
   if (pipeline || layersOnTop) for (const name of ['navi_layers_on', 'navi_layer_off']) generatedSymbols.add(name);
   if (unicodeTable.length) generatedSymbols.add('unicode_map');
+  if (rebootOn) generatedSymbols.add('navi_bootloader_packet');
+  if (rebootOn && via) generatedSymbols.add('via_command_kb');
+  if (rebootOn && !via && !pipeline) generatedSymbols.add('raw_hid_receive');
   // Own pipeline: every *_navi function is defined (the QMK hooks are the user's).
-  if (pipeline) for (const name of Object.values(NAVI_HOOKS)) generatedSymbols.add(name);
+  if (pipeline) for (const name of [...Object.values(NAVI_HOOKS), 'navi_raw_hid_receive']) generatedSymbols.add(name);
   for (const file of CUSTOM_FILES) {
     const text = custom[file];
     if (!text?.trim()) continue;
@@ -898,6 +915,17 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       { hook: 'keyboard_post_init_user', call: 'keyboard_post_init_navi();', why: { en: 'the first language’s layer turns on at power-on', ru: 'слой первого языка включается при включении клавиатуры' } },
       { hook: 'caps_word_press_user', call: 'return caps_word_press_navi(keycode);', why: { en: 'Caps Word key rules', ru: 'правила клавиш Caps Word' } },
     ];
+    // Said only while no file of the user's own C calls it (ownCode null = not read: warn).
+    if (rebootOn && !via && !ownCode?.some((f) => /\bnavi_raw_hid_receive\s*\(/.test(f.text))) {
+      issues.push({
+        level: 'warning',
+        where: 'own pipeline: raw_hid_receive()',
+        message: {
+          en: 'Your raw_hid_receive must call navi_raw_hid_receive(data, length) first (if it returns true, return): without it the build still passes, but NAVI can’t restart the keyboard into its bootloader (Firmware → Flash).',
+          ru: 'Ваша raw_hid_receive должна первой вызывать navi_raw_hid_receive(data, length) (если она вернула true — выйдите): без этого сборка пройдёт, но NAVI не сможет перезагрузить клавиатуру в загрузчик (Прошивка → Прошить).',
+        },
+      });
+    }
     for (const f of forward) {
       if (!hookUsed[f.hook]) continue;
       issues.push({

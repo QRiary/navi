@@ -31,7 +31,7 @@ export function SetupTab({ active = true }: { active?: boolean }) {
   const revokeTrust = useQmkStore((s) => s.revokeTrust);
 
   useEffect(() => {
-    if (!env && navi) void detect();
+    if (!env && navi && !useQmkStore.getState().detecting) void detect(); // the top bar's build button may have started it
   }, [env, detect]);
   // Reread every time the tab is shown (it stays mounted while hidden; a build may have added a folder).
   useEffect(() => {

@@ -37,6 +37,7 @@
     "postinstall": "node node_modules/electron/install.js",
     "app": "vite build && electron .",
     "app:dev": "node scripts/dev-app.mjs",
+    "app:test": "node scripts/app-test.mjs",
     "device:probe": "vite build && electron . --probe-device",
     "gen:qmk": "node scripts/gen-qmk-data.mjs",
     "icon": "electron scripts/make-icon.cjs",

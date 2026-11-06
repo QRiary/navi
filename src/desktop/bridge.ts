@@ -59,7 +59,8 @@ export interface KeymapSources {
   dir: string;
   exists: boolean;
   root: 'firmware' | 'userspace';
-  files: { name: string; text: string }[];
+  /** `navi`: the file is exactly what NAVI wrote there last (electron/keymapWrites.cjs); false = maybe edited outside NAVI. */
+  files: { name: string; text: string; navi?: boolean }[];
 }
 
 export interface FirmwareInfo {
@@ -123,6 +124,8 @@ export interface Uf2Drive {
   model: string;
   boardId: string;
   info: string;
+  /** The drive shows CURRENT.UF2, so its current firmware can be saved (the RP2040 / RP2350 ROM doesn't). */
+  current: boolean;
 }
 
 export interface FlashScan {

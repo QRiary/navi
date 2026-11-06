@@ -1142,10 +1142,21 @@
 /* In a narrow window the project name gives way, not the buttons beside it */
 .deck-cell--right > * {
   flex-shrink: 0;
+  /* one line each, so the cell's min-content (its grid column's minimum) is the buttons' real width */
+  white-space: nowrap;
 }
 
 .deck-cell--right > .save-state {
   flex-shrink: 1;
+  /* never narrower than “saved ?” (the deck column is sized from this, layout.css) */
+  min-width: min-content;
+}
+
+/* The project name adds nothing to that minimum: it fills what is left and ellipsizes */
+.deck-cell--right > .save-state span {
+  contain: inline-size;
+  align-self: stretch;
+  text-align: right;
 }
 
 .save-state--dirty strong {

@@ -3,8 +3,8 @@
  * finding the keyboard in bootloader mode, writing:
  *  • UF2 (RP2040 etc.) — copying to the bootloader drive, with a chip family check;
  *  • the rest — the official `qmk flash <file>`.
- * Before the first flash — a backup of the current firmware from the RP2040 bootloader drive (CURRENT.UF2):
- * it is the only way to restore the seller's firmware later.
+ * Before the first flash — a backup of the current firmware from a UF2 bootloader drive that shows CURRENT.UF2
+ * (the RP2040 / RP2350 ROM doesn't, so there is nothing to save there): the only way back to the seller's firmware.
  * “Done” is shown only when the keyboard appears over USB again (the project's VID:PID).
  */
 import { useEffect, useRef, useState } from 'react';
@@ -17,7 +17,9 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { toast, toastError } from '../../store/toastStore';
 import { BootloaderHelp } from '../device/BootloaderHelp';
 import { BuildLog } from './BuildLog';
+import { BootloaderRebootRow } from './BootloaderRebootRow';
 import { QMK_DOCS } from '../../lib/qmkDocs';
+import { expectedUsb, waitForKeyboardBack } from '../../lib/flashSteps';
 import { whyDisabled } from '../../lib/whyDisabled';
 import { EmptyState } from '../EmptyState';
 import { Hint } from '../InfoTip';
@@ -87,43 +89,17 @@ export function FlashTab({ active = true }: { active?: boolean }) {
 
   if (!navi) return <p className="field-hint">{t('Flashing needs the desktop app.', 'Для прошивки нужно настольное приложение.')}</p>;
   const fw = firmware.find((f) => f.id === selected) ?? null;
-  const expect = project?.device ?? (project?.hardware.usb.vid && project.hardware.usb.pid ? { vid: project.hardware.usb.vid, pid: project.hardware.usb.pid } : null);
+  const expect = expectedUsb(project);
 
   /** After flashing: wait until the keyboard appears over USB again (up to 40 s). */
   const waitForKeyboard = async () => {
-    const since = Date.now();
-    setStep({ phase: 'waiting', since });
-    while (Date.now() - since < 40000) {
-      await new Promise((r) => setTimeout(r, 1500));
-      const s = await navi!.flash.scan();
-      const back = expect ? s.usb.find((u) => Number.parseInt(u.vid, 16) === expect.vid && Number.parseInt(u.pid, 16) === expect.pid) : null;
-      const stillBoot = s.bootloaders.length > 0 || s.uf2Drives.length > 0;
-      if (back) {
-        await refreshDevices();
-        setStep({ phase: 'done', ok: true, text: t(`Done: the keyboard is back (USB ${back.vid}:${back.pid}).`, `Готово: клавиатура снова на связи (USB ${back.vid}:${back.pid}).`) });
-        toast(t('Firmware flashed — keyboard is back', 'Прошито — клавиатура снова на связи'));
-        return;
-      }
-      if (!expect && !stillBoot && Date.now() - since > 6000) {
-        setStep({
-          phase: 'done',
-          ok: true,
-          text: t(
-            'The bootloader is gone (the board restarted). The keyboard USB ID is not known to the project, so the result is not confirmed — check that the keyboard types.',
-            'Загрузчик пропал (плата перезапустилась). USB ID клавиатуры проекту не известен — результат не подтверждён, проверьте, что клавиатура печатает.',
-          ),
-        });
-        return;
-      }
+    setStep({ phase: 'waiting', since: Date.now() });
+    const res = await waitForKeyboardBack(expect);
+    if (res.back) {
+      await refreshDevices();
+      toast(t('Firmware flashed — keyboard is back', 'Прошито — клавиатура снова на связи'));
     }
-    setStep({
-      phase: 'done',
-      ok: false,
-      text: t(
-        'The keyboard did not come back within 40 s. If a new USB ID was expected, check by typing; otherwise enter the bootloader again and flash a previous firmware from the archive.',
-        'Клавиатура не вернулась за 40 с. Если ожидался другой USB ID — проверьте, печатает ли она; иначе снова войдите в загрузчик и прошейте прежнюю прошивку из архива.',
-      ),
-    });
+    setStep({ phase: 'done', ok: res.ok, text: res.text });
   };
 
   const flashUf2 = async (drive: Uf2Drive) => {
@@ -209,6 +185,13 @@ export function FlashTab({ active = true }: { active?: boolean }) {
 
   return (
     <div className="page">
+      {project && (
+        <div className="panel-box" style={{ marginBottom: 'var(--gap)' }}>
+          <div className="panel-box-body">
+            <BootloaderRebootRow project={project} />
+          </div>
+        </div>
+      )}
       <div className="grid-2">
         <section className="panel-box">
           <div className="panel-box-head">
@@ -305,7 +288,12 @@ export function FlashTab({ active = true }: { active?: boolean }) {
                   <button
                     className="btn"
                     {...whyDisabled(
-                      busy && t('Wait: a flash or backup is running', 'Подождите: идёт прошивка или копирование'),
+                      (!d.current &&
+                        t(
+                          'This bootloader can’t read the board’s current firmware: its drive has no CURRENT.UF2 (the RP2040 / RP2350 boot ROM never shows one).',
+                          'Этот загрузчик не умеет читать текущую прошивку платы: на его диске нет CURRENT.UF2 (загрузчик RP2040 / RP2350 его не показывает).',
+                        )) ||
+                        (busy && t('Wait: a flash or backup is running', 'Подождите: идёт прошивка или копирование')),
                       t(
                         'Copy the whole flash memory of the board (CURRENT.UF2) into the archive. Nothing is written to the board.',
                         'Скопировать всю память платы (CURRENT.UF2) в архив. На плату ничего не пишется.',
@@ -327,7 +315,7 @@ export function FlashTab({ active = true }: { active?: boolean }) {
                     <Zap {...ICON} /> {confirmUnverified ? t('flash anyway', 'всё равно прошить') : t('flash', 'прошить')}
                   </button>
                 </div>
-                {!hasBackup(d) && (
+                {d.current && !hasBackup(d) && (
                   <p className="field-hint">
                     {t(
                       'First save the current firmware: it is the only way back to the firmware the keyboard came with (the seller’s source is unknown).',

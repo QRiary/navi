@@ -13,6 +13,7 @@ npm run typecheck      # tsc --noEmit
 npm run build          # tsc + vite build → dist/
 npm run app            # build + Electron window
 npm run app:dev        # Vite :5190 + Electron with hot reload
+npm run app:test       # build + open the worktree with the newest commit not on master (else master); --dry-run prints the pick
 npm run device:probe   # build + hidden window: reads (read-only!) all VIA keyboards and prints JSON
 npm run gen:qmk -- <qmk_firmware>   # regenerate src/core/qmk-data/* from QMK sources
 npm run icon           # build/icon.svg → build/icon.png, public/icon.png, build/icon.ico
@@ -28,7 +29,7 @@ After changes: `npm run typecheck; npm test; npm run build`.
 - Do not fake anything: connection/write/build/flash statuses only from facts (keyboard answer, read-back, exit code, device appearing).
 - Do not invent hardware: unknown stays empty/“unknown”, guesses get evidence `heuristic`.
 - Never write to a keyboard or flash without an explicit user action. Show the change plan before writing.
-- QMK files are written only into the keymap folder (or a new target) and only after showing a diff; previous files are backed up.
+- QMK files are written only into the keymap folder (or a new target) and only after showing a diff; previous files are backed up. One exception (the owner's call, 2026-11-06): “build + flash” overwrites without asking a file that is exactly what NAVI wrote there last (`electron/keymapWrites.cjs`); any other file still gets its diff first.
 - Layers are numbers in QMK: reorder/delete layers only through `src/core/project/ops.ts`.
 - Build safety: make variables only from the allowlist; imported own code is held until “allow” (`firmware.customReview`). Do not weaken this.
 - New project field = `PROJECT_SCHEMA_VERSION + 1` + migration in `migrate.ts` + test.

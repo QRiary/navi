@@ -13,6 +13,7 @@ const { execFile } = require('node:child_process');
 const { cancel, findMsys, findOnPath, fromWslUnc, parseWslList, qmkCommand, run, toWslUnc, validateArg, validateDistro, validatePath } = require('./runner.cjs');
 const { allowedBuildOption, insideDir, joinInside, readTextIfExists, safeFileName, safeId, unsafeSource, writeFileAtomic } = require('./safety.cjs');
 const { createTrustStore, scanFolders, trustDialogDetail, trustRefusal } = require('./trust.cjs');
+const { createKeymapWrites } = require('./keymapWrites.cjs');
 
 const KB_RE = /^[a-z0-9_][a-z0-9_/.+-]{0,150}$/i;
 const KM_RE = /^[a-z0-9_][a-z0-9_-]{0,60}$/i;
@@ -366,7 +367,8 @@ async function checkTrust(store, home, userspace, kb, km) {
 }
 
 /** Async: see readOwnCode. */
-async function readKeymap(home, userspace, kb, km) {
+/** `writes` (keymapWrites.cjs): each file gets `navi: true` when it is exactly what NAVI wrote there last. */
+async function readKeymap(home, userspace, kb, km, writes = null) {
   const { dir, exists: found, root } = keymapDir(home, userspace, kb, km);
   const files = [];
   if (found) {
@@ -374,7 +376,8 @@ async function readKeymap(home, userspace, kb, km) {
       const full = path.join(dir, name);
       const st = await fs.promises.stat(full);
       if (!st.isFile() || st.size > MAX_SOURCE) continue;
-      files.push({ name, text: await fs.promises.readFile(full, 'utf8') });
+      const text = await fs.promises.readFile(full, 'utf8');
+      files.push({ name, text, navi: writes ? writes.isNavis(full, text) : false });
     }
   }
   return { dir, exists: found, root, files };
@@ -448,7 +451,7 @@ function backupFiles(dataDir, baseDir, names) {
   return copied ? backup : null;
 }
 
-function writeKeymap(dataDir, home, userspace, kb, km, files) {
+function writeKeymap(dataDir, home, userspace, kb, km, files, writes = null) {
   const { dir } = keymapDir(home, userspace, kb, km);
   if (!Array.isArray(files) || files.length === 0) throw new Error('no files');
   for (const f of files) {
@@ -458,6 +461,7 @@ function writeKeymap(dataDir, home, userspace, kb, km, files) {
   }
   const backup = backupFiles(dataDir, dir, files.map((f) => f.name));
   for (const f of files) writeFileAtomic(path.join(dir, f.name), f.text);
+  writes?.record(dir, files);
   return { dir, backup };
 }
 
@@ -656,17 +660,18 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
   const send = (channel, payload) => getWindow()?.webContents.send(channel, payload);
   // Only NAVI's local data, never the JSONC config the renderer writes.
   const trust = createTrustStore(path.join(dataDir, 'trusted-folders.json'));
+  const writes = createKeymapWrites(path.join(dataDir, 'keymap-writes.json'));
 
   ipcMain.handle('navi:qmk:detect', (_e, settings) => detect(settings));
   ipcMain.handle('navi:qmk:list-keyboards', (_e, home) => listKeyboards(validatePath(home)));
   ipcMain.handle('navi:qmk:read-keyboard', (_e, home, userspace, kb) => readKeyboard(validatePath(home), checkUserspace(userspace), kb));
-  ipcMain.handle('navi:qmk:read-keymap', (_e, home, userspace, kb, km) => readKeymap(validatePath(home), checkUserspace(userspace), kb, km));
+  ipcMain.handle('navi:qmk:read-keymap', (_e, home, userspace, kb, km) => readKeymap(validatePath(home), checkUserspace(userspace), kb, km, writes));
   ipcMain.handle('navi:qmk:read-own-code', (_e, home, userspace, kb, km) => {
     checkKb(kb);
     checkKm(km);
     return readOwnCode(validatePath(home), checkUserspace(userspace), kb, km);
   });
-  ipcMain.handle('navi:qmk:write-keymap', (_e, home, userspace, kb, km, files) => writeKeymap(dataDir, validatePath(home), checkUserspace(userspace), kb, km, files));
+  ipcMain.handle('navi:qmk:write-keymap', (_e, home, userspace, kb, km, files) => writeKeymap(dataDir, validatePath(home), checkUserspace(userspace), kb, km, files, writes));
   ipcMain.handle('navi:qmk:write-keyboard', (_e, home, kb, files) => writeKeyboard(dataDir, validatePath(home), kb, files));
 
   /** Build: a real qmk compile. The result is copied into the firmware archive. */

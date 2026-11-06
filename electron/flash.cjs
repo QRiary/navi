@@ -7,8 +7,8 @@
  *    the .uf2 to this drive. Before copying we check that the file is UF2 and that its “family”
  *    matches the board (RP2040 ≠ RP2350 ≠ nRF52…): a mismatching file is not written.
  *  • Other bootloaders (DFU, Caterina, HalfKay…) — through the official `qmk flash <file>`.
- *  • Current firmware backup: the RP2040 bootloader shows a CURRENT.UF2 file — the board's whole flash
- *    memory. Its copy in the archive = the seller's firmware, which can be restored by the same UF2 write.
+ *  • Current firmware backup: a UF2 bootloader that shows CURRENT.UF2 (Adafruit-style; not the RP2040 / RP2350 ROM)
+ *    exposes the board's whole flash memory. Its copy in the archive = the seller's firmware, restored by the same UF2 write.
  *
  * Success is NOT declared here: a finished copy/program is not a confirmation yet.
  * The confirmation is the keyboard appearing over USB again (the interface checks that).
@@ -90,7 +90,10 @@ function listUf2Drives() {
       const text = fs.readFileSync(info, 'utf8').slice(0, 2000);
       const model = (text.match(/Model:\s*(.+)/) || [])[1]?.trim() ?? '';
       const boardId = (text.match(/Board-ID:\s*(.+)/) || [])[1]?.trim() ?? '';
-      out.push({ root, model, boardId, info: text.trim() });
+      // current: the drive shows CURRENT.UF2 (Adafruit-style UF2 bootloaders); the RP2040 / RP2350 boot ROM
+      // shows only INFO_UF2.TXT and INDEX.HTM, so its flash can't be read from the drive.
+      const current = fs.existsSync(path.join(root, 'CURRENT.UF2'));
+      out.push({ root, model, boardId, info: text.trim(), current });
     } catch {
       // drive not available
     }

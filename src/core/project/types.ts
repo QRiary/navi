@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 14;
+export const PROJECT_SCHEMA_VERSION = 15;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -443,6 +443,11 @@ export interface FirmwareConfig {
    * is hidden while it is on. NAVI's own setting (generated layer_state_set_user / layer_state_set_navi), not a define.
    */
   layerKeysOnTop: boolean;
+  /**
+   * Let NAVI restart the keyboard into its bootloader (Raw HID packet, then reset_keyboard()), so “build + flash”
+   * needs no key press. NAVI's own C code in keymap.c, not a define.
+   */
+  bootloaderReboot: boolean;
   /**
    * Auto repeat of keys ticked “repeat while held” (macros, custom keycodes): ms before the first repeat and ms between
    * repeats. NAVI's own C code in keymap.c, not a define.

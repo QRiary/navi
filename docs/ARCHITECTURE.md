@@ -69,6 +69,7 @@ build/           app icon (icon.svg is the source)
 | QMK CLI: finding MSYS/qmk, sources, writing the keymap with a backup, compile, firmware archive; External Userspace: keymap lookup like QMK's `locate_keymap`, a `qmk compile -n` dry run refuses a build when QMK would use another folder, only firmware this build made is taken | `electron/qmk.cjs`, `electron/runner.cjs` (only validated arguments) |
 | Trusted folders: trust store (`<userData>/trusted-folders.json`, per normalized folder), scan of the keymap folder and `users/<keymap>` against the allowlist, build gate, grant (main-process warning dialog) / revoke IPC | `electron/trust.cjs`, gate and IPC in `electron/qmk.cjs` |
 | Flashing: bootloaders from the QMK table, UF2 with chip family check, `CURRENT.UF2` backup, `qmk flash` | `electron/flash.cjs` |
+| “Build + flash” beside Save: save → write the keymap files (a diff only for files not as NAVI wrote them last: `<userData>/keymap-writes.json`) → build → NAVI's Raw HID restart packet (`firmware.bootloaderReboot`, by the build's `RAW_USAGE_PAGE`/`ID`) or “press QK_BOOT” → flash the half in its bootloader → wait for it over USB; every refusal stops with a toast leading to its Firmware tab. Firmware side: `navi_bootloader_packet` + `raw_hid_receive` / `via_command_kb` / `navi_raw_hid_receive` (own pipeline) | `src/store/buildFlashStore.ts`, `components/firmware/BuildFlashButton.tsx`, `src/lib/flashSteps.ts` (shared with the Flash tab), `src/device/rawHid.ts`, `electron/keymapWrites.cjs`, `src/core/qmk/bootloaderReboot.ts` |
 | WebHID transport, `--probe-device` mode | `src/device/webhid.ts`, `src/device/probeRun.ts` |
 | Stores: project + undo/redo + draft; device; QMK; settings | `src/store/projectStore.ts`, `deviceStore.ts`, `qmkStore.ts`, `settingsStore.ts` |
 | Keyboard drawing (SVG, rotation, selection frame, drag) | `src/components/keyboard/KeyboardCanvas.tsx` |
@@ -93,7 +94,8 @@ Building runs `make` on the user's computer, so a project file must not be able 
   (`firmware.customReview`).
 - The main process checks the files again right before writing (`electron/safety.cjs`).
 - QMK files are written only into the keymap folder (or a new target) and only after showing a diff;
-  the previous files go to `%APPDATA%\NAVI\backups\qmk`.
+  the previous files go to `%APPDATA%\NAVI\backups\qmk`. “Build + flash” skips the diff only for a file that is
+  exactly what NAVI wrote there last (`<userData>/keymap-writes.json`).
 - Before a build, every file in the keymap folder and `users/<keymap>` must pass the same allowlist (`.mk` → make
   check, other text → C include check; links, files too big to read and over 5000 files fail), or the build is
   refused, unless the user trusted that folder (`electron/trust.cjs`). Trust is kept only in
