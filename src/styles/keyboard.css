@@ -328,13 +328,31 @@
   z-index: 2;
 }
 
-/* Combos in the strip, one wrapping line under the legend (a card over the drawing covered keys). */
+/* Combos in the strip under the legend (a card over the drawing covered keys): the heading on its own line, then
+   one row per group (never fired / fired), its head in a fixed column and the names wrapping beside it. */
 .heat-combos {
   flex: 1 0 100%;
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--fs-xs);
+}
+
+.heat-combos .kicker {
+  white-space: nowrap;
+}
+
+.heat-combo-group {
+  display: flex;
   align-items: baseline;
   gap: 12px;
-  font-size: var(--fs-xs);
+}
+
+.heat-combo-group-head {
+  flex: none;
+  min-width: 110px;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .heat-combos ul {

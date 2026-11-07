@@ -9,7 +9,7 @@ import { EmptyState } from '../EmptyState';
 import { InfoTip } from '../InfoTip';
 import { Modal } from '../Modal';
 import { comboCountKey, spotCounts, spotTotal, type KeyCountsFile } from '../../core/project/keyCounts';
-import type { Keymap } from '../../core/project/types';
+import type { Combo, Keymap } from '../../core/project/types';
 import { comboRows, countAtPosition, heatColor, HEAT_STOPS, inkOn } from '../../lib/heatmap';
 import { navigate } from '../../lib/router';
 import { whyDisabled } from '../../lib/whyDisabled';
@@ -152,22 +152,49 @@ export function HeatmapOverlay() {
   return null;
 }
 
-/** Combos by times fired, never fired first: a wrapping line in the strip (a card on the drawing covered keys). */
+/**
+ * Combos by times fired, in the strip (a card on the drawing covered keys): the heading on its own line, then the
+ * never-fired ones as one group named once, then the fired ones, fewest first (the next candidates to drop).
+ */
 function HeatmapCombos({ file }: { file: KeyCountsFile }) {
   const combos = useProjectStore((s) => s.project?.combos) ?? [];
   const rows = comboRows(combos, file);
   if (rows.length === 0) return null;
+  const never = rows.filter((r) => r.count === 0);
+  const fired = rows.filter((r) => r.count > 0);
+  const name = (c: Combo) => c.name.trim() || comboCountKey(c);
   return (
     <div className="heat-combos" data-find-id="heatmap:combos">
       <span className="kicker">{t('Combos by times fired', 'Комбо по числу срабатываний')}</span>
-      <ul>
-        {rows.map(({ combo, count }) => (
-          <li key={combo.id} className={count === 0 ? 'is-zero' : ''}>
-            <span className="heat-combo-name">{combo.name.trim() || comboCountKey(combo)}</span>
-            <span className="heat-combo-count">{count === 0 ? t('never', 'ни разу') : count}</span>
-          </li>
-        ))}
-      </ul>
+      {never.length > 0 && (
+        <div className="heat-combo-group">
+          <span className="heat-combo-group-head">
+            {t('Never fired', 'Ни разу')} ({never.length})
+          </span>
+          <ul>
+            {never.map(({ combo }) => (
+              <li key={combo.id} className="is-zero">
+                <span className="heat-combo-name">{name(combo)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {fired.length > 0 && (
+        <div className="heat-combo-group">
+          <span className="heat-combo-group-head">
+            {t('Fired', 'Срабатывали')} ({fired.length})
+          </span>
+          <ul>
+            {fired.map(({ combo, count }) => (
+              <li key={combo.id}>
+                <span className="heat-combo-name">{name(combo)}</span>
+                <span className="heat-combo-count">{count}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
