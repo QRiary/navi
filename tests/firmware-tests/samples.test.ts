@@ -24,6 +24,8 @@
  *             language's OS shortcut; also as generated-custom-any
  *   macros-any  macro key steps above one byte without VIA: C(KC_A), TG(1), MO(1) down / up, a custom keycode, TG(1)
  *             auto-repeated; also as generated-macros-any
+ *   own-hardware  own pipeline whose own.c includes transactions.h unguarded, registers / sends a split RPC, sends raw
+ *             HID and calls code from LIB_SRC; a GUI + Space key; also as generated-own-hardware
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -311,7 +313,54 @@ it.skipIf(!out)('writes the sample keymap folders for the firmware test runner',
   write(join(out!, 'macros-any'), macrosAny(), MACROS_ANY_TESTS);
   writeGenerated(join(out!, 'generated-macros-any'), macrosAny());
   writeFileSync(join(out!, 'generated-secret', 'secrets.h'), SECRETS_H);
+  const hw = { 'rules.mk': HARDWARE_RULES, 'config.h': HARDWARE_CONFIG, 'own.c': HARDWARE_OWN_C, 'lib.c': HARDWARE_LIB_C };
+  write(join(out!, 'own-hardware'), ownHardware(true), ['r0c0 => a', 'r0c1 => y', 'r0c2 => ⟨G- ⟩'], hw);
+  writeGenerated(join(out!, 'generated-own-hardware'), ownHardware(false));
+  for (const [name, text] of Object.entries(hw)) writeFileSync(join(out!, 'generated-own-hardware', name), text);
 });
+
+/**
+ * Own code that reaches hardware the test build leaves out: it includes QMK's split transactions header unguarded and
+ * registers / sends an RPC, sends raw HID, and keeps part of its code in LIB_SRC. r0c2 is GUI + Space. Without `ownKey`
+ * r0c1 is KC_B: NAVI's model can't know what the own C does to KC_X.
+ */
+function ownHardware(ownKey: boolean): Project {
+  const p = pipeline('fw tests own hardware');
+  return withKeys(p, [[0, 0, 2, 'G(KC_SPC)'], ...(ownKey ? [] : [[0, 0, 1, 'KC_B']] as [number, number, number, string][])]);
+}
+
+const HARDWARE_RULES = PIPELINE_RULES + ['RAW_ENABLE = yes', 'SPLIT_KEYBOARD = yes', 'LIB_SRC += lib.c', ''].join('\n');
+const HARDWARE_CONFIG = PIPELINE_CONFIG + '#define SPLIT_TRANSACTION_IDS_USER OWN_SYNC\n';
+const HARDWARE_LIB_C = ['#include <stdint.h>', '', 'uint16_t own_lib_key(void) {', '    return 0x1C; // KC_Y', '}', ''].join('\n');
+const HARDWARE_OWN_C = [
+  '#include "navi.h"',
+  '#include "transactions.h"',
+  '#include "raw_hid.h"',
+  '',
+  'uint16_t own_lib_key(void);',
+  '',
+  'static void own_sync(uint8_t in_size, const void *in, uint8_t out_size, void *out) {}',
+  '',
+  'void keyboard_post_init_user(void) {',
+  '    transaction_register_rpc(OWN_SYNC, own_sync);',
+  '}',
+  '',
+  'bool process_record_user(uint16_t keycode, keyrecord_t *record) {',
+  '    if (!process_record_navi(keycode, record)) return false;',
+  '    if (keycode == KC_X) {',
+  '        if (record->event.pressed) {',
+  '            uint8_t packet[32] = {1};',
+  '            raw_hid_send(packet, sizeof(packet));',
+  '            uint8_t bit = 1;',
+  '            transaction_rpc_send(OWN_SYNC, sizeof(bit), &bit);',
+  '            tap_code(own_lib_key());',
+  '        }',
+  '        return false;',
+  '    }',
+  '    return true;',
+  '}',
+  '',
+].join('\n');
 
 const SECRETS_H = '#pragma once\n#define WORK_PIN "zz"\n';
 

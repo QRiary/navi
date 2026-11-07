@@ -102,6 +102,11 @@ try {
   const genMacrosAny = await play('generated-macros-any', 4, 10);
   check('generated-macros-any: NAVI\'s own navi_tests.txt passes whole', genMacrosAny.status === 'pass' && genMacrosAny.passed > 0, genMacrosAny);
 
+  const hw = await play('own-hardware', 4, 10);
+  check('own-hardware: own C including transactions.h unguarded, sending raw HID and keeping code in LIB_SRC builds; GUI + Space reads ⟨G- ⟩', hw.status === 'pass' && hw.passed === 3, hw);
+  const genHw = await play('generated-own-hardware', 4, 10);
+  check('generated-own-hardware: NAVI\'s own navi_tests.txt passes whole', genHw.status === 'pass' && genHw.passed > 0, genHw);
+
   const all = await play('all-pipeline', 10, 6);
   check('all-pipeline: LEDs, the task switcher, a per-language key and a secret macro build together in the own pipeline', all.status === 'pass' && all.passed === 3, all);
 
