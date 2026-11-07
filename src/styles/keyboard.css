@@ -256,6 +256,134 @@
   fill: transparent;
 }
 
+/* Heatmap view: toggle, strip under the layer tabs, legend, combo list, notes */
+.seg button.heat-toggle,
+.heat-strip .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.heat-strip {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.heat-legend {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.heat-legend-end {
+  line-height: 12px;
+}
+
+.heat-legend-scale {
+  position: relative;
+  width: 200px;
+  margin-right: 16px;
+}
+
+.heat-legend-bar {
+  height: 12px;
+  border: var(--border);
+}
+
+.heat-legend-ticks {
+  position: relative;
+  height: 16px;
+  margin-top: 4px;
+}
+
+.heat-legend-ticks span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.heat-legend-ticks span:last-child {
+  transform: translateX(-100%);
+}
+
+.heat-since {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.heat-note {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(460px, calc(100% - 48px));
+  background: var(--panel-background);
+  border: var(--border);
+  z-index: 2;
+}
+
+.heat-combos {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 224px;
+  max-height: calc(100% - 64px);
+  overflow-y: auto;
+  padding: 12px;
+  background: var(--panel-background);
+  border: var(--border);
+  font-size: var(--fs-xs);
+}
+
+.heat-combos ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.heat-combos li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.heat-combos li.is-zero {
+  color: var(--text-label);
+}
+
+.heat-combo-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Heatmap: filled by count (fill and label color from the key's --heat-* variables); a never-pressed key is outlined only */
+.kb-key.is-heat .kb-key-shape {
+  fill: var(--heat-fill, transparent);
+  stroke: var(--heat-fill, var(--key-border));
+}
+
+.kb-key.is-heat-cold text {
+  fill: var(--text-label);
+}
+
+.kb-key.is-heat:not(.is-heat-cold) text {
+  fill: var(--heat-ink);
+}
+
+.kb-key.is-heat:hover .kb-key-shape {
+  stroke: var(--text-primary);
+}
+
 /* Selected — inverted, like an active menu item */
 .kb-key.is-selected .kb-key-shape {
   fill: var(--accent-color);
