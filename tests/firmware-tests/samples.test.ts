@@ -11,6 +11,8 @@
  *             SPLIT_KEYBOARD on and own lines asking which half they run on
  *   secret    a macro typing a, a secret, b, with a secrets header beside keymap.c: the test build leaves the header
  *             out, so the macro types "ab" (also as generated-secret: the macro goes to [not checked])
+ *   overrides Shift overrides on a macro, a custom keycode with an action and CW_TOGG (keys QMK's overrides would
+ *             never see without navi_key_overrides_first); also as generated-overrides
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -282,6 +284,8 @@ it.skipIf(!out)('writes the sample keymap folders for the firmware test runner',
   writeGenerated(join(out!, 'generated-languages'), languages());
   write(join(out!, 'secret'), secret(), ['r0c0 => a', 'r0c1 => ab'], { 'secrets.h': SECRETS_H });
   writeGenerated(join(out!, 'generated-secret'), secret());
+  write(join(out!, 'overrides'), overrides(), ['r0c0 => hi', 'r0c1 => yo', 'r0c3 r0c4 r0c3 r0c4 => Aa', '+r0c2 r0c0 -r0c2 => ⟨LSFT⟩x⟨LSFT⟩', '+r0c2 r0c1 -r0c2 => ⟨LSFT⟩y⟨LSFT⟩', '+r0c2 r0c3 -r0c2 => ⟨LSFT⟩z⟨LSFT⟩']);
+  writeGenerated(join(out!, 'generated-overrides'), overrides());
   writeFileSync(join(out!, 'generated-secret', 'secrets.h'), SECRETS_H);
 });
 
@@ -293,6 +297,27 @@ function secret(): Project {
     [0, 0, 1, 'QK_MACRO_0'],
   ]);
   return { ...p, macros: [{ id: 'm0', index: 0, name: 'pin', steps: [{ type: 'text', text: 'a' }, { type: 'secret', name: 'WORK_PIN' }, { type: 'text', text: 'b' }] }] };
+}
+
+/** Shift overrides on keys NAVI's code or Caps Word takes before QMK's key overrides: a macro, a custom keycode with an action, CW_TOGG. */
+function overrides(): Project {
+  const p = withKeys(createBlankProject('fw tests overrides', 4, 10, false), [
+    [0, 0, 0, 'QK_MACRO_0'],
+    [0, 0, 1, 'QK_USER_0'],
+    [0, 0, 2, 'KC_LSFT'],
+    [0, 0, 3, 'CW_TOGG'],
+    [0, 0, 4, 'KC_A'],
+  ]);
+  return {
+    ...p,
+    macros: [{ id: 'm0', index: 0, name: 'hi', steps: [{ type: 'text', text: 'hi' }] }],
+    customKeycodes: [{ id: 'yo', name: 'MY_YO', description: '', action: { type: 'send-string', text: 'yo' } }],
+    keyOverrides: [
+      { id: 'a', name: 'shift_macro', mods: 0x02, trigger: q('QK_MACRO_0'), replacement: q('KC_X') },
+      { id: 'b', name: 'shift_yo', mods: 0x02, trigger: q('QK_USER_0'), replacement: q('KC_Y') },
+      { id: 'c', name: 'shift_caps', mods: 0x02, trigger: q('CW_TOGG'), replacement: q('KC_Z') },
+    ],
+  };
 }
 
 function writeGenerated(dir: string, p: Project) {

@@ -38,6 +38,7 @@ import { checkTapHolds, effectiveTapHolds } from '../project/tapHolds';
 import { checkTapHoldActions, effectiveTapHoldActions, projectOwnCodeRefs, type OwnCodeFile } from '../project/tapHoldActions';
 import { anyHoldsOn, caseLines, comboEventCode, hasHoldKeys, hasSpots, spotsCode, keyListsCode, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, naviSendCode, replayTracked, standInCheckCode, tapHoldsCode, type StandIn } from './tapHold';
 import { tapDanceCode } from './tapDance';
+import { KEY_OVERRIDES_FIRST_LINE, KEY_OVERRIDES_FIRST_SYMBOLS, keyOverridesFirstCode, keyOverridesFirstTriggers, keyOverrideOrderIssues } from './keyOverridesFirst';
 import { checkSecrets, secretsCode } from './secretText';
 import { isTextStep, textArg } from '../project/textSteps';
 import { layoutMacro, renderLayers, textLayout } from './layoutText';
@@ -299,6 +300,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     ...checkTapDances(spec, project.tapDances, tdReserved),
     ...checkCombos(project, project.combos, spec),
     ...checkKeyOverrides(project.keyOverrides),
+    ...keyOverrideOrderIssues(spec, project),
     ...checkLeaderSequences(spec, project),
     ...checkUnicodeMap(spec, project),
     ...layerNameIssues(project, keymap),
@@ -698,7 +700,10 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   // keyboard_post_init: what runs once at power-on (languages, LEDs).
   const postInit = [...(lang?.layers ? ['    layer_state_set(layer_state); // the first language’s layer on at power-on'] : []), ...(ledsOn ? ['    navi_leds_init(); // indicator LED pins (and the split link)'] : [])];
   if (postInit.length) c.push(`void ${hookName('keyboard_post_init_user')}(void) {`, ...postInit, '}', '');
-  const recordHook = keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang || viaLift || osCancel || ledRecord.length > 0 || switcher;
+  // Key overrides on keys NAVI's code (or Caps Word) takes first: process_key_override sees them before (keyOverridesFirst.ts).
+  const koFirst = keyOverridesFirstTriggers(spec, project, !!lang?.symbols);
+  if (koFirst.length) c.push(...keyOverridesFirstCode(koFirst.map(kc)));
+  const recordHook = koFirst.length > 0 || keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang || viaLift || osCancel || ledRecord.length > 0 || switcher;
   if (recordHook) {
     c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
     c.push(...ledRecord);
@@ -712,6 +717,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
         '    }',
       );
     }
+    if (koFirst.length) c.push(KEY_OVERRIDES_FIRST_LINE);
     if (tapHoldInCode) c.push('    if (!navi_tap_holds(keycode, record)) return false; // tap-hold keys: actions and the replay fix');
     if (switcher) c.push(TASK_SWITCHER_RECORD_LINE);
     if (lang) c.push(...languageRecordLines(lang));
@@ -1016,6 +1022,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (!pipeline && capsRules) generatedSymbols.add('caps_word_press_user');
   if (!pipeline && switcher) generatedSymbols.add('housekeeping_task_user');
   if (switcher) for (const name of TASK_SWITCHER_SYMBOLS) generatedSymbols.add(name);
+  if (koFirst.length) for (const name of KEY_OVERRIDES_FIRST_SYMBOLS) generatedSymbols.add(name);
   if (lang) {
     for (const name of [...LANGUAGE_SYMBOLS, 'navi_lang', 'navi_language_key']) generatedSymbols.add(name);
     if (lang.layers) generatedSymbols.add('navi_language_layer');

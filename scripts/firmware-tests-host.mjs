@@ -67,6 +67,11 @@ try {
   const genSecret = await play('generated-secret', 4, 10);
   check('generated-secret: the secret macro is not checked, the rest passes', genSecret.status === 'pass' && genSecret.passed > 0, genSecret);
 
+  const ko = await play('overrides', 4, 10);
+  check('overrides: Shift overrides fire on a macro, a custom keycode with an action and CW_TOGG; the keys work alone', ko.status === 'pass' && ko.passed === 6, ko);
+  const genKo = await play('generated-overrides', 4, 10);
+  check('generated-overrides: NAVI\'s own navi_tests.txt passes whole', genKo.status === 'pass' && genKo.passed > 0, genKo);
+
   const all = await play('all-pipeline', 10, 6);
   check('all-pipeline: LEDs, the task switcher, a per-language key and a secret macro build together in the own pipeline', all.status === 'pass' && all.passed === 3, all);
 
