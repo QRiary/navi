@@ -4,7 +4,7 @@
  * The counts come from `useKeyCountsStore`; this file never talks to the bridge.
  */
 import { useState } from 'react';
-import { RotateCcw, Download } from 'lucide-react';
+import { ChevronDown, ChevronRight, RotateCcw, Download } from 'lucide-react';
 import { EmptyState } from '../EmptyState';
 import { InfoTip } from '../InfoTip';
 import { Modal } from '../Modal';
@@ -154,10 +154,12 @@ export function HeatmapOverlay() {
 
 /**
  * Combos by times fired, in the strip (a card on the drawing covered keys): the heading on its own line, then the
- * never-fired ones as one group named once, then the fired ones, fewest first (the next candidates to drop).
+ * never-fired ones as one group named once (folded by default: dozens of names pushed the keys down), then the fired
+ * ones, fewest first (the next candidates to drop).
  */
 function HeatmapCombos({ file }: { file: KeyCountsFile }) {
   const combos = useProjectStore((s) => s.project?.combos) ?? [];
+  const [showNever, setShowNever] = useState(false);
   const rows = comboRows(combos, file);
   if (rows.length === 0) return null;
   const never = rows.filter((r) => r.count === 0);
@@ -168,16 +170,25 @@ function HeatmapCombos({ file }: { file: KeyCountsFile }) {
       <span className="kicker">{t('Combos by times fired', 'Комбо по числу срабатываний')}</span>
       {never.length > 0 && (
         <div className="heat-combo-group">
-          <span className="heat-combo-group-head">
+          <button
+            type="button"
+            className="heat-combo-group-head heat-combo-toggle"
+            aria-expanded={showNever}
+            onClick={() => setShowNever((v) => !v)}
+            title={showNever ? t('Hide the never-fired combos', 'Скрыть комбо, которые не срабатывали') : t('Show the never-fired combos', 'Показать комбо, которые не срабатывали')}
+          >
+            {showNever ? <ChevronDown size={12} strokeWidth={1.5} /> : <ChevronRight size={12} strokeWidth={1.5} />}
             {t('Never fired', 'Ни разу')} ({never.length})
-          </span>
-          <ul>
-            {never.map(({ combo }) => (
-              <li key={combo.id} className="is-zero">
-                <span className="heat-combo-name">{name(combo)}</span>
-              </li>
-            ))}
-          </ul>
+          </button>
+          {showNever && (
+            <ul>
+              {never.map(({ combo }) => (
+                <li key={combo.id} className="is-zero">
+                  <span className="heat-combo-name">{name(combo)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
       {fired.length > 0 && (

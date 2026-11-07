@@ -355,6 +355,22 @@
   white-space: nowrap;
 }
 
+.heat-combo-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.heat-combo-toggle:hover,
+.heat-combo-toggle:focus-visible {
+  color: var(--text-primary);
+}
+
 .heat-combos ul {
   display: flex;
   flex-wrap: wrap;
