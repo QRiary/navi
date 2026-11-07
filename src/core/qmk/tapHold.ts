@@ -308,7 +308,7 @@ export function preProcessHook(
  * that completes or ends it; the combo's own keys were taken by it, so a key they interrupted first was interrupted
  * by the combo's result.
  */
-export function comboEventCode(hook: string, combos: { result: string; keys: [number, number][]; name: string }[], opts: { lastPressed: boolean; interrupters: boolean; spots?: boolean }): string[] {
+export function comboEventCode(hook: string, combos: { result: string; keys: [number, number][]; name: string }[], opts: { lastPressed: boolean; interrupters: boolean; spots?: boolean; count?: boolean }): string[] {
   const out = [
     '// ── Combo results seen by the tap-hold logic like real key presses (their QMK result is KC_NO) ──',
     "// Is the key at row, col one of the combo's keys (row, col pairs)?",
@@ -349,7 +349,9 @@ export function comboEventCode(hook: string, combos: { result: string; keys: [nu
   out.push('    }', '#ifndef NO_ACTION_TAPPING', '    action_tapping_process(record);', '#else', '    process_record(&record);', '#endif');
   if (opts.lastPressed) out.push('    if (before) navi_last_pressed = navi_press_keycode;');
   if (opts.spots) out.push('    if (before) navi_last_at = (uint16_t)navi_press_key.row << 8 | navi_press_key.col;');
-  out.push('}', '', `void ${hook}(uint16_t combo_index, bool pressed) {`, '    switch (combo_index) {');
+  out.push('}', '', `void ${hook}(uint16_t combo_index, bool pressed) {`);
+  if (opts.count) out.push('    if (pressed) navi_count_combo(combo_index); // key press counts');
+  out.push('    switch (combo_index) {');
   combos.forEach((c, i) => {
     if (c.result === 'KC_NO') return;
     out.push(`        case ${i}: navi_combo(${c.result}, pressed, (const uint8_t[]){${c.keys.flat().join(', ')}}, ${c.keys.length}); break; // ${c.name}`);

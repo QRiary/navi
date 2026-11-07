@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 22;
+export const PROJECT_SCHEMA_VERSION = 23;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -530,6 +530,14 @@ export interface FirmwareConfig {
    * Empty = NAVI writes no LED code. Generated C: core/qmk/indicatorLeds.ts.
    */
   indicatorLeds: IndicatorLed[];
+  /**
+   * Count key presses (since format 23), to find the keys, layers and combos never used: one count per press of a spot
+   * on the layer its action came from (tap and hold apart for tap-hold keys) and one per combo that fired. 'off' = no C
+   * at all. 'board': counted in RAM, saved to the EEPROM every saveMinutes and on USB suspend, read by NAVI over Raw HID
+   * into <userData>/key-counts/<projectId>.json. 'program': the user's C (navi_key_count_user) sends them on and their
+   * program writes the counts file at programFile (core/project/keyCounts.ts, core/qmk/keyCounts.ts, docs/companion.md).
+   */
+  keyCounts: KeyCountsSettings;
 }
 
 /** What can light an indicator LED. */
@@ -569,6 +577,18 @@ export interface CapsWordRule {
  */
 export const TEXT_ROUTES = ['own-program', 'wincompose', 'alt-codes', 'linux'] as const;
 export type TextRoute = (typeof TEXT_ROUTES)[number];
+
+/** Where key press counts go (firmware.keyCounts.route): nowhere, the board's EEPROM, or the user's own program. */
+export const KEY_COUNT_ROUTES = ['off', 'board', 'program'] as const;
+export type KeyCountRoute = (typeof KEY_COUNT_ROUTES)[number];
+
+export interface KeyCountsSettings {
+  route: KeyCountRoute;
+  /** The board route: minutes between EEPROM saves (a save happens only when a count changed since the last one). */
+  saveMinutes: number;
+  /** The program route: the counts file the user's program writes (an absolute path; '' = not set). */
+  programFile: string;
+}
 
 /** A language the keyboard types in (since format 13). The first one is active at power-on. */
 export interface Language {

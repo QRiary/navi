@@ -6,10 +6,14 @@ keys with actions (stand-in MT / LT keycodes), the replay fix for keys that hold
 dances, combos, auto repeat (a held macro or custom keycode running again at a rate) and languages (language keys,
 the language's layer, text through the own-program route, symbol keys, hold keys by language).
 
-Three suites, each its own test build, since QMK's test build compiles every `.cpp` in its folder into one keymap:
-- **main** (this folder): `hostProject()`, scenarios in `qmk_host_test.cpp`.
+Four suites, each its own test build, since QMK's test build compiles every `.cpp` in its folder into one keymap:
+- **main** (this folder): `hostProject()`, scenarios in `qmk_host_test.cpp`; key press counts of the “my own program”
+  route in `counts_program_test.cpp` (it defines `navi_key_count_user`).
 - **languages** (`languages/`): `languageHostProject()`, scenarios in `languages/languages_test.cpp`.
 - **options** (`options/`): `optionsHostProject()`, scenarios in `options/options_test.cpp` (hold spots, the one-shot cancel).
+- **counts** (`counts/`): `countsHostProject()`, key press counts kept on the board, read over Raw HID in
+  `counts/counts_test.cpp`; QMK's transient (RAM) EEPROM driver, since the test platform's own EEPROM is 32 bytes;
+  `counts_expect.h` carries the table size and hash NAVI computed.
 
 - `fixture.test.ts` builds the test projects (4x10 matrices like the test framework's) and writes their
   `keymap.c`, `rules.mk` and `config.h` to `NAVI_QMK_OUT` and `NAVI_QMK_OUT/languages` and `NAVI_QMK_OUT/options`. Without that variable it
