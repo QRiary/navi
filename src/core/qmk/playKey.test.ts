@@ -80,6 +80,36 @@ describe('custom keycode “press a key” = any keycode', () => {
   });
 });
 
+describe('macro key steps = any keycode without VIA', () => {
+  const step = (type: 'tap' | 'down' | 'up', k: string) => ({ type, keycode: q(k) });
+  const steps = [step('tap', 'KC_A'), step('tap', 'C(KC_A)'), step('down', 'LSFT(KC_B)'), step('up', 'LSFT(KC_B)'), step('tap', 'TG(1)'), step('down', 'MO(1)'), step('up', 'MO(1)')];
+  const p: Project = { ...createBlankProject('macros any', 4, 10, false), macros: [{ id: 'm', index: 0, name: 'm', steps }] };
+
+  it('basic keys stay 8-bit, keys with mods *_code16, the rest played for the macro key’s record', () => {
+    expect(keymapC(p)).toContain(
+      [
+        'tap_code(0x04);',
+        'tap_code16(LCTL(KC_A));',
+        'register_code16(LSFT(KC_B));',
+        'unregister_code16(LSFT(KC_B));',
+        'navi_play_tap(TG(L_LAYER_1), record);',
+        'navi_play(MO(L_LAYER_1), record, true);',
+        'navi_play(MO(L_LAYER_1), record, false);',
+      ].join('\n                '),
+    );
+    expect(rulesMk(p)).toMatch(/REPEAT_KEY_ENABLE = yes/);
+  });
+
+  it('with VIA the macros are VIA’s: nothing played, the one-byte check stays', async () => {
+    const { checkMacroSteps } = await import('../via/macros');
+    const via = { ...p, firmware: { ...p.firmware, buildFeatures: { ...p.firmware.buildFeatures, via: true } } };
+    expect(generateKeymap({ project: via, keymap: activeKeymap(via), spec, via: true, encoderCount: 0 }).files.find((f) => f.name === 'keymap.c')!.text).not.toContain('navi_play');
+    expect(checkMacroSteps(0, steps)).toHaveLength(6);
+    expect(checkMacroSteps(0, steps, { via: false })).toEqual([]);
+    expect(checkMacroSteps(0, [{ type: 'tap', keycode: 0 }], { via: false })).toHaveLength(1);
+  });
+});
+
 describe('key override replacement = any keycode', () => {
   const ko = (name: string, replacement: string, layers?: number[]): KeyOverride => ({ id: name, name, mods: 0x02, trigger: q('KC_E'), replacement: q(replacement), ...(layers ? { layers } : {}) });
   const project = (overrides: KeyOverride[]): Project => ({ ...createBlankProject('ko any', 4, 10, false), keyOverrides: overrides });

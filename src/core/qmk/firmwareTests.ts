@@ -278,7 +278,7 @@ function textOps(text: string): Op[] | Why {
 const lifted = (ops: Op[], lift: boolean): Op[] => (lift && ops.length ? [{ t: 'lift' }, ...ops, { t: 'lower' }] : ops);
 
 /** Macro steps (tap_code / register_code of basic keys, send_string) as ops; `lift`: the held mods are let go for all of it. */
-function macroOps(steps: MacroStep[], lift: boolean): Op[] | Why {
+function macroOps(c: Ctx, steps: MacroStep[], lift: boolean): Op[] | Why {
   const ops: Op[] = [];
   for (const s of steps) {
     if (s.type === 'delay') continue;
@@ -290,7 +290,8 @@ function macroOps(steps: MacroStep[], lift: boolean): Op[] | Why {
       ops.push(...t);
       continue;
     }
-    const p = basicPress(s.keycode & 0xff);
+    // A key with mods or anything NAVI plays as a key event (above 0x1FFF: not modeled, so plainPress says why).
+    const p = s.keycode <= 0xff ? basicPress(s.keycode) : plainPress(c, s.keycode);
     if (isWhy(p)) return p;
     if (s.type === 'tap') ops.push(...tapOps(p));
     else ops.push(...(s.type === 'down' ? p.down : p.up));
@@ -376,7 +377,7 @@ function namedBehavior(c: Ctx, v: number, key: string): Behavior {
     const m = project.macros.find((x) => x.index === index);
     if (!m || !m.steps.length) return why(`${c.kc(v)}, a macro with no steps`);
     if (project.firmware.buildFeatures.via === true) return why(`${c.kc(v)}, a VIA macro (the keyboard's memory decides it)`);
-    const ops = macroOps(m.steps, liftOf(project, m.heldMods));
+    const ops = macroOps(c, m.steps, liftOf(project, m.heldMods));
     return isWhy(ops) ? why(`${c.kc(v)}: ${ops.why}`) : { tap: { down: ops, up: [] }, term: 0 };
   }
   if (range('QK_USER')) {
@@ -837,7 +838,7 @@ function danceTests(c: Ctx, td: TapDance, at: { route: Route; pos: MatrixPos }, 
     for (let n = 1; n <= steps.length; n++) {
       const st = steps[n - 1];
       if (!st.none) return skip(`tap ${n}`, 'no step without modifiers');
-      const ops = macroOps(st.none, liftSetting(c.project) && st.none.some(isTextStep));
+      const ops = macroOps(c, st.none, liftSetting(c.project) && st.none.some(isTextStep));
       if (isWhy(ops)) return skip(`tap ${n}`, ops.why);
       played.push(...ops);
       lines.push([[n === 1 ? s : `${s}*${n}`], [...played]]);

@@ -159,25 +159,27 @@ function modsToMask(mods: number): string {
   return parts.join(' | ') || '0';
 }
 
-/** Macro steps → C statements (send_string / tap_code / register_code / wait_ms). */
-function macroStatements(steps: MacroStep[]): string[] {
-  return steps.map(macroStatement);
-}
-
-function macroStatement(s: MacroStep): string {
-  {
-    switch (s.type) {
-      case 'text':
-      case 'secret':
-        return `send_string(${textArg(s, cString)});`;
-      case 'delay':
-        return `wait_ms(${s.ms});`;
-      case 'tap':
-        return `tap_code(0x${s.keycode.toString(16).toUpperCase().padStart(2, '0')});`;
-      case 'down':
-        return `register_code(0x${s.keycode.toString(16).toUpperCase().padStart(2, '0')});`;
-      case 'up':
-        return `unregister_code(0x${s.keycode.toString(16).toUpperCase().padStart(2, '0')});`;
+/**
+ * Macro steps (compiled in: no VIA) → C statements (send_string / tap_code / register_code / wait_ms). A basic key
+ * stays the 8-bit call; a key with mods the *_code16 one; anything else is played as a key event (playKey.ts) for
+ * `record` (the macro key's, or NULL). kc: a keycode's C expression.
+ */
+function macroStatement(s: MacroStep, kc: (v: number) => string, record: string): string {
+  const hex = (v: number) => `0x${v.toString(16).toUpperCase().padStart(2, '0')}`;
+  switch (s.type) {
+    case 'text':
+    case 'secret':
+      return `send_string(${textArg(s, cString)});`;
+    case 'delay':
+      return `wait_ms(${s.ms});`;
+    case 'tap':
+      return s.keycode <= 0xff ? `tap_code(${hex(s.keycode)});` : tapStatement(s.keycode, kc(s.keycode), record);
+    case 'down':
+    case 'up': {
+      const down = s.type === 'down';
+      if (s.keycode <= 0xff) return `${down ? 'register_code' : 'unregister_code'}(${hex(s.keycode)});`;
+      if (!playsAsKey(s.keycode)) return `${down ? 'register_code16' : 'unregister_code16'}(${kc(s.keycode)});`;
+      return `navi_play(${kc(s.keycode)}, ${record}, ${down});`;
     }
   }
 }
@@ -238,19 +240,20 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   // The own-program route is left alone: its text lifts only where the keyboard types it (plain keys). ASCII text the
   // keyboard types in a plain-keys language: one lift around the whole macro, its key steps included (the mods are
   // not put back between steps); text with other characters: per text, as navi_type_text decides.
-  const macroBody = (m: Macro) => {
+  const macroBody = (m: Macro, record: string) => {
+    const macroStep = (s: MacroStep) => macroStatement(s, kc, record);
     const lift = lifts(m.heldMods);
-    if (!lang) return liftedBlock(macroStatements(m.steps), lift);
+    if (!lang) return liftedBlock(m.steps.map(macroStep), lift);
     if (lang.program && m.steps.some(isTextStep)) {
       // A secret's text is unknown here: it may not be ASCII, so navi_type_text decides per text.
       const ascii = m.steps.every((s) => s.type !== 'secret' && (s.type !== 'text' || [...s.text].every((ch) => ch.charCodeAt(0) < 0x80)));
       if (lift && ascii) {
-        const body = routedMacroStatements(m.steps, lang, macroStatement, cString, undefined, (arg) => `navi_type_text(${arg}, false);`);
+        const body = routedMacroStatements(m.steps, lang, macroStep, cString, undefined, (arg) => `navi_type_text(${arg}, false);`);
         return ['{', '    uint8_t navi_held = navi_typing_plain() ? navi_lift_mods() : 0;', ...body.map((s) => `    ${s}`), '    navi_lower_mods(navi_held);', '}'];
       }
-      return routedMacroStatements(m.steps, lang, macroStatement, cString, undefined, (arg) => `navi_type_text(${arg}, ${lift});`);
+      return routedMacroStatements(m.steps, lang, macroStep, cString, undefined, (arg) => `navi_type_text(${arg}, ${lift});`);
     }
-    return liftedBlock(routedMacroStatements(m.steps, lang, macroStatement, cString, undefined, (arg) => `navi_type_text(${arg}, false);`), lift);
+    return liftedBlock(routedMacroStatements(m.steps, lang, macroStep, cString, undefined, (arg) => `navi_type_text(${arg}, false);`), lift);
   };
   const sendText = (text: string, own?: HeldMods) => {
     const lift = lifts(own);
@@ -674,7 +677,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       ...repeatMacros.map((m) => ({
         label: `QK_MACRO_${m.index}`,
         comment: commentText(m.name),
-        body: via ? (lang?.routed ? [`navi_send_via_macro(${m.index});`] : liftedBlock([`dynamic_keymap_macro_send(${m.index});`], lifts(undefined))) : macroBody(m),
+        body: via ? (lang?.routed ? [`navi_send_via_macro(${m.index});`] : liftedBlock([`dynamic_keymap_macro_send(${m.index});`], lifts(undefined))) : macroBody(m, 'NULL'),
       })),
       ...repeatCustoms.map((ck) => ({
         label: ck.name,
@@ -766,7 +769,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       c.push('        // Macros MC_n compiled into the firmware (no VIA in this build).');
       pressMacros.forEach((m) => {
         c.push(`        case QK_MACRO_${m.index}: // ${commentText(m.name)}`);
-        for (const st of macroBody(m)) c.push(`            ${st}`);
+        for (const st of macroBody(m, 'record')) c.push(`            ${st}`);
         c.push('            return false;');
       });
     }

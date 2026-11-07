@@ -85,6 +85,11 @@ try {
   const genCustomAny = await play('generated-custom-any', 4, 10);
   check('generated-custom-any: NAVI\'s own navi_tests.txt passes whole', genCustomAny.status === 'pass' && genCustomAny.passed > 0, genCustomAny);
 
+  const macrosAny = await play('macros-any', 4, 10);
+  check('macros-any: macro steps C(KC_A), TG(1), MO(1) down / up, a custom keycode, TG(1) auto-repeated (no VIA)', macrosAny.status === 'pass' && macrosAny.passed === 6, macrosAny);
+  const genMacrosAny = await play('generated-macros-any', 4, 10);
+  check('generated-macros-any: NAVI\'s own navi_tests.txt passes whole', genMacrosAny.status === 'pass' && genMacrosAny.passed > 0, genMacrosAny);
+
   const all = await play('all-pipeline', 10, 6);
   check('all-pipeline: LEDs, the task switcher, a per-language key and a secret macro build together in the own pipeline', all.status === 'pass' && all.passed === 3, all);
 

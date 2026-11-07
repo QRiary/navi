@@ -18,6 +18,8 @@
  *   leader-any  leader actions TG(1), a macro and CW_TOGG, played as taps (tap_code16 can't send them)
  *   custom-any  custom keycodes tapping TG(1), a macro, CW_TOGG (also auto-repeated and per language), a macro as a
  *             language's OS shortcut; also as generated-custom-any
+ *   macros-any  macro key steps above one byte without VIA: C(KC_A), TG(1), MO(1) down / up, a custom keycode, TG(1)
+ *             auto-repeated; also as generated-macros-any
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -297,6 +299,8 @@ it.skipIf(!out)('writes the sample keymap folders for the firmware test runner',
   write(join(out!, 'leader-any'), leaderAny(), LEADER_ANY_TESTS);
   write(join(out!, 'custom-any'), customAny(), CUSTOM_ANY_TESTS);
   writeGenerated(join(out!, 'generated-custom-any'), customAny());
+  write(join(out!, 'macros-any'), macrosAny(), MACROS_ANY_TESTS);
+  writeGenerated(join(out!, 'generated-macros-any'), macrosAny());
   writeFileSync(join(out!, 'generated-secret', 'secrets.h'), SECRETS_H);
 });
 
@@ -427,6 +431,39 @@ function customAny(): Project {
 }
 
 export const CUSTOM_ANY_TESTS = ['r0c0 r0c2 => 9', 'r0c1 => hi', 'r0c3 r0c4 => A', 'r0c5 => hi', 'r0c6 => os', 'r0c7 => os', 'r0c7 r0c6 => oshi'];
+
+/**
+ * Macro key steps above one byte (no VIA): C(KC_A), TG(1), MO(1) pressed in one macro and released in another, a
+ * custom keycode, TG(1) in a macro ticked "repeat while held". The old 8-bit tap_code cut them (C(KC_A) typed "a").
+ */
+function macrosAny(): Project {
+  const p = withKeys(createBlankProject('fw tests macros any', 4, 10, false), [
+    [0, 0, 0, 'QK_MACRO_0'],
+    [0, 0, 1, 'QK_MACRO_1'],
+    [0, 0, 2, 'KC_B'],
+    [1, 0, 2, 'KC_9'],
+    [0, 0, 3, 'QK_MACRO_2'],
+    [0, 0, 4, 'QK_MACRO_3'],
+    [1, 0, 4, 'QK_MACRO_3'],
+    [0, 0, 5, 'QK_MACRO_4'],
+    [0, 0, 6, 'QK_MACRO_5'],
+  ]);
+  const step = (type: 'tap' | 'down' | 'up', k: string) => ({ type, keycode: q(k) });
+  return {
+    ...p,
+    macros: [
+      { id: 'm0', index: 0, name: 'ctrl a', steps: [step('tap', 'C(KC_A)')] },
+      { id: 'm1', index: 1, name: 'toggle', steps: [step('tap', 'TG(1)')] },
+      { id: 'm2', index: 2, name: 'layer on', steps: [step('down', 'MO(1)')] },
+      { id: 'm3', index: 3, name: 'layer off', steps: [step('up', 'MO(1)')] },
+      { id: 'm4', index: 4, name: 'own key', steps: [step('tap', 'QK_USER_0')] },
+      { id: 'm5', index: 5, name: 'toggle repeat', steps: [step('tap', 'TG(1)')], repeat: true },
+    ],
+    customKeycodes: [{ id: 'yo', name: 'MY_YO', description: '', action: { type: 'send-string', text: 'yo' } }],
+  };
+}
+
+export const MACROS_ANY_TESTS = ['r0c0 => ⟨C-a⟩', 'r0c1 r0c2 => 9', 'r0c3 r0c2 => 9', 'r0c3 r0c4 r0c2 => b', 'r0c5 => yo', 'r0c6 r0c2 => 9'];
 
 function writeGenerated(dir: string, p: Project) {
   const on = { ...p, firmware: { ...p.firmware, tests: true } };
