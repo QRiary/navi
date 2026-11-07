@@ -57,15 +57,10 @@ export interface ComboRow {
   count: number;
 }
 
-/** Combos by times fired, most first; never fired ones last (a combo with no entry counts 0), ties by name. */
+/** Combos by times fired, never fired first (a combo with no entry counts 0), then the least used; ties by name. */
 export function comboRows(combos: Combo[], file: KeyCountsFile | null): ComboRow[] {
   return combos
     .map((combo) => ({ combo, count: file?.combos[comboCountKey(combo)] ?? 0 }))
-    .sort((a, b) => b.count - a.count || (a.combo.name || a.combo.id).localeCompare(b.combo.name || b.combo.id));
+    .sort((a, b) => a.count - b.count || (a.combo.name || a.combo.id).localeCompare(b.combo.name || b.combo.id));
 }
 
-/** The route of the open project. TODO(step 17 merge): use firmware.keyCounts.route. */
-export function keyCountsRoute(firmware: object): 'off' | 'board' | 'program' {
-  const r = (firmware as { keyCounts?: { route?: string } }).keyCounts?.route;
-  return r === 'board' || r === 'program' ? r : 'off';
-}

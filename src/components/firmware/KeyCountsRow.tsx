@@ -86,8 +86,8 @@ export function KeyCountsRow({ project }: { project: Project }) {
               {t('Save to the keyboard’s memory every', 'Сохранять в память клавиатуры каждые')}{' '}
               <InfoTip label={t('Save interval', 'Интервал сохранения')}>
                 {t(
-                  `Minutes between saves; a save happens only when something was counted, and also when the PC goes to sleep. On an RP2040 each changed count takes up to ${RP2040_BYTES_PER_COUNT} bytes of QMK’s ${Math.round(RP2040_LOG_BYTES / 1024)} KB flash write log; about ${FILLED_AFTER} changed counts fill it, then the 8 KB area is erased and rewritten once. Its flash chip is rated for about 100,000 erases.`,
-                  `Минуты между сохранениями; сохраняется, только если что-то посчитано, и ещё когда компьютер засыпает. На RP2040 каждый изменившийся счётчик занимает до ${RP2040_BYTES_PER_COUNT} байт журнала записи QMK (${Math.round(RP2040_LOG_BYTES / 1024)} КБ во флеше); около ${FILLED_AFTER} изменившихся счётчиков заполняют его, потом область 8 КБ стирается и переписывается один раз. Флеш-чип рассчитан примерно на 100 000 стираний.`,
+                  `Minutes between saves; a save happens only when something was counted, and also when the PC goes to sleep. On an RP2040 each changed count takes up to ${RP2040_BYTES_PER_COUNT} bytes of QMK’s ${Math.round(RP2040_LOG_BYTES / 1024)} KB flash write log; about ${FILLED_AFTER} changed counts fill it, then the 8 KB area is erased and rewritten once. Typical flash chips are rated for about 100,000 erases (your board’s chip may differ).`,
+                  `Минуты между сохранениями; сохраняется, только если что-то посчитано, и ещё когда компьютер засыпает. На RP2040 каждый изменившийся счётчик занимает до ${RP2040_BYTES_PER_COUNT} байт журнала записи QMK (${Math.round(RP2040_LOG_BYTES / 1024)} КБ во флеше); около ${FILLED_AFTER} изменившихся счётчиков заполняют его, потом область 8 КБ стирается и переписывается один раз. Обычные флеш-чипы рассчитаны примерно на 100 000 стираний (у чипа вашей платы может быть иначе).`,
                 )}
               </InfoTip>
             </span>

@@ -282,10 +282,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.heat-legend-end {
-  line-height: 12px;
-}
-
 .heat-legend-scale {
   position: relative;
   width: 200px;
@@ -306,6 +302,10 @@
 .heat-legend-ticks span {
   position: absolute;
   transform: translateX(-50%);
+}
+
+.heat-legend-ticks span:first-child {
+  transform: none;
 }
 
 .heat-legend-ticks span:last-child {

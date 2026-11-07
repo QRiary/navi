@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { comboRows, contrastRatio, countAtPosition, heatColor, heatPosition, HEAT_STOPS, inkOn, keyCountsRoute } from './heatmap';
+import { comboRows, contrastRatio, countAtPosition, heatColor, heatPosition, HEAT_STOPS, inkOn } from './heatmap';
 import { emptyKeyCounts } from '../core/project/keyCounts';
 import type { Combo } from '../core/project/types';
 
@@ -32,24 +32,16 @@ describe('heat scale', () => {
 
 describe('combo rows', () => {
   const mk = (id: string, name: string): Combo => ({ id, name, keys: [], result: 0 });
-  it('most fired first, never fired last, missing entries are 0', () => {
+  it('never fired first (the point: finding unused combos), then by count, missing entries are 0', () => {
     const f = emptyKeyCounts();
     f.combos = { esc: 3, tab: 9 };
     const rows = comboRows([mk('c1', 'zed'), mk('c2', 'esc'), mk('c3', 'tab'), mk('c4', 'abc')], f);
     expect(rows.map((r) => [r.combo.id, r.count])).toEqual([
-      ['c3', 9],
-      ['c2', 3],
       ['c4', 0],
       ['c1', 0],
+      ['c2', 3],
+      ['c3', 9],
     ]);
     expect(comboRows([mk('c1', '')], null)[0].count).toBe(0);
-  });
-});
-
-describe('route', () => {
-  it('defaults to off', () => {
-    expect(keyCountsRoute({})).toBe('off');
-    expect(keyCountsRoute({ keyCounts: { route: 'board' } })).toBe('board');
-    expect(keyCountsRoute({ keyCounts: { route: 'x' } })).toBe('off');
   });
 });

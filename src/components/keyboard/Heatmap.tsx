@@ -10,7 +10,7 @@ import { InfoTip } from '../InfoTip';
 import { Modal } from '../Modal';
 import { comboCountKey, spotCounts, spotTotal, type KeyCountsFile } from '../../core/project/keyCounts';
 import type { Keymap } from '../../core/project/types';
-import { comboRows, countAtPosition, heatColor, HEAT_STOPS, inkOn, keyCountsRoute } from '../../lib/heatmap';
+import { comboRows, countAtPosition, heatColor, HEAT_STOPS, inkOn } from '../../lib/heatmap';
 import { navigate } from '../../lib/router';
 import { whyDisabled } from '../../lib/whyDisabled';
 import { useKeyCountsStore } from '../../store/keyCountsStore';
@@ -32,20 +32,18 @@ export function heatForKey(file: KeyCountsFile | null, keymap: Keymap, layer: nu
 const LEGEND_TICKS = [0, 0.25, 0.5, 0.75, 1];
 
 export function HeatmapStrip({ max }: { max: number }) {
-  const { file, reading, readNow, reset } = useKeyCountsStore();
-  const route = useProjectStore((s) => (s.project ? keyCountsRoute(s.project.firmware) : 'off'));
+  const { file, reading, readNow, reset, canRead, canReset } = useKeyCountsStore();
   const [asking, setAsking] = useState(false);
   const gradient = `linear-gradient(90deg, ${HEAT_STOPS.join(', ')})`;
   return (
     <div className="heat-strip">
       <div className="heat-legend" role="img" aria-label={t(`Presses per key, from 0 to ${max}`, `Нажатия клавиши: от 0 до ${max}`)}>
-        <span className="heat-legend-end">0</span>
         <div className="heat-legend-scale">
           <div className="heat-legend-bar" style={{ background: gradient }} />
           <div className="heat-legend-ticks">
             {(max > 0 ? LEGEND_TICKS : []).map((p) => (
               <span key={p} style={{ left: `${p * 100}%` }}>
-                {p === 0 ? '' : countAtPosition(p, max)}
+                {p === 0 ? 0 : countAtPosition(p, max)}
               </span>
             ))}
           </div>
@@ -59,7 +57,7 @@ export function HeatmapStrip({ max }: { max: number }) {
       </InfoTip>
       {file && <span className="heat-since">{t(`since ${new Date(file.since).toLocaleDateString()}`, `с ${new Date(file.since).toLocaleDateString()}`)}</span>}
       <span className="spacer" />
-      {route === 'board' && (
+      {canRead && (
         <button
           className="btn"
           onClick={() => void readNow()}
@@ -68,7 +66,7 @@ export function HeatmapStrip({ max }: { max: number }) {
           <Download size={13} strokeWidth={1.5} /> {reading ? t('reading…', 'чтение…') : t('read counts now', 'прочитать счётчики')}
         </button>
       )}
-      {route !== 'off' && (
+      {canReset && (
         <button className="btn" onClick={() => setAsking(true)} title={t('Start counting over', 'Начать счёт заново')}>
           <RotateCcw size={13} strokeWidth={1.5} /> {t('reset counts', 'сбросить счётчики')}
         </button>
@@ -108,10 +106,10 @@ export function HeatmapOverlay() {
   const { file, status, error } = useKeyCountsStore();
   const project = useProjectStore((s) => s.project);
   if (!project) return null;
-  const route = keyCountsRoute(project.firmware);
+  const route = project.firmware.keyCounts.route;
   const jump = (
-    <button className="btn" onClick={() => navigate({ section: 'firmware', tab: 'features' })}>
-      {t('open Firmware → Features', 'открыть Прошивка → Функции')}
+    <button className="btn" onClick={() => navigate({ section: 'firmware', tab: 'flash' })}>
+      {t('open Firmware → Flash', 'открыть Прошивка → Прошить')}
     </button>
   );
   if (route === 'off') {
@@ -119,8 +117,8 @@ export function HeatmapOverlay() {
       <div className="heat-note">
         <EmptyState
           what={t(
-            'Key presses aren’t being counted. Turn on “Count key presses” in Firmware → Features, flash, and type for a while.',
-            'Нажатия клавиш не считаются. Включите «Считать нажатия клавиш» в Прошивка → Функции, прошейте и немного поработайте.',
+            'Key presses aren’t being counted. Turn on “Count key presses” in Firmware → Flash, flash, and type for a while.',
+            'Нажатия клавиш не считаются. Включите «Считать нажатия клавиш» в Прошивка → Прошить, прошейте и немного поработайте.',
           )}
         >
           {jump}
