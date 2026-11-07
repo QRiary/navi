@@ -12,6 +12,27 @@ const gen = (p: Project) => generateKeymap({ project: p, keymap: activeKeymap(p)
 const keymapC = (p: Project) => gen(p).files.find((f) => f.name === 'keymap.c')!.text;
 const rulesMk = (p: Project) => gen(p).files.find((f) => f.name === 'rules.mk')!.text;
 
+describe('leader action = any keycode', () => {
+  it('keys and keys with mods stay tap_code16; the rest is played as a tap with no source key; no error', () => {
+    const p: Project = {
+      ...createBlankProject('leader any', 4, 10, false),
+      macros: [{ id: 'm', index: 0, name: 'hi', steps: [{ type: 'text', text: 'hi' }] }],
+      leaderSequences: [
+        { id: 'a', keys: [q('KC_A')], action: { type: 'tap', keycode: q('C(KC_A)') } },
+        { id: 'b', keys: [q('KC_B')], action: { type: 'tap', keycode: q('TG(1)') } },
+        { id: 'c', keys: [q('KC_C')], action: { type: 'tap', keycode: q('QK_MACRO_0') } },
+      ],
+    };
+    const res = gen(p);
+    const c = keymapC(p);
+    expect(c).toContain('if (leader_sequence_one_key(KC_A)) {\n        tap_code16(LCTL(KC_A));');
+    expect(c).toContain('} else if (leader_sequence_one_key(KC_B)) {\n        navi_play_tap(TG(L_LAYER_1), NULL);');
+    expect(c).toContain('} else if (leader_sequence_one_key(KC_C)) {\n        navi_play_tap(MC_0, NULL);');
+    expect(res.issues.filter((i) => i.where.startsWith('leader #'))).toEqual([]);
+    expect(rulesMk(p)).toMatch(/REPEAT_KEY_ENABLE = yes/);
+  });
+});
+
 describe('key override replacement = any keycode', () => {
   const ko = (name: string, replacement: string, layers?: number[]): KeyOverride => ({ id: name, name, mods: 0x02, trigger: q('KC_E'), replacement: q(replacement), ...(layers ? { layers } : {}) });
   const project = (overrides: KeyOverride[]): Project => ({ ...createBlankProject('ko any', 4, 10, false), keyOverrides: overrides });

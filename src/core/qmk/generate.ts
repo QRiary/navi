@@ -38,7 +38,7 @@ import { checkTapHolds, effectiveTapHolds } from '../project/tapHolds';
 import { checkTapHoldActions, effectiveTapHoldActions, projectOwnCodeRefs, type OwnCodeFile } from '../project/tapHoldActions';
 import { anyHoldsOn, caseLines, comboEventCode, hasHoldKeys, hasSpots, spotsCode, keyListsCode, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, naviSendCode, replayTracked, standInCheckCode, tapHoldsCode, type StandIn } from './tapHold';
 import { tapDanceCode } from './tapDance';
-import { KO_PLAY_CODE, PLAY_SYMBOLS, playCode, playedOverride, playsAsKey, projectPlays } from './playKey';
+import { KO_PLAY_CODE, PLAY_SYMBOLS, playCode, playedOverride, playsAsKey, projectPlays, tapStatement } from './playKey';
 import { KEY_OVERRIDES_FIRST_LINE, KEY_OVERRIDES_FIRST_SYMBOLS, keyOverridesFirstCode, keyOverridesFirstTriggers, keyOverrideOrderIssues } from './keyOverridesFirst';
 import { checkSecrets, secretsCode } from './secretText';
 import { isTextStep, textArg } from '../project/textSteps';
@@ -644,7 +644,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     leaders.forEach((s, i) => {
       c.push(`    ${i === 0 ? 'if' : '} else if'} (${leaderFunction(s.keys.length)}(${s.keys.map(kc).join(', ')})) {`);
       if (s.action.type === 'send-string') c.push(`        ${sendText(s.action.text, s.action.heldMods)}`);
-      else if (s.action.type === 'tap') c.push(`        tap_code16(${kc(s.action.keycode)});`);
+      else if (s.action.type === 'tap') c.push(`        ${tapStatement(s.action.keycode, kc(s.action.keycode), 'NULL')}`);
     });
     c.push('    }');
     c.push('}');

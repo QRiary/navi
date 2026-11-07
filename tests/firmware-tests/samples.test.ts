@@ -15,6 +15,7 @@
  *             never see without navi_key_overrides_first); also as generated-overrides
  *   overrides-any  Shift overrides whose replacement is no keyboard key (MO(1) held, a macro, CW_TOGG, a custom
  *             keycode): played by navi_ko_play; also as generated-overrides-any
+ *   leader-any  leader actions TG(1), a macro and CW_TOGG, played as taps (tap_code16 can't send them)
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -290,6 +291,7 @@ it.skipIf(!out)('writes the sample keymap folders for the firmware test runner',
   writeGenerated(join(out!, 'generated-overrides'), overrides());
   write(join(out!, 'overrides-any'), overridesAny(), OVERRIDES_ANY_TESTS);
   writeGenerated(join(out!, 'generated-overrides-any'), overridesAny());
+  write(join(out!, 'leader-any'), leaderAny(), LEADER_ANY_TESTS);
   writeFileSync(join(out!, 'generated-secret', 'secrets.h'), SECRETS_H);
 });
 
@@ -359,6 +361,27 @@ export const OVERRIDES_ANY_TESTS = [
   '+r0c0 r0c4 -r0c0 r0c5 => ⟨LSFT⟩A',
   '+r0c0 r0c6 -r0c0 => ⟨LSFT⟩yo⟨LSFT⟩',
 ];
+
+/** Leader actions tap_code16 can't send: TG(1), a macro, CW_TOGG (tap_code16 of them sends a wrong key or nothing). */
+function leaderAny(): Project {
+  const p = withKeys(createBlankProject('fw tests leader any', 4, 10, false), [
+    [0, 0, 0, 'QK_LEAD'],
+    [0, 0, 1, 'KC_A'],
+    [0, 0, 2, 'KC_B'],
+    [1, 0, 2, 'KC_9'],
+  ]);
+  return {
+    ...p,
+    macros: [{ id: 'm0', index: 0, name: 'hi', steps: [{ type: 'text', text: 'hi' }] }],
+    leaderSequences: [
+      { id: 'l1', keys: [q('KC_A')], action: { type: 'tap', keycode: q('TG(1)') } },
+      { id: 'l2', keys: [q('KC_B')], action: { type: 'tap', keycode: q('QK_MACRO_0') } },
+      { id: 'l3', keys: [q('KC_B'), q('KC_B')], action: { type: 'tap', keycode: q('CW_TOGG') } },
+    ],
+  };
+}
+
+export const LEADER_ANY_TESTS = ['r0c0 r0c1 wait:500 r0c2 => 9', 'r0c0 r0c2 wait:500 => hi', 'r0c0 r0c2 r0c2 wait:500 r0c1 => A'];
 
 function writeGenerated(dir: string, p: Project) {
   const on = { ...p, firmware: { ...p.firmware, tests: true } };

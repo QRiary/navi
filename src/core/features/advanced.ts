@@ -19,27 +19,6 @@ export interface AdvancedIssue {
   message: Text;
 }
 
-/**
- * Which keycodes a leader action can run (the generated code calls tap_code16). The rest (QK_BOOT, macros, RGB…)
- * is not. Tap dances play any keycode as a key event (checkTapDances).
- */
-export function tapDanceActionSupported(spec: KeycodeSpec, value: number): boolean {
-  if (value === 0) return true;
-  const d = decode(spec, value);
-  switch (d.kind) {
-    case 'basic':
-      return d.value >= 0x04;
-    case 'mods':
-      return true;
-    case 'layer':
-      return d.fn === 'MO' || d.fn === 'TG' || d.fn === 'TO' || d.fn === 'DF';
-    case 'one-shot-mod':
-      return true;
-    default:
-      return false;
-  }
-}
-
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 const NESTED_TD = { en: 'A tap dance can’t be inside another tap dance.', ru: 'Tap dance не может быть внутри другого tap dance.' };
@@ -337,9 +316,7 @@ export function checkLeaderSequences(spec: KeycodeSpec, project: Project): Advan
     if (s.action.type === 'none' || (s.action.type === 'send-string' && !s.action.text)) {
       out.push({ level: 'warning', where, message: { en: 'No action: the sequence does nothing.', ru: 'Нет действия: последовательность ничего не делает.' } });
     }
-    if (s.action.type === 'tap' && !tapDanceActionSupported(spec, s.action.keycode)) {
-      out.push({ level: 'error', where, message: { en: 'The action supports keys and modifier combos.', ru: 'Действие — клавиша или сочетание с модификаторами.' } });
-    }
+    // The action is any keycode: what tap_code16 can't send is played as a key event (qmk/playKey.ts).
   });
   if (project.leaderSequences.length) {
     const lead = spec.byName.get('QK_LEAD')?.value;

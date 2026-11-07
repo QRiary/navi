@@ -77,6 +77,9 @@ try {
   const genKoAny = await play('generated-overrides-any', 4, 10);
   check('generated-overrides-any: NAVI\'s own navi_tests.txt passes whole', genKoAny.status === 'pass' && genKoAny.passed > 0, genKoAny);
 
+  const leaderAny = await play('leader-any', 4, 10);
+  check('leader-any: leader actions TG(1), a macro and CW_TOGG work', leaderAny.status === 'pass' && leaderAny.passed === 3, leaderAny);
+
   const all = await play('all-pipeline', 10, 6);
   check('all-pipeline: LEDs, the task switcher, a per-language key and a secret macro build together in the own pipeline', all.status === 'pass' && all.passed === 3, all);
 
