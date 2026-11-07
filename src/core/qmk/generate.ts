@@ -39,7 +39,7 @@ import { checkTapHolds, effectiveTapHolds } from '../project/tapHolds';
 import { checkTapHoldActions, effectiveTapHoldActions, projectOwnCodeRefs, type OwnCodeFile } from '../project/tapHoldActions';
 import { anyHoldsOn, caseLines, comboEventCode, hasHoldKeys, hasSpots, spotsCode, keyListsCode, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, naviSendCode, replayTracked, standInCheckCode, tapHoldsCode, type StandIn } from './tapHold';
 import { tapDanceCode } from './tapDance';
-import { KO_PLAY_CODE, PLAY_SYMBOLS, playCode, playedOverride, playLoopIssues, playsAsKey, projectPlays, tapStatement } from './playKey';
+import { KO_PLAY_CODE, PLAY_SYMBOLS, playCode, playedOverride, playLoopIssues, playsAsKey, projectPlays, standInsAsTaps, tapStatement } from './playKey';
 import { KEY_OVERRIDES_FIRST_LINE, KEY_OVERRIDES_FIRST_SYMBOLS, keyOverridesFirstCode, keyOverridesFirstTriggers, keyOverrideOrderIssues } from './keyOverridesFirst';
 import { checkSecrets, secretsCode } from './secretText';
 import { isTextStep, textArg } from '../project/textSteps';
@@ -246,7 +246,9 @@ export function usesTaskSwitcher(spec: KeycodeSpec, project: Project): boolean {
   return used;
 }
 
-export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBrightness, ownCode }: GenerateOptions): GenerateResult {
+export function generateKeymap({ project: given, keymap, spec, via, encoderCount, maxBrightness, ownCode }: GenerateOptions): GenerateResult {
+  // Where NAVI plays a keycode, a tap-hold key with actions is its tap (playKey.ts).
+  const project = standInsAsTaps(spec, given);
   const { rows, cols } = project.hardware.matrix;
   const layerIds = layerIdentifiers(keymap);
   const tdSorted = [...project.tapDances].sort((a, b) => a.index - b.index);

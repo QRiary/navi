@@ -9,9 +9,10 @@
 import type { AdvancedIssue } from '../features/advanced';
 import { toQmk } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
-import { ownActionDoesSomething, ownActionKeycodes } from '../project/languageActions';
+import { mapOwnActionKeycodes, ownActionDoesSomething, ownActionKeycodes } from '../project/languageActions';
 import { languageKeyOf } from '../project/languages';
-import type { Project } from '../project/types';
+import { effectiveTapHoldActions } from '../project/tapHoldActions';
+import type { MacroStep, Project } from '../project/types';
 
 export const PLAY_SYMBOLS = ['navi_play', 'navi_play_tap', 'navi_ko_play'] as const;
 
@@ -30,6 +31,28 @@ export function playedKeycodes(project: Project): number[] {
     for (const m of project.macros) for (const s of m.steps) if (s.type === 'tap' || s.type === 'down' || s.type === 'up') out.push(s.keycode);
   }
   return out;
+}
+
+/**
+ * A tap-hold key with actions (a stand-in, tapHoldActions.ts) where NAVI's code plays a keycode is its tap: nothing
+ * there is held long enough for QMK to decide tap or hold (an override's replacement, a leader / own keycode action,
+ * a macro step, an OS shortcut). Played as itself it would reach process_record as the stand-in and could fire an
+ * override whose trigger is that key. The generator works on this copy; combos and override triggers keep the
+ * stand-in: a combo result goes through QMK's tap-hold logic, a trigger is the key itself.
+ */
+export function standInsAsTaps(spec: KeycodeSpec, project: Project): Project {
+  const taps = new Map(effectiveTapHoldActions(spec, project).map((a) => [a.keycode, a.tap]));
+  if (!taps.size) return project;
+  const fix = (v: number) => taps.get(v & 0xffff) ?? v;
+  const step = (s: MacroStep): MacroStep => (s.type === 'tap' || s.type === 'down' || s.type === 'up' ? { ...s, keycode: fix(s.keycode) } : s);
+  return {
+    ...project,
+    keyOverrides: project.keyOverrides.map((o) => ({ ...o, replacement: fix(o.replacement) })),
+    leaderSequences: project.leaderSequences.map((s) => (s.action.type === 'tap' ? { ...s, action: { ...s.action, keycode: fix(s.action.keycode) } } : s)),
+    customKeycodes: project.customKeycodes.map((c) => ({ ...c, action: mapOwnActionKeycodes(c.action, fix) })),
+    languages: project.languages.map((l) => (l.osShortcut === undefined ? l : { ...l, osShortcut: fix(l.osShortcut) })),
+    macros: project.macros.map((m) => ({ ...m, steps: m.steps.map(step) })),
+  };
 }
 
 /**

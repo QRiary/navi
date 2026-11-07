@@ -18,6 +18,8 @@
  *   leader-any  leader actions TG(1), a macro and CW_TOGG, played as taps (tap_code16 can't send them)
  *   leader-keys  keys after Leader that aren't plain keys: a macro, a custom keycode, MO(1), C(KC_A), a mod-tap key, a
  *             tap dance; also as generated-leader-keys
+ *   standins-any  a tap-hold key with actions as a combo result (tap and hold), an override trigger and
+ *             replacement, a leader / own keycode action and a macro step; also as generated-standins-any
  *   custom-any  custom keycodes tapping TG(1), a macro, CW_TOGG (also auto-repeated and per language), a macro as a
  *             language's OS shortcut; also as generated-custom-any
  *   macros-any  macro key steps above one byte without VIA: C(KC_A), TG(1), MO(1) down / up, a custom keycode, TG(1)
@@ -301,6 +303,8 @@ it.skipIf(!out)('writes the sample keymap folders for the firmware test runner',
   write(join(out!, 'leader-any'), leaderAny(), LEADER_ANY_TESTS);
   write(join(out!, 'leader-keys'), leaderKeys(), LEADER_KEYS_TESTS);
   writeGenerated(join(out!, 'generated-leader-keys'), leaderKeys());
+  write(join(out!, 'standins-any'), standInsAny(), STAND_INS_ANY_TESTS);
+  writeGenerated(join(out!, 'generated-standins-any'), standInsAny());
   write(join(out!, 'custom-any'), customAny(), CUSTOM_ANY_TESTS);
   writeGenerated(join(out!, 'generated-custom-any'), customAny());
   write(join(out!, 'macros-any'), macrosAny(), MACROS_ANY_TESTS);
@@ -425,6 +429,54 @@ function leaderKeys(): Project {
     ],
   };
 }
+
+/**
+ * A tap-hold key with actions (tap: a macro typing "hi", hold: layer 1; a stand-in LT) as a combo's result (tap and
+ * hold both work), an override's trigger and replacement, a leader action, a custom keycode's action and a macro step
+ * (each of those plays its tap).
+ */
+function standInsAny(): Project {
+  const p0 = withKeys(createBlankProject('fw tests stand-ins any', 4, 10, false), [
+    [0, 0, 0, 'KC_A'],
+    [0, 0, 1, 'KC_B'],
+    [0, 0, 3, 'KC_C'],
+    [1, 0, 3, 'KC_9'],
+    [0, 0, 4, 'KC_LSFT'],
+    [0, 0, 5, 'KC_E'],
+    [0, 0, 7, 'QK_LEAD'],
+    [0, 0, 8, 'QK_USER_0'],
+    [0, 0, 9, 'QK_MACRO_1'],
+  ]);
+  const th = ensureTapHold(spec, p0, q('QK_MACRO_0'), { type: 'layer', layer: 1, mods: 0 });
+  const s = th.keycode;
+  const p = setKeycodes(th.project, activeKeymap(th.project).id, 0, [[0, 6]], s);
+  return {
+    ...p,
+    macros: [
+      { id: 'm0', index: 0, name: 'hi', steps: [{ type: 'text', text: 'hi' }] },
+      { id: 'm1', index: 1, name: 'th', steps: [{ type: 'tap', keycode: s }] },
+    ],
+    customKeycodes: [{ id: 's', name: 'MY_S', description: '', action: { type: 'tap', keycode: s } }],
+    combos: [{ id: 'c', name: 'AB', keys: [[0, 0], [0, 1]], result: s }],
+    keyOverrides: [
+      { id: 'r', name: 'ko_repl', mods: 0x02, trigger: q('KC_E'), replacement: s },
+      { id: 't', name: 'ko_trig', mods: 0x02, trigger: s, replacement: q('KC_X') },
+    ],
+    leaderSequences: [{ id: 'l', keys: [q('KC_C')], action: { type: 'tap', keycode: s } }],
+  };
+}
+
+export const STAND_INS_ANY_TESTS = [
+  '+r0c0 +r0c1 -r0c0 -r0c1 => hi',
+  '+r0c0 +r0c1 wait:300 r0c3 -r0c0 -r0c1 => 9',
+  'r0c6 => hi',
+  '+r0c6 wait:300 r0c3 -r0c6 => 9',
+  '+r0c4 r0c5 -r0c4 => ⟨LSFT⟩hi⟨LSFT⟩',
+  '+r0c4 r0c6 -r0c4 => ⟨LSFT⟩x⟨LSFT⟩',
+  'r0c7 r0c3 wait:500 => hi',
+  'r0c8 => hi',
+  'r0c9 => hi',
+];
 
 export const LEADER_KEYS_TESTS = [
   'r0c0 r0c1 wait:500 => 1',

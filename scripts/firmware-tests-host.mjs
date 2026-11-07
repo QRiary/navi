@@ -85,6 +85,11 @@ try {
   const genLeaderKeys = await play('generated-leader-keys', 4, 10);
   check('generated-leader-keys: NAVI\'s own navi_tests.txt passes whole', genLeaderKeys.status === 'pass' && genLeaderKeys.passed > 0, genLeaderKeys);
 
+  const standIns = await play('standins-any', 4, 10);
+  check('standins-any: a tap-hold key with actions as a combo result (tap and hold), an override trigger and replacement, a leader action, an own keycode action and a macro step', standIns.status === 'pass' && standIns.passed === 9, standIns);
+  const genStandIns = await play('generated-standins-any', 4, 10);
+  check('generated-standins-any: NAVI\'s own navi_tests.txt passes whole', genStandIns.status === 'pass' && genStandIns.passed > 0, genStandIns);
+
   const customAny = await play('custom-any', 4, 10);
   check('custom-any: own keycodes tap TG(1), a macro, CW_TOGG (also auto-repeated and per language); a macro as a language\'s OS shortcut', customAny.status === 'pass' && customAny.passed === 7, customAny);
   const genCustomAny = await play('generated-custom-any', 4, 10);

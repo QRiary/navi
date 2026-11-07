@@ -75,6 +75,35 @@ describe('keys after Leader = any keycode the leader sees', () => {
   });
 });
 
+describe('tap-hold keys with actions (stand-ins) outside the keymap', () => {
+  it('no error; a combo result and an override trigger stay the stand-in, where NAVI plays a key it plays the tap', async () => {
+    const { ensureTapHold } = await import('../project/tapHoldActions');
+    const th = ensureTapHold(spec, { ...createBlankProject('stand-ins', 4, 10, false), macros: [{ id: 'm', index: 0, name: 'hi', steps: [{ type: 'text', text: 'hi' }] }] }, q('QK_MACRO_0'), { type: 'layer', layer: 1, mods: 0 });
+    const s = th.keycode;
+    const p: Project = {
+      ...th.project,
+      customKeycodes: [{ id: 'c', name: 'MY_S', description: '', action: { type: 'tap', keycode: s } }],
+      combos: [{ id: 'c', name: 'AB', keys: [[0, 0], [0, 1]], result: s }],
+      keyOverrides: [
+        { id: 'r', name: 'ko_repl', mods: 0x02, trigger: q('KC_E'), replacement: s },
+        { id: 't', name: 'ko_trig', mods: 0x02, trigger: s, replacement: q('KC_X') },
+      ],
+      leaderSequences: [{ id: 'l', keys: [q('KC_C')], action: { type: 'tap', keycode: s } }],
+    };
+    activeKeymap(p).layers[0]!.keys[0] = q('KC_A');
+    activeKeymap(p).layers[0]!.keys[1] = q('KC_B');
+    const res = gen(p);
+    expect(res.issues.filter((i) => i.level === 'error')).toEqual([]);
+    const c = keymapC(p);
+    expect(c).toContain('case MY_S: navi_play_tap(MC_0, record); return false;');
+    expect(c).toContain('if (leader_sequence_one_key(KC_C)) {\n        navi_play_tap(MC_0, NULL);');
+    expect(c).toContain('.context = (void *)(uintptr_t)(MC_0)');
+    expect(c).toContain('ko_make_basic(MOD_MASK_SHIFT, NAVI_TH_0, KC_X)');
+    expect(c).toMatch(/COMBO\(\w+, NAVI_TH_0\)|NAVI_TH_0\),/);
+    expect(c).toMatch(/static bool navi_key_overrides_first[\s\S]*?case NAVI_TH_0:/);
+  });
+});
+
 describe('custom keycode “press a key” = any keycode', () => {
   const tap = (k: string) => ({ type: 'tap' as const, keycode: q(k) });
   const base = createBlankProject('custom any', 4, 10, false);

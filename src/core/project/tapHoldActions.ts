@@ -290,11 +290,7 @@ export function checkTapHoldActions(spec: KeycodeSpec, project: Project, ownRefs
     out.push({ level: 'error', where: 'tap-hold keys', message: { en: `At most ${TAP_HOLD_ACTIONS_MAX} tap-hold keys with actions.`, ru: `Не больше ${TAP_HOLD_ACTIONS_MAX} тап-холд клавиш с действиями.` } });
   }
   const layers = activeKeymap(project).layers.length;
-  const onKeysOnly = new Set<number>();
-  for (const c of project.combos) onKeysOnly.add(c.result);
-  for (const o of project.keyOverrides) onKeysOnly.add(o.trigger).add(o.replacement);
-  for (const c of project.customKeycodes) for (const k of ownActionKeycodes(c.action)) onKeysOnly.add(k);
-  for (const s of project.leaderSequences) if (s.action.type === 'tap') onKeysOnly.add(s.action.keycode);
+  // In combos and override triggers a stand-in is a real tap-hold key; where NAVI plays a keycode it is its tap (qmk/playKey.ts).
   const seen = new Set<number>();
   project.tapHoldActions.forEach((a, i) => {
     const where = `tap-hold key ${i + 1} · ${toQmk(spec, a.tap)}`;
@@ -306,9 +302,6 @@ export function checkTapHoldActions(spec: KeycodeSpec, project: Project, ownRefs
     seen.add(a.keycode);
     if (a.hold.type === 'layer' && a.hold.layer >= layers && !problem) {
       out.push({ level: 'warning', where, message: { en: `Layer ${a.hold.layer} doesn’t exist in this keymap.`, ru: `Слоя ${a.hold.layer} нет в этой раскладке.` } });
-    }
-    if (onKeysOnly.has(a.keycode)) {
-      err({ en: 'A tap-hold key with actions works only on keys of the keymap and in tap dances, not in combos, overrides or leader / own keycode actions.', ru: 'Тап-холд клавиша с действиями работает только на клавишах раскладки и в tap dance, не в комбо, подменах и действиях лидера / своих keycodes.' });
     }
     const own = ownRefs?.get(standInBase(a.keycode));
     if (own && !problem) {
