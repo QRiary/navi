@@ -67,6 +67,14 @@ export const PROJECT_SETTING_ITEMS: readonly SettingItem[] = [
     route: { section: 'firmware', tab: 'flash' },
   },
   {
+    key: 'firmware.keyCounts',
+    label: () => t('Count key presses', 'Считать нажатия клавиш'),
+    hint: () => t('for the heatmap: on the board, or through your own program', 'для тепловой карты: на клавиатуре или через свою программу'),
+    keywords: 'key counts heatmap statistics счётчики тепловая карта статистика navi_key_count_user',
+    section: () => `${t('Firmware', 'Прошивка')} › ${t('6 · Flash', '6 · Прошить')}`,
+    route: { section: 'firmware', tab: 'flash' },
+  },
+  {
     key: 'firmware.indicatorLeds',
     label: () => t('Indicator LEDs', 'Светодиоды-индикаторы'),
     hint: () => t('LEDs on controller pins lit by Caps Lock, Caps Word, one-shot modifiers, toggled layers or your code', 'Светодиоды на выводах контроллера: Caps Lock, Caps Word, one-shot модификаторы, включённые слои или ваш код'),
