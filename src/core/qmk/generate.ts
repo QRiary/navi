@@ -10,7 +10,7 @@
  * Structure formats follow the current QMK sources (process_tap_dance.h, combo, key_override,
  * keymap_introspection.c: encoder_map must have as many layers as keymaps).
  */
-import { modsToConstExpr, toQmk, type NameContext } from '../keycodes/codec';
+import { decode, modsToConstExpr, toQmk, type NameContext } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
 import { FEATURE_BY_ID, type FeatureId } from '../features/registry';
 import { checkCombos, comboRefOf, comboRefsMixed, comboStacks, qmkCombos, checkKeyOverrides, checkLeaderSequences, checkTapDances, checkUnicodeMap, leaderFunction, type AdvancedIssue } from '../features/advanced';
@@ -211,11 +211,18 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     return on;
   };
   // A macro's text steps type through navi_type_text (the macro's own lift decides the mods, not navi_send_text's).
-  // The own-program route is left alone: its text lifts only where the keyboard types it (plain keys), per text.
+  // The own-program route is left alone: its text lifts only where the keyboard types it (plain keys). ASCII text the
+  // keyboard types in a plain-keys language: one lift around the whole macro, its key steps included (the mods are
+  // not put back between steps); text with other characters: per text, as navi_type_text decides.
   const macroBody = (m: Macro) => {
     const lift = lifts(m.heldMods);
     if (!lang) return liftedBlock(macroStatements(m.steps), lift);
     if (lang.program && m.steps.some((s) => s.type === 'text')) {
+      const ascii = m.steps.every((s) => s.type !== 'text' || [...s.text].every((ch) => ch.charCodeAt(0) < 0x80));
+      if (lift && ascii) {
+        const body = routedMacroStatements(m.steps, lang, macroStatement, cString, undefined, (arg) => `navi_type_text(${arg}, false);`);
+        return ['{', '    uint8_t navi_held = navi_typing_plain() ? navi_lift_mods() : 0;', ...body.map((s) => `    ${s}`), '    navi_lower_mods(navi_held);', '}'];
+      }
       return routedMacroStatements(m.steps, lang, macroStatement, cString, undefined, (arg) => `navi_type_text(${arg}, ${lift});`);
     }
     return liftedBlock(routedMacroStatements(m.steps, lang, macroStatement, cString, undefined, (arg) => `navi_type_text(${arg}, false);`), lift);
@@ -300,6 +307,10 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const comboRefs = hasCombos && comboRefsMixed(keymap);
   const comboTerms = qmkComboList.filter((q) => q.combo.term);
   const comboLayers = qmkComboList.filter((q) => q.layers);
+  // combo_should_trigger: layer limits, and with reference layers each combo's own key spots (navi_combo_at).
+  const comboTrigger = comboLayers.length > 0 || comboRefs;
+  // Keys of combos that play a tap dance: their presses must not end the active dance before process_combo.
+  const tdComboKeys = [...new Set(qmkComboList.filter((q) => decode(spec, q.combo.result).kind === 'tap-dance').flatMap((q) => q.keys))];
   const holdKeys = hasHoldKeys(tapHold);
   // NAVI's tracking needs combo results as key presses: they become KC_NO, process_combo_event plays them.
   const comboEvents = replay && qmkComboList.some((q) => q.combo.result !== 0);
@@ -462,15 +473,32 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       c.push('    return COMBO_TERM;');
       c.push('}');
     }
-    if (comboLayers.length) {
+    if (comboTrigger) {
+      if (comboRefs) {
+        c.push('');
+        c.push("// QMK matches a combo by keycodes, NAVI's combos are key spots: with keys falling through to other layers, the same");
+        c.push("// keycodes may sit elsewhere (another combo's keys). A press counts only on the combo's own spots (row, col pairs).");
+        c.push('static bool navi_combo_at(keyrecord_t *record, const uint8_t *keys, uint8_t count) {');
+        c.push('    if (!record->event.pressed || !IS_KEYEVENT(record->event)) return true;');
+        c.push('    for (uint8_t i = 0; i < count; i++) {');
+        c.push('        if (keys[2 * i] == record->event.key.row && keys[2 * i + 1] == record->event.key.col) return true;');
+        c.push('    }');
+        c.push('    return false;');
+        c.push('}');
+      }
       c.push('');
       c.push(`bool ${hookName('combo_should_trigger')}(uint16_t combo_index, combo_t *combo, uint16_t keycode, keyrecord_t *record) {`);
-      c.push('    // A combo works on a layer when that layer is the highest active one.');
-      c.push('    layer_state_t top = (layer_state_t)1 << get_highest_layer(layer_state | default_layer_state);');
+      if (comboLayers.length) {
+        c.push('    // A combo works on a layer when that layer is the highest active one.');
+        c.push('    layer_state_t top = (layer_state_t)1 << get_highest_layer(layer_state | default_layer_state);');
+      }
       c.push('    switch (combo_index) {');
       qmkComboList.forEach((q, i) => {
-        if (!q.layers) return;
-        c.push(`        case ${i}: return top & (${q.layers.map((l) => `(layer_state_t)1 << ${layerIds[l] ?? l}`).join(' | ')}); // ${q.name}`);
+        const checks: string[] = [];
+        if (q.layers) checks.push(`(top & (${q.layers.map((l) => `(layer_state_t)1 << ${layerIds[l] ?? l}`).join(' | ')}))`);
+        if (comboRefs) checks.push(`navi_combo_at(record, (const uint8_t[]){${q.combo.keys.flat().join(', ')}}, ${q.combo.keys.length})`);
+        if (!checks.length) return;
+        c.push(`        case ${i}: return ${checks.length === 1 && !comboRefs ? checks[0].slice(1, -1) : checks.join(' && ')}; // ${q.name}`);
       });
       c.push('    }');
       c.push('    return true;');
@@ -538,7 +566,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const preProcess = holdKeys || replay || comboRefs || hasTd;
   const interrupters = holdKeys && anyHoldsOn(tracked);
   c.push(...keyListsCode(tapHold.lists));
-  if (preProcess) c.push(...preProcessHook(hookName('pre_process_record_user'), { lastPressed: holdKeys, replay, interrupters, comboLayer: comboRefs, comboEvents, tapDance: hasTd }));
+  if (preProcess) c.push(...preProcessHook(hookName('pre_process_record_user'), { lastPressed: holdKeys, replay, interrupters, comboLayer: comboRefs, comboEvents, tapDance: hasTd, tapDanceComboKeys: tdComboKeys.map(kc) }));
   if (comboEvents) {
     const played = qmkComboList.map((q) => ({ result: kc(q.combo.result), keys: q.combo.keys, name: q.name }));
     c.push(...comboEventCode(hookName('process_combo_event'), played, { lastPressed: holdKeys, interrupters }));
@@ -685,7 +713,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     get_permissive_hold: permissive,
     pre_process_record_user: preProcess,
     get_combo_term: comboTerms.length > 0,
-    combo_should_trigger: comboLayers.length > 0,
+    combo_should_trigger: comboTrigger,
     combo_ref_from_layer: comboRefs,
     process_combo_event: comboEvents,
     leader_end_user: leaders.length > 0,
@@ -821,7 +849,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   }
   if (hasCombos && !comboRefs) define('COMBO_ONLY_FROM_LAYER', 0);
   if (comboTerms.length) define('COMBO_TERM_PER_COMBO');
-  if (comboLayers.length) define('COMBO_SHOULD_TRIGGER');
+  if (comboTrigger) define('COMBO_SHOULD_TRIGGER');
   if (tappingTerms) define('TAPPING_TERM_PER_KEY');
   if (quickTap) define('QUICK_TAP_TERM_PER_KEY');
   if (holdPress) define('HOLD_ON_OTHER_KEY_PRESS_PER_KEY');
@@ -850,7 +878,9 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   if (sendingFlag) generatedSymbols.add('navi_sending');
   if (hasCombos) generatedSymbols.add('key_combos');
   if (!pipeline && comboTerms.length) generatedSymbols.add('get_combo_term');
-  if (!pipeline && comboLayers.length) generatedSymbols.add('combo_should_trigger');
+  if (!pipeline && comboTrigger) generatedSymbols.add('combo_should_trigger');
+  if (comboRefs) generatedSymbols.add('navi_combo_at');
+  if (hasTd && tdComboKeys.length) for (const name of ['navi_td_combo_keys', 'navi_td_combo_key']) generatedSymbols.add(name);
   if (!pipeline && comboRefs) generatedSymbols.add('combo_ref_from_layer');
   if (!pipeline && comboEvents) generatedSymbols.add('process_combo_event');
   if (comboRefs) for (const name of ['navi_key_layer', 'navi_layer_of']) generatedSymbols.add(name);
@@ -945,7 +975,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
         },
       },
       { hook: 'get_combo_term', call: 'return get_combo_term_navi(combo_index, combo);', why: { en: 'COMBO_TERM_PER_COMBO is on — without it the build fails', ru: 'включён COMBO_TERM_PER_COMBO — без неё сборка не пройдёт' } },
-      { hook: 'combo_should_trigger', call: 'return combo_should_trigger_navi(combo_index, combo, keycode, record);', why: { en: 'COMBO_SHOULD_TRIGGER is on — combo layer limits', ru: 'включён COMBO_SHOULD_TRIGGER — ограничения комбинаций по слоям' } },
+      { hook: 'combo_should_trigger', call: 'return combo_should_trigger_navi(combo_index, combo, keycode, record);', why: { en: 'COMBO_SHOULD_TRIGGER is on — combo layer limits and key spots', ru: 'включён COMBO_SHOULD_TRIGGER — ограничения комбинаций по слоям и местам клавиш' } },
       { hook: 'combo_ref_from_layer', call: 'return combo_ref_from_layer_navi(layer);', why: { en: 'combo reference layers — without it the build still passes, but combos read keys of the highest active layer', ru: 'опорные слои комбо — без неё сборка пройдёт, но комбо будут читать клавиши самого верхнего активного слоя' } },
       { hook: 'process_combo_event', call: 'process_combo_event_navi(combo_index, pressed);', why: { en: 'combo results go through the tap-hold logic — without it the build still passes, but combos do nothing', ru: 'результаты комбо проходят через логику тап-холд — без неё сборка пройдёт, но комбо ничего не будут делать' } },
       { hook: 'leader_end_user', call: 'leader_end_navi();', why: { en: 'leader sequences', ru: 'последовательности leader' } },

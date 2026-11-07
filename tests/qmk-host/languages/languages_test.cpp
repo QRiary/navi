@@ -116,6 +116,11 @@ TEST_F(Languages, macro_in_english_types_its_keys) {
     EXPECT_EQ(play({"+20", "-20"}), "A - H - I - B -");
 }
 
+// A held Shift is let go once for the whole macro, its keys before the text included, and put back after
+TEST_F(Languages, macro_in_english_with_a_held_shift_lifts_it_once) {
+    EXPECT_EQ(play({"+8", "+20", "-20", "-8"}), "LSFT - A - H - I - B - LSFT -");
+}
+
 // The keys before the first text are the keyboard's; from the text on, everything goes to the program in order.
 TEST_F(Languages, macro_in_russian_sends_its_text_and_later_keys_to_the_program) {
     EXPECT_EQ(play({"+0", "-0", "+20", "-20"}), "A -");
