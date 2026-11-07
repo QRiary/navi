@@ -164,6 +164,8 @@ export function preProcessHook(
     comboEvents?: boolean;
     /** End the active tap dance on another key's press before QMK's tapping code (any dance: QMK's own semantics). */
     tapDance?: boolean;
+    /** Keys (C keycodes, as process_combo matches them) of combos whose result is a tap dance. */
+    tapDanceComboKeys?: string[];
   },
 ): string[] {
   const out: string[] = [];
@@ -229,14 +231,54 @@ export function preProcessHook(
     if (opts.lastPressed) out.push('static uint16_t navi_press_keycode;');
     out.push('');
   }
+  const tdCombo = opts.tapDance && !!opts.tapDanceComboKeys?.length;
+  if (tdCombo) {
+    out.push(
+      '#ifdef COMBO_ENABLE',
+      '// Keys of combos whose result is a tap dance, as process_combo matches them',
+      `static const uint16_t PROGMEM navi_td_combo_keys[] = { ${opts.tapDanceComboKeys!.join(', ')} };`,
+      '#    ifndef COMBO_ONLY_FROM_LAYER',
+      'uint8_t combo_ref_from_layer(uint8_t layer); // QMK declares it in process_combo.c only',
+      '#    endif',
+      '',
+      '// Can process_combo take this press for a combo that plays a tap dance? pre_process_record runs before it, so such',
+      "// a press must not end the active dance here: the combo may be the dance's next tap. A key that plays on its own",
+      '// still ends it, later, in QMK.',
+      'static bool navi_td_combo_key(uint16_t keycode, keyrecord_t *record) {',
+      '    if (!is_combo_enabled() || !IS_KEYEVENT(record->event)) return false;',
+      '#    ifdef COMBO_ONLY_FROM_LAYER',
+      '    keycode = keymap_key_to_keycode(COMBO_ONLY_FROM_LAYER, record->event.key);',
+      '#    else',
+      '    uint8_t highest = get_highest_layer(layer_state | default_layer_state);',
+      '    uint8_t ref     = combo_ref_from_layer(highest);',
+      '    if (ref != highest) keycode = keymap_key_to_keycode(ref, record->event.key);',
+      '#    endif',
+      '    for (uint8_t i = 0; i < ARRAY_SIZE(navi_td_combo_keys); i++) {',
+      '        if (pgm_read_word(&navi_td_combo_keys[i]) == keycode) return true;',
+      '    }',
+      '    return false;',
+      '}',
+      '#endif',
+      '',
+    );
+  }
   out.push(`bool ${hook}(uint16_t keycode, keyrecord_t *record) {`);
   if (opts.tapDance) {
     out.push(
       '    // A press of another key ends the active tap dance. QMK does that in process_record, after its tap-hold code',
       "    // judged this key by the layers before the dance's action (a layer change could make a mod-tap hold instead of",
       '    // tap). Ended here, the same way and before that code; QMK finds no active dance later. The key is looked up again.',
-      '    if (preprocess_tap_dance(keycode, record)) keycode = get_record_keycode(record, true);',
     );
+    if (tdCombo) {
+      if (opts.comboLayer) out.push('    navi_key_layer = navi_layer_of(record); // combo_ref_from_layer reads it');
+      out.push(
+        '#ifdef COMBO_ENABLE',
+        '    if (!(record->event.pressed && navi_td_combo_key(keycode, record)) && preprocess_tap_dance(keycode, record)) keycode = get_record_keycode(record, true);',
+        '#else',
+        '    if (preprocess_tap_dance(keycode, record)) keycode = get_record_keycode(record, true);',
+        '#endif',
+      );
+    } else out.push('    if (preprocess_tap_dance(keycode, record)) keycode = get_record_keycode(record, true);');
   }
   if (opts.comboLayer) out.push('    navi_key_layer = navi_layer_of(record); // for combo_ref_from_layer: pre_process_record runs before combos');
   if (opts.lastPressed) out.push('    if (record->event.pressed) navi_last_pressed = keycode;');

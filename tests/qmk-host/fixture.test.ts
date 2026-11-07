@@ -99,6 +99,9 @@ export function hostProject(): Project {
   // Layer 3, reached by MO(3) on layer 1 (hold 30, then 20): 2 is KC_8, 13 transparent (layer 1's KC_A shows through).
   put(1, 20, q('MO(3)'));
   put(3, 2, q('KC_8'));
+  // The same keycodes as combo c8 on layer 3 (KC_A, KC_8) on other spots: no combo there
+  put(3, 7, q('KC_A'));
+  put(3, 8, q('KC_8'));
   const refs: Record<number, 'self'> = { 1: 'self', 2: 'self', 3: 'self' };
   return {
     ...p,
