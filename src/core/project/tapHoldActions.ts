@@ -90,7 +90,12 @@ export function projectKeycodeRefs(project: Project): Set<number> {
   for (const c of project.combos) refs.add(c.result);
   for (const o of project.keyOverrides) refs.add(o.trigger).add(o.replacement);
   for (const c of project.customKeycodes) for (const k of ownActionKeycodes(c.action)) refs.add(k);
-  for (const s of project.leaderSequences) if (s.action.type === 'tap') refs.add(s.action.keycode);
+  for (const s of project.leaderSequences) {
+    for (const k of s.keys) refs.add(k);
+    if (s.action.type === 'tap') refs.add(s.action.keycode);
+  }
+  for (const m of project.macros) for (const s of m.steps) if (s.type === 'tap' || s.type === 'down' || s.type === 'up') refs.add(s.keycode);
+  for (const l of project.languages) if (l.osShortcut !== undefined) refs.add(l.osShortcut);
   for (const a of project.keyAliases) refs.add(a.keycode);
   for (const s of project.tapHolds) {
     for (const k of s.keycodes) refs.add(k);
@@ -115,7 +120,7 @@ function standInCandidates(spec: KeycodeSpec, hold: HoldAction): number[] {
   return [STAND_IN_BASES, STAND_IN_OVERFLOW].flatMap((bases) => mods.flatMap((m) => bases.map((base) => encode(spec, { kind: 'mod-tap', mods: m, base }))));
 }
 
-function holdProblem(spec: KeycodeSpec, hold: HoldAction): { en: string; ru: string } | null {
+export function holdProblem(spec: KeycodeSpec, hold: HoldAction): { en: string; ru: string } | null {
   if (hold.type === 'mods') return (hold.mods & 0x0f) === 0 || hold.mods > 0x1f ? { en: 'Choose at least one modifier.', ru: 'Выберите хотя бы один модификатор.' } : null;
   if (hold.type === 'layer') {
     if (!Number.isInteger(hold.layer) || hold.layer < 0 || hold.layer > 15) return { en: 'A tap-hold key holds layers 0–15 only (QMK’s LT).', ru: 'Тап-холд клавиша удерживает только слои 0–15 (LT в QMK).' };
@@ -285,11 +290,7 @@ export function checkTapHoldActions(spec: KeycodeSpec, project: Project, ownRefs
     out.push({ level: 'error', where: 'tap-hold keys', message: { en: `At most ${TAP_HOLD_ACTIONS_MAX} tap-hold keys with actions.`, ru: `Не больше ${TAP_HOLD_ACTIONS_MAX} тап-холд клавиш с действиями.` } });
   }
   const layers = activeKeymap(project).layers.length;
-  const onKeysOnly = new Set<number>();
-  for (const c of project.combos) onKeysOnly.add(c.result);
-  for (const o of project.keyOverrides) onKeysOnly.add(o.trigger).add(o.replacement);
-  for (const c of project.customKeycodes) for (const k of ownActionKeycodes(c.action)) onKeysOnly.add(k);
-  for (const s of project.leaderSequences) if (s.action.type === 'tap') onKeysOnly.add(s.action.keycode);
+  // In combos and override triggers a stand-in is a real tap-hold key; where NAVI plays a keycode it is its tap (qmk/playKey.ts).
   const seen = new Set<number>();
   project.tapHoldActions.forEach((a, i) => {
     const where = `tap-hold key ${i + 1} · ${toQmk(spec, a.tap)}`;
@@ -301,9 +302,6 @@ export function checkTapHoldActions(spec: KeycodeSpec, project: Project, ownRefs
     seen.add(a.keycode);
     if (a.hold.type === 'layer' && a.hold.layer >= layers && !problem) {
       out.push({ level: 'warning', where, message: { en: `Layer ${a.hold.layer} doesn’t exist in this keymap.`, ru: `Слоя ${a.hold.layer} нет в этой раскладке.` } });
-    }
-    if (onKeysOnly.has(a.keycode)) {
-      err({ en: 'A tap-hold key with actions works only on keys of the keymap and in tap dances, not in combos, overrides or leader / own keycode actions.', ru: 'Тап-холд клавиша с действиями работает только на клавишах раскладки и в tap dance, не в комбо, подменах и действиях лидера / своих keycodes.' });
     }
     const own = ownRefs?.get(standInBase(a.keycode));
     if (own && !problem) {

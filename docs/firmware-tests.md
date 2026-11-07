@@ -121,17 +121,21 @@ after the run) with the player (`electron/firmwareTests/navi_tests_player.cpp`),
 
 - `config.h`: the project's matrix size in place of the test framework's 4 x 10, `QMK_KEYBOARD_H` as `quantum.h`,
   then the keymap folder's own `config.h`.
-- `test.mk`: the keymap folder's `rules.mk` (own pipeline: yours, with `navi_rules.mk` and your `SRC` files), the
-  keymap folder on `VPATH`, then these turned off, since the test platform has no stand-in for them and none changes
+- `test.mk`: the keymap folder's `rules.mk` (own pipeline: yours, with `navi_rules.mk` and your `SRC` files; `LIB_SRC`
+  files are compiled too, as a firmware build does), the keymap folder on `VPATH`, then these turned off, since the test platform has no stand-in for them and none changes
   what a key types: RGB Matrix, RGB Light, LED Matrix, backlight, OLED, ST7565, Quantum Painter, haptic, audio,
-  encoders, split, raw HID, VIA / Vial / dynamic keymap (it would replace the test fixture's key lookup), pointing
+  encoders, split, VIA / Vial / dynamic keymap (it would replace the test fixture's key lookup), pointing
   devices, PS/2, joystick, digitizer, MIDI, Bluetooth, DIP switches, NKRO (the player reads 6-key reports), console,
   LTO, steno, virtual serial, sleep LED, WPM.
 - Not read: keyboard-level files (`keyboards/<kb>/config.h`, `rules.mk`, `keyboard.json`), so a keyboard's own
   `TAPPING_TERM` or features are missing from the test build; `users/<keymap>` isn't on `VPATH`. A split board is
   built as its whole matrix on one board; `is_keyboard_left()` and `is_keyboard_master()` are QMK's defaults for a
   board that isn't split. Code that needs any of the features above (an RGB call outside `#ifdef RGB_MATRIX_ENABLE`)
-  can't build, and the run says so with the first compiler errors.
+  can't build, and the run says so with the first compiler errors. Raw HID stays as `rules.mk` sets it: the test
+  driver has no raw HID, so `raw_hid_send` goes nowhere.
+- `transactions.h` and `navi_tests_stubs.c`: stand-ins for QMK's split transactions, for own code that includes the
+  header outside `#ifdef SPLIT_KEYBOARD`: `transaction_register_rpc` does nothing, `transaction_rpc_send` / `_exec`
+  return true and read back zeros (there is no other half). Weak, so your own definitions win.
 
 Nothing is written into `qmk_firmware` or the keymap folder. The player registers every spot of every layer from the
 built keymap (`keycode_at_keymap_location_raw`), plays each scenario in a forked child (30 s at most), and prints one

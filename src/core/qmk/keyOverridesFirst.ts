@@ -44,6 +44,7 @@ export function keyOverridesFirstTriggers(spec: KeycodeSpec, project: Project, s
   const capsWord = spec.byName.get('QK_CAPS_WORD_TOGGLE')?.value;
   const first = (v: number): boolean => {
     if (v === capsWord || inRange(spec, 'QK_MACRO', v) || isTaskSwitcher(spec, v) || languageKeyOf(spec, project, v)) return true;
+    if (project.tapHoldActions.some((a) => a.keycode === v)) return true; // a tap-hold key with actions: navi_tap_holds plays it
     const ck = project.customKeycodes[v - customStart];
     if (v >= customStart && ck) return ownActionDoesSomething(ck.action);
     return symbols && isSymbolKey(spec, v);

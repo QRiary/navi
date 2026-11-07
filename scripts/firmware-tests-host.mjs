@@ -72,6 +72,41 @@ try {
   const genKo = await play('generated-overrides', 4, 10);
   check('generated-overrides: NAVI\'s own navi_tests.txt passes whole', genKo.status === 'pass' && genKo.passed > 0, genKo);
 
+  const koAny = await play('overrides-any', 4, 10);
+  check('overrides-any: Shift overrides play MO(1) while held, a macro, CW_TOGG and a custom keycode', koAny.status === 'pass' && koAny.passed === 5, koAny);
+  const genKoAny = await play('generated-overrides-any', 4, 10);
+  check('generated-overrides-any: NAVI\'s own navi_tests.txt passes whole', genKoAny.status === 'pass' && genKoAny.passed > 0, genKoAny);
+
+  const leaderCw = await play('leader-caps-word', 4, 10);
+  check('leader-caps-word: CW_TOGG after Leader runs the sequence; alone it still toggles Caps Word', leaderCw.status === 'pass' && leaderCw.passed === 2, leaderCw);
+  const leaderAny = await play('leader-any', 4, 10);
+  check('leader-any: leader actions TG(1), a macro and CW_TOGG work', leaderAny.status === 'pass' && leaderAny.passed === 3, leaderAny);
+
+  const leaderKeys = await play('leader-keys', 4, 10);
+  check('leader-keys: a macro, a custom keycode, MO(1) + C(KC_A), a mod-tap key and a tap dance after Leader; the keys work outside it', leaderKeys.status === 'pass' && leaderKeys.passed === 7, leaderKeys);
+  const genLeaderKeys = await play('generated-leader-keys', 4, 10);
+  check('generated-leader-keys: NAVI\'s own navi_tests.txt passes whole', genLeaderKeys.status === 'pass' && genLeaderKeys.passed > 0, genLeaderKeys);
+
+  const standIns = await play('standins-any', 4, 10);
+  check('standins-any: a tap-hold key with actions as a combo result (tap and hold), an override trigger and replacement, a leader action, an own keycode action and a macro step', standIns.status === 'pass' && standIns.passed === 9, standIns);
+  const genStandIns = await play('generated-standins-any', 4, 10);
+  check('generated-standins-any: NAVI\'s own navi_tests.txt passes whole', genStandIns.status === 'pass' && genStandIns.passed > 0, genStandIns);
+
+  const customAny = await play('custom-any', 4, 10);
+  check('custom-any: own keycodes tap TG(1), a macro, CW_TOGG (also auto-repeated and per language); a macro as a language\'s OS shortcut', customAny.status === 'pass' && customAny.passed === 7, customAny);
+  const genCustomAny = await play('generated-custom-any', 4, 10);
+  check('generated-custom-any: NAVI\'s own navi_tests.txt passes whole', genCustomAny.status === 'pass' && genCustomAny.passed > 0, genCustomAny);
+
+  const macrosAny = await play('macros-any', 4, 10);
+  check('macros-any: macro steps C(KC_A), TG(1), MO(1) down / up, a custom keycode, TG(1) auto-repeated (no VIA)', macrosAny.status === 'pass' && macrosAny.passed === 6, macrosAny);
+  const genMacrosAny = await play('generated-macros-any', 4, 10);
+  check('generated-macros-any: NAVI\'s own navi_tests.txt passes whole', genMacrosAny.status === 'pass' && genMacrosAny.passed > 0, genMacrosAny);
+
+  const hw = await play('own-hardware', 4, 10);
+  check('own-hardware: own C including transactions.h unguarded, sending raw HID and keeping code in LIB_SRC builds; GUI + Space reads ⟨G- ⟩', hw.status === 'pass' && hw.passed === 3, hw);
+  const genHw = await play('generated-own-hardware', 4, 10);
+  check('generated-own-hardware: NAVI\'s own navi_tests.txt passes whole', genHw.status === 'pass' && genHw.passed > 0, genHw);
+
   const all = await play('all-pipeline', 10, 6);
   check('all-pipeline: LEDs, the task switcher, a per-language key and a secret macro build together in the own pipeline', all.status === 'pass' && all.passed === 3, all);
 

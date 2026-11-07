@@ -12,6 +12,7 @@
  */
 import { decode, modsToConstExpr, toQmk, type NameContext } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
+import { leaderKey, leaderNeverSees } from '../keycodes/sequence';
 import { FEATURE_BY_ID, type FeatureId } from '../features/registry';
 import { checkCombos, comboRefOf, comboRefsMixed, comboStacks, qmkCombos, checkKeyOverrides, checkLeaderSequences, checkTapDances, checkUnicodeMap, leaderFunction, type AdvancedIssue } from '../features/advanced';
 import { configParams, configValueType } from './configParams';
@@ -38,6 +39,7 @@ import { checkTapHolds, effectiveTapHolds } from '../project/tapHolds';
 import { checkTapHoldActions, effectiveTapHoldActions, projectOwnCodeRefs, type OwnCodeFile } from '../project/tapHoldActions';
 import { anyHoldsOn, caseLines, comboEventCode, hasHoldKeys, hasSpots, spotsCode, keyListsCode, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, naviSendCode, replayTracked, standInCheckCode, tapHoldsCode, type StandIn } from './tapHold';
 import { tapDanceCode } from './tapDance';
+import { KO_PLAY_CODE, PLAY_SYMBOLS, playCode, playedOverride, playLoopIssues, playsAsKey, projectPlays, standInsAsTaps, tapStatement } from './playKey';
 import { KEY_OVERRIDES_FIRST_LINE, KEY_OVERRIDES_FIRST_SYMBOLS, keyOverridesFirstCode, keyOverridesFirstTriggers, keyOverrideOrderIssues } from './keyOverridesFirst';
 import { checkSecrets, secretsCode } from './secretText';
 import { isTextStep, textArg } from '../project/textSteps';
@@ -158,25 +160,56 @@ function modsToMask(mods: number): string {
   return parts.join(' | ') || '0';
 }
 
-/** Macro steps → C statements (send_string / tap_code / register_code / wait_ms). */
-function macroStatements(steps: MacroStep[]): string[] {
-  return steps.map(macroStatement);
+/**
+ * Keys after Leader, first in process_record. QMK's process_leader runs late (after caps word, key overrides, tap
+ * dance), so a key NAVI's code plays here (a macro, an own keycode, a language or symbol key) would never reach it,
+ * and a tap dance would still dance and play its key into the open sequence. So while a sequence is open, a press of
+ * a key some sequence holds goes to the leader here, as process_leader.c does it (the tap key of a tap-hold key; a
+ * full sequence ends the leader and the key works as usual). Releases go on as usual: the leader takes only presses.
+ */
+function leaderPassLines(leaders: { keys: number[] }[], kc: (v: number) => string): string[] {
+  const keys = [...new Set(leaders.flatMap((s) => s.keys))].sort((a, b) => a - b);
+  return [
+    '#ifdef LEADER_ENABLE',
+    '    // Keys of Leader sequences while one is open: straight to the leader, nothing else acts on them.',
+    '    if (record->event.pressed && leader_sequence_active() && !leader_sequence_timed_out()) {',
+    '        switch (get_tap_keycode(keycode)) {',
+    ...keys.map((k) => `            case ${kc(k)}:`),
+    '                if (!leader_sequence_add(get_tap_keycode(keycode))) {',
+    '                    leader_end();',
+    '                    return true;',
+    '                }',
+    '#    ifdef LEADER_PER_KEY_TIMING',
+    '                leader_reset_timer();',
+    '#    endif',
+    '                return false;',
+    '        }',
+    '    }',
+    '#endif',
+  ];
 }
 
-function macroStatement(s: MacroStep): string {
-  {
-    switch (s.type) {
-      case 'text':
-      case 'secret':
-        return `send_string(${textArg(s, cString)});`;
-      case 'delay':
-        return `wait_ms(${s.ms});`;
-      case 'tap':
-        return `tap_code(0x${s.keycode.toString(16).toUpperCase().padStart(2, '0')});`;
-      case 'down':
-        return `register_code(0x${s.keycode.toString(16).toUpperCase().padStart(2, '0')});`;
-      case 'up':
-        return `unregister_code(0x${s.keycode.toString(16).toUpperCase().padStart(2, '0')});`;
+/**
+ * Macro steps (compiled in: no VIA) → C statements (send_string / tap_code / register_code / wait_ms). A basic key
+ * stays the 8-bit call; a key with mods the *_code16 one; anything else is played as a key event (playKey.ts) for
+ * `record` (the macro key's, or NULL). kc: a keycode's C expression.
+ */
+function macroStatement(s: MacroStep, kc: (v: number) => string, record: string): string {
+  const hex = (v: number) => `0x${v.toString(16).toUpperCase().padStart(2, '0')}`;
+  switch (s.type) {
+    case 'text':
+    case 'secret':
+      return `send_string(${textArg(s, cString)});`;
+    case 'delay':
+      return `wait_ms(${s.ms});`;
+    case 'tap':
+      return s.keycode <= 0xff ? `tap_code(${hex(s.keycode)});` : tapStatement(s.keycode, kc(s.keycode), record);
+    case 'down':
+    case 'up': {
+      const down = s.type === 'down';
+      if (s.keycode <= 0xff) return `${down ? 'register_code' : 'unregister_code'}(${hex(s.keycode)});`;
+      if (!playsAsKey(s.keycode)) return `${down ? 'register_code16' : 'unregister_code16'}(${kc(s.keycode)});`;
+      return `navi_play(${kc(s.keycode)}, ${record}, ${down});`;
     }
   }
 }
@@ -213,7 +246,9 @@ export function usesTaskSwitcher(spec: KeycodeSpec, project: Project): boolean {
   return used;
 }
 
-export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBrightness, ownCode }: GenerateOptions): GenerateResult {
+export function generateKeymap({ project: given, keymap, spec, via, encoderCount, maxBrightness, ownCode }: GenerateOptions): GenerateResult {
+  // Where NAVI plays a keycode, a tap-hold key with actions is its tap (playKey.ts).
+  const project = standInsAsTaps(spec, given);
   const { rows, cols } = project.hardware.matrix;
   const layerIds = layerIdentifiers(keymap);
   const tdSorted = [...project.tapDances].sort((a, b) => a.index - b.index);
@@ -237,19 +272,20 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   // The own-program route is left alone: its text lifts only where the keyboard types it (plain keys). ASCII text the
   // keyboard types in a plain-keys language: one lift around the whole macro, its key steps included (the mods are
   // not put back between steps); text with other characters: per text, as navi_type_text decides.
-  const macroBody = (m: Macro) => {
+  const macroBody = (m: Macro, record: string) => {
+    const macroStep = (s: MacroStep) => macroStatement(s, kc, record);
     const lift = lifts(m.heldMods);
-    if (!lang) return liftedBlock(macroStatements(m.steps), lift);
+    if (!lang) return liftedBlock(m.steps.map(macroStep), lift);
     if (lang.program && m.steps.some(isTextStep)) {
       // A secret's text is unknown here: it may not be ASCII, so navi_type_text decides per text.
       const ascii = m.steps.every((s) => s.type !== 'secret' && (s.type !== 'text' || [...s.text].every((ch) => ch.charCodeAt(0) < 0x80)));
       if (lift && ascii) {
-        const body = routedMacroStatements(m.steps, lang, macroStatement, cString, undefined, (arg) => `navi_type_text(${arg}, false);`);
+        const body = routedMacroStatements(m.steps, lang, macroStep, cString, undefined, (arg) => `navi_type_text(${arg}, false);`);
         return ['{', '    uint8_t navi_held = navi_typing_plain() ? navi_lift_mods() : 0;', ...body.map((s) => `    ${s}`), '    navi_lower_mods(navi_held);', '}'];
       }
-      return routedMacroStatements(m.steps, lang, macroStatement, cString, undefined, (arg) => `navi_type_text(${arg}, ${lift});`);
+      return routedMacroStatements(m.steps, lang, macroStep, cString, undefined, (arg) => `navi_type_text(${arg}, ${lift});`);
     }
-    return liftedBlock(routedMacroStatements(m.steps, lang, macroStatement, cString, undefined, (arg) => `navi_type_text(${arg}, false);`), lift);
+    return liftedBlock(routedMacroStatements(m.steps, lang, macroStep, cString, undefined, (arg) => `navi_type_text(${arg}, false);`), lift);
   };
   const sendText = (text: string, own?: HeldMods) => {
     const lift = lifts(own);
@@ -277,25 +313,26 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   aliases.defines.forEach((a) => aliasOf.has(a.keycode) || aliasOf.set(a.keycode, a.cName));
   const kc = (v: number) => aliasOf.get(v) ?? qmkExpr(v);
   // An own keycode's action as C statements; a per-language one picks by navi_language() (without languages: `other`).
-  const basicActionLines = (a: CustomAction): string[] =>
-    a.type === 'send-string' ? [sendText(a.text, a.heldMods)] : a.type === 'tap' ? [`tap_code16(${kc(a.keycode)});`] : [];
-  const ownActionLines = (a: CustomKeycodeAction): string[] => {
-    if (a.type !== 'by-language') return basicActionLines(a);
+  // record: the C record a tapped keycode is played for (the key's own, or NULL where there is none: auto repeat).
+  const basicActionLines = (a: CustomAction, record: string): string[] =>
+    a.type === 'send-string' ? [sendText(a.text, a.heldMods)] : a.type === 'tap' ? [tapStatement(a.keycode, kc(a.keycode), record)] : [];
+  const ownActionLines = (a: CustomKeycodeAction, record: string): string[] => {
+    if (a.type !== 'by-language') return basicActionLines(a, record);
     const entries = project.languages.flatMap((l) => {
       const e = a.byLanguage.find((x) => x.language === l.id);
-      return e ? [{ name: `NAVI_LANG_${languageCName(l)}`, lines: basicActionLines(e.action) }] : [];
+      return e ? [{ name: `NAVI_LANG_${languageCName(l)}`, lines: basicActionLines(e.action, record) }] : [];
     });
-    if (!lang || !entries.length) return basicActionLines(a.other);
+    if (!lang || !entries.length) return basicActionLines(a.other, record);
     const branch = (lines: string[]) => [...lines.map((l) => `        ${l}`), '        break;'];
     return [
       'switch (navi_language()) { // per-language action',
       ...entries.flatMap((e) => [`    case ${e.name}:`, ...branch(e.lines)]),
-      ...(entries.length < project.languages.length ? ['    default: // other languages', ...branch(basicActionLines(a.other))] : []),
+      ...(entries.length < project.languages.length ? ['    default: // other languages', ...branch(basicActionLines(a.other, record))] : []),
       '}',
     ];
   };
   const tdC = tapDanceCode(tdSorted, kc, cString, lang, globalLift);
-  const tdReserved = tapDanceReservedNames(project, keymap, [...tdC.symbols, 'navi_send', 'navi_sending', ...standInName.values()]);
+  const tdReserved = tapDanceReservedNames(project, keymap, [...tdC.symbols, 'navi_send', 'navi_sending', ...PLAY_SYMBOLS, ...standInName.values()]);
   const issues: AdvancedIssue[] = [
     ...checkTapDances(spec, project.tapDances, tdReserved),
     ...checkCombos(project, project.combos, spec),
@@ -312,6 +349,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   issues.push(...checkLanguages(project, keymap));
   issues.push(...oneShotCancelIssues(project));
   issues.push(...checkLanguageActions(project));
+  issues.push(...playLoopIssues(spec, project));
   issues.push(...tdC.issues);
   issues.push(...checkSecrets(spec, project, via, new Set([...tdReserved, ...aliases.defines.map((a) => a.cName)])));
   const langNames = new Map(project.languages.map((l) => [l.id, `NAVI_LANG_${languageCName(l)}`]));
@@ -319,8 +357,10 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const tracked = replayTracked(tapHold);
   const replay = tracked.length > 0;
   const tapHoldInCode = thActions.length > 0 || replay;
-  // navi_send is shared by tap-hold keys with actions and tap dances; navi_sending only where navi_tap_holds reads it.
-  const sendingFlag = (tdC.sends || thActions.length > 0) && tapHoldInCode;
+  // Keycodes tap_code16 can't send, played as key events (playKey.ts): navi_play over navi_send.
+  const plays = projectPlays(project);
+  // navi_send is shared by tap-hold keys with actions, tap dances and navi_play; navi_sending only where navi_tap_holds reads it.
+  const sendingFlag = (tdC.sends || thActions.length > 0 || plays) && tapHoldInCode;
   // “Own pipeline”: the hooks get a _navi suffix, enums and prototypes go to navi.h, build settings to navi_*.
   const pipeline = project.firmware.pipeline?.enabled === true;
   const hookName = (qmk: keyof typeof NAVI_HOOKS) => (pipeline ? NAVI_HOOKS[qmk] : qmk);
@@ -336,7 +376,10 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     });
   }
   // Only valid sequences with an action get into the code.
-  const leaders = project.leaderSequences.filter((s) => s.keys.length >= 1 && s.keys.length <= 5 && s.keys.every((k) => k >= 0x04 && k <= 0xff) && s.action.type !== 'none' && !(s.action.type === 'send-string' && !s.action.text));
+  // Keys as QMK's leader records them (a tap-hold key as its tap key, sequence.ts).
+  const leaders = project.leaderSequences
+    .map((s) => ({ ...s, keys: s.keys.map(leaderKey) }))
+    .filter((s) => s.keys.length >= 1 && s.keys.length <= 5 && s.keys.every((k) => k >= 0x04 && !leaderNeverSees(spec, k)) && s.action.type !== 'none' && !(s.action.type === 'send-string' && !s.action.text));
   const unicodeTable = project.firmware.unicode === 'unicodemap' ? project.unicodeMap : [];
 
   // ── what is used ──────────────────────────────────────────────────
@@ -500,8 +543,9 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const liftAt = c.length;
   if (lang) c.push(...languageEarlyCode({ project, keymap, plan: lang, layerIds, via, prototypes: !pipeline, lift: globalLift }));
 
+  if (tdC.sends || plays) c.push(...naviSendCode({ flag: sendingFlag, guard: false }));
+  if (plays) c.push(...playCode());
   if (hasTd) {
-    if (tdC.sends) c.push(...naviSendCode({ flag: sendingFlag, guard: false }));
     c.push(...tdC.lines);
     if (!pipeline && tdC.prototypes.length) c.push('// Your own tap dance functions (define them in your own lines below):', ...tdC.prototypes, '');
     c.push(...tdC.actions);
@@ -585,8 +629,13 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
 
   if (hasOverrides) {
     c.push('// ── Key overrides ────────────────────────────────────────────────────');
+    if (project.keyOverrides.some((o) => playsAsKey(o.replacement))) c.push(...KO_PLAY_CODE);
     project.keyOverrides.forEach((o) => {
       const layers = o.layers?.length ? o.layers.map((l) => `(1 << ${layerIds[l] ?? l})`).join(' | ') : null;
+      if (playsAsKey(o.replacement)) {
+        c.push(playedOverride({ name: o.name, mask: modsToMask(o.mods), trigger: kc(o.trigger), replacement: kc(o.replacement), layers: layers ?? '~0' }));
+        return;
+      }
       c.push(
         layers
           ? `const key_override_t ${o.name} = ko_make_with_layers(${modsToMask(o.mods)}, ${kc(o.trigger)}, ${kc(o.replacement)}, ${layers});`
@@ -635,7 +684,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     leaders.forEach((s, i) => {
       c.push(`    ${i === 0 ? 'if' : '} else if'} (${leaderFunction(s.keys.length)}(${s.keys.map(kc).join(', ')})) {`);
       if (s.action.type === 'send-string') c.push(`        ${sendText(s.action.text, s.action.heldMods)}`);
-      else if (s.action.type === 'tap') c.push(`        tap_code16(${kc(s.action.keycode)});`);
+      else if (s.action.type === 'tap') c.push(`        ${tapStatement(s.action.keycode, kc(s.action.keycode), 'NULL')}`);
     });
     c.push('    }');
     c.push('}');
@@ -663,11 +712,11 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       ...repeatMacros.map((m) => ({
         label: `QK_MACRO_${m.index}`,
         comment: commentText(m.name),
-        body: via ? (lang?.routed ? [`navi_send_via_macro(${m.index});`] : liftedBlock([`dynamic_keymap_macro_send(${m.index});`], lifts(undefined))) : macroBody(m),
+        body: via ? (lang?.routed ? [`navi_send_via_macro(${m.index});`] : liftedBlock([`dynamic_keymap_macro_send(${m.index});`], lifts(undefined))) : macroBody(m, 'NULL'),
       })),
       ...repeatCustoms.map((ck) => ({
         label: ck.name,
-        body: ownActionLines(ck.action),
+        body: ownActionLines(ck.action, 'NULL'),
       })),
     ];
     c.push(...autoRepeatCode({ delay, rate, cases, fallback: lang?.symbols ? ['navi_send_text(navi_symbol_text);'] : undefined }));
@@ -684,7 +733,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       tap: kc(a.tap),
       hold: a.hold.type === 'key' ? { type: 'key', key: kc(a.hold.keycode) } : a.hold.type === 'layer' ? { type: 'layer', mask: a.hold.mods ? modMask(a.hold.mods) : null } : { type: 'mods', mask: modMask(a.hold.mods) },
     }));
-    if (thActions.length && !tdC.sends) c.push(...naviSendCode({ flag: sendingFlag, guard: true }));
+    if (thActions.length && !tdC.sends && !plays) c.push(...naviSendCode({ flag: sendingFlag, guard: true }));
     c.push(...tapHoldsCode({ standIns, tracked, interrupters: anyHoldsOn(tracked), layerOff: layersOnTop ? 'navi_layer_off' : 'layer_off', sending: sendingFlag }));
   }
   // For the user's own C: which MT / LT values are NAVI's stand-ins (their base key isn't what they tap).
@@ -703,9 +752,14 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   // Key overrides on keys NAVI's code (or Caps Word) takes first: process_key_override sees them before (keyOverridesFirst.ts).
   const koFirst = keyOverridesFirstTriggers(spec, project, !!lang?.symbols);
   if (koFirst.length) c.push(...keyOverridesFirstCode(koFirst.map(kc)));
-  const recordHook = koFirst.length > 0 || keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang || viaLift || osCancel || ledRecord.length > 0 || switcher;
+  const otherRecord = koFirst.length > 0 || keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang || viaLift || osCancel || ledRecord.length > 0 || switcher;
+  // The hand-over to the leader: with any other record code (it may take a sequence key), or for a sequence key that
+  // isn't a plain key (Caps Word, tap dance, a key override… take those before process_leader).
+  const leaderPass = leaders.length > 0 && (otherRecord || leaders.some((s) => s.keys.some((k) => k > 0xff)));
+  const recordHook = otherRecord || leaderPass;
   if (recordHook) {
     c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
+    if (leaderPass) c.push(...leaderPassLines(leaders, kc));
     c.push(...ledRecord);
     if (layersOnTop) c.push('    navi_layer_keys(keycode, record); // layer keys bring their layer to the top');
     if (tdC.keys) {
@@ -747,7 +801,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push('    if (!record->event.pressed) return true;');
     c.push('    switch (keycode) {');
     pressCustoms.forEach((ck) => {
-      const lines = ownActionLines(ck.action);
+      const lines = ownActionLines(ck.action, 'record');
       if (lines.length === 1) c.push(`        case ${ck.name}: ${lines[0]} return false;`);
       else c.push(`        case ${ck.name}:`, ...lines.map((l) => `            ${l}`), '            return false;');
     });
@@ -755,7 +809,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       c.push('        // Macros MC_n compiled into the firmware (no VIA in this build).');
       pressMacros.forEach((m) => {
         c.push(`        case QK_MACRO_${m.index}: // ${commentText(m.name)}`);
-        for (const st of macroBody(m)) c.push(`            ${st}`);
+        for (const st of macroBody(m, 'record')) c.push(`            ${st}`);
         c.push('            return false;');
       });
     }
@@ -985,7 +1039,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const generatedSymbols = new Set<string>(['keymaps']);
   if (hasEncoders) generatedSymbols.add('encoder_map');
   if (hasTd) for (const name of ['tap_dance_actions', ...tdC.symbols]) generatedSymbols.add(name);
-  if (tdC.sends) generatedSymbols.add('navi_send');
+  if (tdC.sends || plays) generatedSymbols.add('navi_send');
+  if (plays) for (const name of PLAY_SYMBOLS) generatedSymbols.add(name);
   if (sendingFlag) generatedSymbols.add('navi_sending');
   if (hasCombos) generatedSymbols.add('key_combos');
   if (!pipeline && comboTerms.length) generatedSymbols.add('get_combo_term');

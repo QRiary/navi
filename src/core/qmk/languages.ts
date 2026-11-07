@@ -20,6 +20,7 @@ import type { KeycodeSpec } from '../keycodes/spec';
 import { isTypingLayer, languageCName, languageKeycodes, languageKeyOf, plainLanguageIndex, usesTextRoute } from '../project/languages';
 import { isTextStep, textArg } from '../project/textSteps';
 import type { Keymap, MacroStep, Project, TextRoute } from '../project/types';
+import { playsAsKey } from './playKey';
 
 const hex = (v: number) => `0x${v.toString(16).toUpperCase().padStart(4, '0')}`;
 
@@ -327,7 +328,12 @@ export function languageSwitchCode(o: { project: Project; plan: LanguagePlan; kc
   }
   out.push('void navi_switch_language(uint8_t language) {', '    if (language >= NAVI_LANGUAGES) return;');
   if (plan.program) out.push('    navi_switch_language_user(language); // your program switches the computer');
-  else if (shortcuts) out.push('    if (navi_lang_shortcuts[language] != KC_NO) tap_code16(navi_lang_shortcuts[language]); // the computer’s shortcut');
+  else if (shortcuts) {
+    // A shortcut tap_code16 can't send (a macro, a layer key…) is played as a key event (playKey.ts).
+    const played = list.some((l) => l.osShortcut !== undefined && playsAsKey(l.osShortcut));
+    const tap = played ? 'navi_play_tap(navi_lang_shortcuts[language], NULL);' : 'tap_code16(navi_lang_shortcuts[language]);';
+    out.push(`    if (navi_lang_shortcuts[language] != KC_NO) ${tap} // the computer’s shortcut`);
+  }
   out.push('    navi_set_language(language);', '}', '');
   const first = languageKeycodes(o.spec, list.length - 1).toggle;
   const last = languageKeycodes(o.spec, 0).to;
