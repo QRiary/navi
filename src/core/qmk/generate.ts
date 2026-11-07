@@ -752,10 +752,14 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   // Key overrides on keys NAVI's code (or Caps Word) takes first: process_key_override sees them before (keyOverridesFirst.ts).
   const koFirst = keyOverridesFirstTriggers(spec, project, !!lang?.symbols);
   if (koFirst.length) c.push(...keyOverridesFirstCode(koFirst.map(kc)));
-  const recordHook = koFirst.length > 0 || keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang || viaLift || osCancel || ledRecord.length > 0 || switcher;
+  const otherRecord = koFirst.length > 0 || keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang || viaLift || osCancel || ledRecord.length > 0 || switcher;
+  // The hand-over to the leader: with any other record code (it may take a sequence key), or for a sequence key that
+  // isn't a plain key (Caps Word, tap dance, a key override… take those before process_leader).
+  const leaderPass = leaders.length > 0 && (otherRecord || leaders.some((s) => s.keys.some((k) => k > 0xff)));
+  const recordHook = otherRecord || leaderPass;
   if (recordHook) {
     c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
-    if (leaders.length) c.push(...leaderPassLines(leaders, kc));
+    if (leaderPass) c.push(...leaderPassLines(leaders, kc));
     c.push(...ledRecord);
     if (layersOnTop) c.push('    navi_layer_keys(keycode, record); // layer keys bring their layer to the top');
     if (tdC.keys) {

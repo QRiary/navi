@@ -77,6 +77,8 @@ try {
   const genKoAny = await play('generated-overrides-any', 4, 10);
   check('generated-overrides-any: NAVI\'s own navi_tests.txt passes whole', genKoAny.status === 'pass' && genKoAny.passed > 0, genKoAny);
 
+  const leaderCw = await play('leader-caps-word', 4, 10);
+  check('leader-caps-word: CW_TOGG after Leader runs the sequence; alone it still toggles Caps Word', leaderCw.status === 'pass' && leaderCw.passed === 2, leaderCw);
   const leaderAny = await play('leader-any', 4, 10);
   check('leader-any: leader actions TG(1), a macro and CW_TOGG work', leaderAny.status === 'pass' && leaderAny.passed === 3, leaderAny);
 

@@ -301,6 +301,7 @@ it.skipIf(!out)('writes the sample keymap folders for the firmware test runner',
   write(join(out!, 'overrides-any'), overridesAny(), OVERRIDES_ANY_TESTS);
   writeGenerated(join(out!, 'generated-overrides-any'), overridesAny());
   write(join(out!, 'leader-any'), leaderAny(), LEADER_ANY_TESTS);
+  write(join(out!, 'leader-caps-word'), leaderCapsWord(), LEADER_CAPS_WORD_TESTS);
   write(join(out!, 'leader-keys'), leaderKeys(), LEADER_KEYS_TESTS);
   writeGenerated(join(out!, 'generated-leader-keys'), leaderKeys());
   write(join(out!, 'standins-any'), standInsAny(), STAND_INS_ANY_TESTS);
@@ -477,6 +478,18 @@ export const STAND_INS_ANY_TESTS = [
   'r0c8 => hi',
   'r0c9 => hi',
 ];
+
+/** CW_TOGG after Leader, with no other record code: Caps Word would take it before process_leader. */
+function leaderCapsWord(): Project {
+  const p = withKeys(createBlankProject('fw tests leader caps word', 4, 10, false), [
+    [0, 0, 0, 'QK_LEAD'],
+    [0, 0, 1, 'CW_TOGG'],
+    [0, 0, 2, 'KC_A'],
+  ]);
+  return { ...p, leaderSequences: [{ id: 'l1', keys: [q('CW_TOGG')], action: { type: 'tap', keycode: q('KC_6') } }] };
+}
+
+export const LEADER_CAPS_WORD_TESTS = ['r0c0 r0c1 wait:500 r0c2 => 6a', 'r0c1 r0c2 r0c1 r0c2 => Aa'];
 
 export const LEADER_KEYS_TESTS = [
   'r0c0 r0c1 wait:500 => 1',

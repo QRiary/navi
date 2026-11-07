@@ -27,30 +27,23 @@ export function leaderKey(v: number): number {
   return k;
 }
 
-/** Keys QMK's own features take before process_leader runs (quantum.c process_record_quantum), so a sequence can't hold them. */
+/**
+ * Keys QMK's own features take before process_record_kb (quantum.c process_record_quantum), so neither NAVI's
+ * hand-over to the leader (generate.ts leaderPassLines, first in process_record) nor process_leader sees them. Keys
+ * taken later (Caps Word, backlight, LED matrix, audio, MIDI, steno, secure, sequencer…) reach the hand-over first.
+ */
 const NEVER_SEEN = [
   'QK_LOCK', // key lock
   'QK_DYNAMIC_MACRO_', // dynamic macros
   'QK_REPEAT_KEY',
   'QK_ALT_REPEAT_KEY',
-  'QK_CAPS_WORD_TOGGLE', // caps word returns false for its key
-  'QK_AUDIO_',
-  'QK_CLICKY_',
-  'QK_MUSIC_',
+  'QK_AUDIO_CLICKY_', // clicky
   'QK_HAPTIC_',
-  'QK_SECURE_',
-  'QK_SEQUENCER_',
-  'QK_MIDI_',
-  'QK_STENO_',
-  'QK_BACKLIGHT_',
-  'QK_LED_MATRIX_',
 ];
 
 export function leaderNeverSees(spec: KeycodeSpec, v: number): boolean {
   const def = spec.byValue.get(v & 0xffff);
-  if (def) return NEVER_SEEN.some((p) => def.key === p || (p.endsWith('_') && def.key.startsWith(p)));
-  const define = spec.ranges.find((r) => v >= r.start && v <= r.end)?.define;
-  return define === 'QK_MIDI' || define === 'QK_SEQUENCER' || define === 'QK_STENO';
+  return !!def && NEVER_SEEN.some((p) => def.key === p || (p.endsWith('_') && def.key.startsWith(p)));
 }
 
 export function parseKeySequence(spec: KeycodeSpec, text: string, max = 5, ctx: ParseContext = {}): { keys: number[] } | { error: { en: string; ru: string } } {

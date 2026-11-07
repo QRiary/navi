@@ -40,7 +40,7 @@ describe('keys after Leader = any keycode the leader sees', () => {
     leaderSequences: [
       { id: 'a', keys: [q('QK_MACRO_0'), q('MO(1)')], action: { type: 'tap', keycode: q('KC_1') } },
       { id: 'b', keys: [q('LCTL_T(KC_E)')], action: { type: 'tap', keycode: q('KC_2') } },
-      { id: 'c', keys: [q('CW_TOGG')], action: { type: 'tap', keycode: q('KC_3') } },
+      { id: 'c', keys: [q('QK_REPEAT_KEY')], action: { type: 'tap', keycode: q('KC_3') } },
     ],
   };
 
@@ -66,7 +66,7 @@ describe('keys after Leader = any keycode the leader sees', () => {
 
   it('a key QMK takes before Leader is an error; a deleted own keycode leaves an empty place', async () => {
     const issues = gen(p).issues.filter((i) => i.where.startsWith('leader #'));
-    expect(issues.map((i) => [i.where, i.level, i.message.en])).toEqual([['leader #3', 'error', 'QMK handles “CW_TOGG” before Leader sees it, so a sequence can\'t contain it.']]);
+    expect(issues.map((i) => [i.where, i.level, i.message.en])).toEqual([['leader #3', 'error', 'QMK handles “QK_REP” before Leader sees it, so a sequence can\'t contain it.']]);
     const { deleteCustomKeycode } = await import('../project/ops');
     const own: Project = { ...p, customKeycodes: [{ id: 'x', name: 'MY_X', description: '', action: { type: 'none' } }], leaderSequences: [{ id: 'a', keys: [q('QK_USER_0')], action: { type: 'tap', keycode: q('KC_1') } }] };
     const after = deleteCustomKeycode(spec, own, 'x').project;
