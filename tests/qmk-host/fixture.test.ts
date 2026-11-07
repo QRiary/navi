@@ -8,6 +8,7 @@ import { it } from 'vitest';
 import { parseQmk } from '../../src/core/keycodes/codec';
 import { loadSpec } from '../../src/core/keycodes/spec';
 import { createBlankProject } from '../../src/core/project/factory';
+import { taskSwitcherKeycode } from '../../src/core/keycodes/taskSwitcher';
 import { languageKeycodes } from '../../src/core/project/languages';
 import { activeKeymap, setKeycodes } from '../../src/core/project/ops';
 import { ensureTapHold, pruneTapHoldActions } from '../../src/core/project/tapHoldActions';
@@ -285,6 +286,7 @@ export function optionsHostProject(): Project {
   put(0, 13, q('KC_N'));
   put(0, 39, q('KC_S'));
   put(1, 5, q('KC_A'));
+  put(1, 6, taskSwitcherKeycode(spec)); // the task switcher key, on layer 1 (hold 3)
   return {
     ...p,
     firmware: { ...p.firmware, oneShotCancel: true },

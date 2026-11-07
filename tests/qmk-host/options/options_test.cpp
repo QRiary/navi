@@ -1,6 +1,6 @@
 // Hold spots and the one-shot cancel (fixture.test.ts → optionsHostProject). Positions (n = row * 10 + col):
 //   0 LT(1, KC_SPC)   1 LGUI_T(KC_Q): holds when a key at 5, 13 or 39 is pressed   2 KC_C   3 MO(1)
-//   4 OSM(MOD_LSFT), a second tap cancels it   5 KC_E (layer 1: KC_A)   6 KC_X   13 KC_N   39 KC_S
+//   4 OSM(MOD_LSFT), a second tap cancels it   5 KC_E (layer 1: KC_A)   6 KC_X (layer 1: the task switcher key)   13 KC_N   39 KC_S
 #include "../navi_host.hpp"
 
 // A press at a spot makes the tap-hold key a hold at once, whatever the key types there
@@ -45,4 +45,14 @@ TEST_F(NaviHost, one_shot_shift_works_again_after_a_cancel) {
 TEST_F(NaviHost, cancel_leaves_a_held_shift_alone) {
     // The real Shift is the OSM key's own hold: held past the term it is a plain Shift, not a one-shot
     EXPECT_EQ(play({"+4", "wait", "+5", "-5", "-4"}), "LSFT LSFT+E LSFT -");
+}
+
+// The task switcher key (6, layer 1 by holding 3) holds Ctrl+Alt+Tab while held: the computer's key repeat moves on
+TEST_F(NaviHost, task_switcher_key_holds_ctrl_alt_tab_while_held) {
+    EXPECT_EQ(play({"+3", "+6", "+5", "-5", "-6", "-3"}), "LCTL+LALT LCTL+LALT+0x2B 0x2B+A 0x2B - 0x28 -"); // A clears the weak mods, as QMK does
+}
+
+// The layer key let go with the switcher key still held: Ctrl+Alt+Tab goes up first, Enter picks alone
+TEST_F(NaviHost, task_switcher_pick_with_the_key_still_held_lets_go_of_it_first) {
+    EXPECT_EQ(play({"+3", "+6", "-3", "-6"}), "LCTL+LALT LCTL+LALT+0x2B LCTL+LALT - 0x28 -");
 }

@@ -189,7 +189,7 @@ interface Behavior {
   switcher?: boolean;
 }
 
-/** What the task switcher key sends (qmk/taskSwitcher.ts): Ctrl+Alt+Tab as tap_code16 (weak mods) on every tap, then Enter. */
+/** What the task switcher key sends (qmk/taskSwitcher.ts): Ctrl+Alt+Tab (weak mods) down on the press, up on the release, then Enter. */
 const weakTap = (mods: number, code: number): Op[] => [{ t: 'weak+', mods }, { t: 'down', code }, { t: 'up', code }, { t: 'weak-', mods }];
 const SWITCHER_OPEN = weakTap(0x05, 0x2b);
 const SWITCHER_PICK: Op[] = [{ t: 'down', code: 0x28 }, { t: 'up', code: 0x28 }];
@@ -319,7 +319,7 @@ function behavior(c: Ctx, v: number, thActions: Map<number, { tap: number; hold:
     }
     return { tap, hold: plainPress(c, h.keycode), term };
   }
-  if (isTaskSwitcher(spec, v)) return { tap: { down: SWITCHER_OPEN, up: [] }, term: 0, switcher: true };
+  if (isTaskSwitcher(spec, v)) return { tap: { down: SWITCHER_OPEN.slice(0, 2), up: SWITCHER_OPEN.slice(2) }, term: 0, switcher: true };
   const lang = languageKeyOf(spec, project, v);
   if (lang) return why(`${c.kc(v)}, a language key (the tests type in the first language)`);
   const d = decode(spec, v, { unicode: project.firmware.unicode });

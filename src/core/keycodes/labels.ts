@@ -262,8 +262,8 @@ function kindOfGroup(group: string | undefined): LabelKind {
 /** What the task switcher key does (tooltip, catalog). */
 export const taskSwitcherTitle = () =>
   t(
-    "Task switcher (Windows): opens Ctrl+Alt+Tab, which stays open. Tap again for the next window, with Shift for the previous one; the arrows move too. Enter picks, Esc closes, and letting go of the layer key that brought up this key's layer picks the window.",
-    'Переключатель окон (Windows): открывает Ctrl+Alt+Tab, и он остаётся открытым. Ещё нажатие — следующее окно, с Shift — предыдущее; стрелки тоже двигают выбор. Enter выбирает, Esc закрывает, а отпускание клавиши слоя, на котором стоит эта клавиша, выбирает окно.',
+    "Task switcher (Windows): opens Ctrl+Alt+Tab, which stays open. Tap again for the next window (hold it to keep moving), with Shift for the previous one; the arrows move too. Enter picks, Esc closes, and letting go of the layer key that brought up this key's layer picks the window.",
+    'Переключатель окон (Windows): открывает Ctrl+Alt+Tab, и он остаётся открытым. Ещё нажатие — следующее окно (удержание — листать дальше), с Shift — предыдущее; стрелки тоже двигают выбор. Enter выбирает, Esc закрывает, а отпускание клавиши слоя, на котором стоит эта клавиша, выбирает окно.',
   );
 
 /** “→” switches to a language, “⇄” toggles it. */
