@@ -33,6 +33,48 @@ describe('leader action = any keycode', () => {
   });
 });
 
+describe('keys after Leader = any keycode the leader sees', () => {
+  const p: Project = {
+    ...createBlankProject('leader keys', 4, 10, false),
+    macros: [{ id: 'm', index: 0, name: 'hi', steps: [{ type: 'text', text: 'hi' }] }],
+    leaderSequences: [
+      { id: 'a', keys: [q('QK_MACRO_0'), q('MO(1)')], action: { type: 'tap', keycode: q('KC_1') } },
+      { id: 'b', keys: [q('LCTL_T(KC_E)')], action: { type: 'tap', keycode: q('KC_2') } },
+      { id: 'c', keys: [q('CW_TOGG')], action: { type: 'tap', keycode: q('KC_3') } },
+    ],
+  };
+
+  it('sequences compare what QMK records; a tap-hold key is its tap key; NAVI hands the keys to the leader first', () => {
+    const c = keymapC(p);
+    expect(c).toContain('if (leader_sequence_two_keys(MC_0, MO(L_LAYER_1))) {');
+    expect(c).toContain('} else if (leader_sequence_one_key(KC_E)) {');
+    expect(c).not.toContain('KC_3');
+    expect(c).toContain(
+      [
+        'bool process_record_user(uint16_t keycode, keyrecord_t *record) {',
+        '#ifdef LEADER_ENABLE',
+        '    // Keys of Leader sequences while one is open: straight to the leader, nothing else acts on them.',
+        '    if (record->event.pressed && leader_sequence_active() && !leader_sequence_timed_out()) {',
+        '        switch (get_tap_keycode(keycode)) {',
+        '            case KC_E:',
+        '            case MO(L_LAYER_1):',
+        '            case MC_0:',
+        '                if (!leader_sequence_add(get_tap_keycode(keycode))) {',
+      ].join('\n'),
+    );
+  });
+
+  it('a key QMK takes before Leader is an error; a deleted own keycode leaves an empty place', async () => {
+    const issues = gen(p).issues.filter((i) => i.where.startsWith('leader #'));
+    expect(issues.map((i) => [i.where, i.level, i.message.en])).toEqual([['leader #3', 'error', 'QMK handles “CW_TOGG” before Leader sees it, so a sequence can\'t contain it.']]);
+    const { deleteCustomKeycode } = await import('../project/ops');
+    const own: Project = { ...p, customKeycodes: [{ id: 'x', name: 'MY_X', description: '', action: { type: 'none' } }], leaderSequences: [{ id: 'a', keys: [q('QK_USER_0')], action: { type: 'tap', keycode: q('KC_1') } }] };
+    const after = deleteCustomKeycode(spec, own, 'x').project;
+    expect(after.leaderSequences[0]!.keys).toEqual([0]);
+    expect(gen(after).issues.some((i) => i.where === 'leader #1' && i.message.en.startsWith('Choose a key'))).toBe(true);
+  });
+});
+
 describe('custom keycode “press a key” = any keycode', () => {
   const tap = (k: string) => ({ type: 'tap' as const, keycode: q(k) });
   const base = createBlankProject('custom any', 4, 10, false);

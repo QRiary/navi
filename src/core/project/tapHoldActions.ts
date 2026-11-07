@@ -90,7 +90,12 @@ export function projectKeycodeRefs(project: Project): Set<number> {
   for (const c of project.combos) refs.add(c.result);
   for (const o of project.keyOverrides) refs.add(o.trigger).add(o.replacement);
   for (const c of project.customKeycodes) for (const k of ownActionKeycodes(c.action)) refs.add(k);
-  for (const s of project.leaderSequences) if (s.action.type === 'tap') refs.add(s.action.keycode);
+  for (const s of project.leaderSequences) {
+    for (const k of s.keys) refs.add(k);
+    if (s.action.type === 'tap') refs.add(s.action.keycode);
+  }
+  for (const m of project.macros) for (const s of m.steps) if (s.type === 'tap' || s.type === 'down' || s.type === 'up') refs.add(s.keycode);
+  for (const l of project.languages) if (l.osShortcut !== undefined) refs.add(l.osShortcut);
   for (const a of project.keyAliases) refs.add(a.keycode);
   for (const s of project.tapHolds) {
     for (const k of s.keycodes) refs.add(k);

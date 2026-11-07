@@ -3,7 +3,8 @@
  * They are all code in keymap.c (generator: core/qmk/generate.ts), so they work only
  * in your own firmware build; here is what can be checked in advance.
  */
-import { decode } from '../keycodes/codec';
+import { decode, toQmk } from '../keycodes/codec';
+import { LEADER_UNSEEN, leaderKey, leaderNeverSees } from '../keycodes/sequence';
 import { loadSpec, type KeycodeSpec } from '../keycodes/spec';
 import { KC_TRNS } from '../project/factory';
 import type { Combo, Keymap, KeyOverride, MatrixPos, Project, TapDance } from '../project/types';
@@ -298,8 +299,8 @@ export function leaderFunction(length: number): string {
 }
 
 /**
- * Leader key sequences. After QK_LEAD QMK remembers up to 5 keycodes; for MT/LT only
- * the “tap” (low byte), so a sequence holds only basic keys (KC_A…).
+ * Leader key sequences. After QK_LEAD QMK remembers up to 5 keycodes, a tap-hold key as its tap key (leaderKey); any
+ * keycode but the ones QMK takes before Leader (leaderNeverSees).
  */
 export function checkLeaderSequences(spec: KeycodeSpec, project: Project): AdvancedIssue[] {
   const out: AdvancedIssue[] = [];
@@ -307,10 +308,11 @@ export function checkLeaderSequences(spec: KeycodeSpec, project: Project): Advan
   project.leaderSequences.forEach((s, i) => {
     const where = `leader #${i + 1}`;
     if (s.keys.length < 1 || s.keys.length > 5) out.push({ level: 'error', where, message: { en: 'A sequence has 1 to 5 keys.', ru: 'В последовательности от 1 до 5 клавиш.' } });
-    if (s.keys.some((k) => k < 0x04 || k > 0xff)) {
-      out.push({ level: 'error', where, message: { en: 'Only plain keys (letters, digits, punctuation, F-keys…) — QMK compares the tapped key.', ru: 'Только простые клавиши (буквы, цифры, знаки, F-клавиши…) — QMK сравнивает нажатую клавишу.' } });
-    }
-    const sig = s.keys.join(',');
+    const keys = s.keys.map(leaderKey);
+    if (keys.some((k) => k < 0x04)) out.push({ level: 'error', where, message: { en: 'Choose a key for every place in the sequence.', ru: 'Выберите клавишу для каждого места в последовательности.' } });
+    const unseen = keys.find((k) => leaderNeverSees(spec, k));
+    if (unseen !== undefined) out.push({ level: 'error', where, message: LEADER_UNSEEN(toQmk(spec, unseen)) });
+    const sig = keys.join(',');
     if (seen.has(sig)) out.push({ level: 'error', where, message: { en: `Same keys as sequence #${seen.get(sig)! + 1}.`, ru: `Те же клавиши, что в последовательности №${seen.get(sig)! + 1}.` } });
     else seen.set(sig, i);
     if (s.action.type === 'none' || (s.action.type === 'send-string' && !s.action.text)) {

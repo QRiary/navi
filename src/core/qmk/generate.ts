@@ -12,6 +12,7 @@
  */
 import { decode, modsToConstExpr, toQmk, type NameContext } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
+import { leaderKey, leaderNeverSees } from '../keycodes/sequence';
 import { FEATURE_BY_ID, type FeatureId } from '../features/registry';
 import { checkCombos, comboRefOf, comboRefsMixed, comboStacks, qmkCombos, checkKeyOverrides, checkLeaderSequences, checkTapDances, checkUnicodeMap, leaderFunction, type AdvancedIssue } from '../features/advanced';
 import { configParams, configValueType } from './configParams';
@@ -157,6 +158,35 @@ function modsToMask(mods: number): string {
   if (mods & 0x04) parts.push('MOD_MASK_ALT');
   if (mods & 0x08) parts.push('MOD_MASK_GUI');
   return parts.join(' | ') || '0';
+}
+
+/**
+ * Keys after Leader, first in process_record. QMK's process_leader runs late (after caps word, key overrides, tap
+ * dance), so a key NAVI's code plays here (a macro, an own keycode, a language or symbol key) would never reach it,
+ * and a tap dance would still dance and play its key into the open sequence. So while a sequence is open, a press of
+ * a key some sequence holds goes to the leader here, as process_leader.c does it (the tap key of a tap-hold key; a
+ * full sequence ends the leader and the key works as usual). Releases go on as usual: the leader takes only presses.
+ */
+function leaderPassLines(leaders: { keys: number[] }[], kc: (v: number) => string): string[] {
+  const keys = [...new Set(leaders.flatMap((s) => s.keys))].sort((a, b) => a - b);
+  return [
+    '#ifdef LEADER_ENABLE',
+    '    // Keys of Leader sequences while one is open: straight to the leader, nothing else acts on them.',
+    '    if (record->event.pressed && leader_sequence_active() && !leader_sequence_timed_out()) {',
+    '        switch (get_tap_keycode(keycode)) {',
+    ...keys.map((k) => `            case ${kc(k)}:`),
+    '                if (!leader_sequence_add(get_tap_keycode(keycode))) {',
+    '                    leader_end();',
+    '                    return true;',
+    '                }',
+    '#    ifdef LEADER_PER_KEY_TIMING',
+    '                leader_reset_timer();',
+    '#    endif',
+    '                return false;',
+    '        }',
+    '    }',
+    '#endif',
+  ];
 }
 
 /**
@@ -344,7 +374,10 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     });
   }
   // Only valid sequences with an action get into the code.
-  const leaders = project.leaderSequences.filter((s) => s.keys.length >= 1 && s.keys.length <= 5 && s.keys.every((k) => k >= 0x04 && k <= 0xff) && s.action.type !== 'none' && !(s.action.type === 'send-string' && !s.action.text));
+  // Keys as QMK's leader records them (a tap-hold key as its tap key, sequence.ts).
+  const leaders = project.leaderSequences
+    .map((s) => ({ ...s, keys: s.keys.map(leaderKey) }))
+    .filter((s) => s.keys.length >= 1 && s.keys.length <= 5 && s.keys.every((k) => k >= 0x04 && !leaderNeverSees(spec, k)) && s.action.type !== 'none' && !(s.action.type === 'send-string' && !s.action.text));
   const unicodeTable = project.firmware.unicode === 'unicodemap' ? project.unicodeMap : [];
 
   // ── what is used ──────────────────────────────────────────────────
@@ -720,6 +753,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const recordHook = koFirst.length > 0 || keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang || viaLift || osCancel || ledRecord.length > 0 || switcher;
   if (recordHook) {
     c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
+    if (leaders.length) c.push(...leaderPassLines(leaders, kc));
     c.push(...ledRecord);
     if (layersOnTop) c.push('    navi_layer_keys(keycode, record); // layer keys bring their layer to the top');
     if (tdC.keys) {

@@ -80,6 +80,11 @@ try {
   const leaderAny = await play('leader-any', 4, 10);
   check('leader-any: leader actions TG(1), a macro and CW_TOGG work', leaderAny.status === 'pass' && leaderAny.passed === 3, leaderAny);
 
+  const leaderKeys = await play('leader-keys', 4, 10);
+  check('leader-keys: a macro, a custom keycode, MO(1) + C(KC_A), a mod-tap key and a tap dance after Leader; the keys work outside it', leaderKeys.status === 'pass' && leaderKeys.passed === 7, leaderKeys);
+  const genLeaderKeys = await play('generated-leader-keys', 4, 10);
+  check('generated-leader-keys: NAVI\'s own navi_tests.txt passes whole', genLeaderKeys.status === 'pass' && genLeaderKeys.passed > 0, genLeaderKeys);
+
   const customAny = await play('custom-any', 4, 10);
   check('custom-any: own keycodes tap TG(1), a macro, CW_TOGG (also auto-repeated and per language); a macro as a language\'s OS shortcut', customAny.status === 'pass' && customAny.passed === 7, customAny);
   const genCustomAny = await play('generated-custom-any', 4, 10);

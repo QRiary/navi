@@ -16,6 +16,8 @@
  *   overrides-any  Shift overrides whose replacement is no keyboard key (MO(1) held, a macro, CW_TOGG, a custom
  *             keycode): played by navi_ko_play; also as generated-overrides-any
  *   leader-any  leader actions TG(1), a macro and CW_TOGG, played as taps (tap_code16 can't send them)
+ *   leader-keys  keys after Leader that aren't plain keys: a macro, a custom keycode, MO(1), C(KC_A), a mod-tap key, a
+ *             tap dance; also as generated-leader-keys
  *   custom-any  custom keycodes tapping TG(1), a macro, CW_TOGG (also auto-repeated and per language), a macro as a
  *             language's OS shortcut; also as generated-custom-any
  *   macros-any  macro key steps above one byte without VIA: C(KC_A), TG(1), MO(1) down / up, a custom keycode, TG(1)
@@ -297,6 +299,8 @@ it.skipIf(!out)('writes the sample keymap folders for the firmware test runner',
   write(join(out!, 'overrides-any'), overridesAny(), OVERRIDES_ANY_TESTS);
   writeGenerated(join(out!, 'generated-overrides-any'), overridesAny());
   write(join(out!, 'leader-any'), leaderAny(), LEADER_ANY_TESTS);
+  write(join(out!, 'leader-keys'), leaderKeys(), LEADER_KEYS_TESTS);
+  writeGenerated(join(out!, 'generated-leader-keys'), leaderKeys());
   write(join(out!, 'custom-any'), customAny(), CUSTOM_ANY_TESTS);
   writeGenerated(join(out!, 'generated-custom-any'), customAny());
   write(join(out!, 'macros-any'), macrosAny(), MACROS_ANY_TESTS);
@@ -391,6 +395,46 @@ function leaderAny(): Project {
 }
 
 export const LEADER_ANY_TESTS = ['r0c0 r0c1 wait:500 r0c2 => 9', 'r0c0 r0c2 wait:500 => hi', 'r0c0 r0c2 r0c2 wait:500 r0c1 => A'];
+
+/**
+ * Keys after Leader that aren't plain keys: a macro and a custom keycode with an action (NAVI's process_record would
+ * take them first), MO(1) and C(KC_A), a mod-tap key (stored as itself, recorded as its tap key) and a tap dance.
+ */
+function leaderKeys(): Project {
+  const p = withKeys(createBlankProject('fw tests leader keys', 4, 10, false), [
+    [0, 0, 0, 'QK_LEAD'],
+    [0, 0, 1, 'QK_MACRO_0'],
+    [0, 0, 2, 'QK_USER_0'],
+    [0, 0, 3, 'MO(1)'],
+    [0, 0, 4, 'C(KC_A)'],
+    [0, 0, 5, 'LCTL_T(KC_E)'],
+    [0, 0, 6, 'TD(0)'],
+  ]);
+  const tap = (k: string) => ({ type: 'tap' as const, keycode: q(k) });
+  return {
+    ...p,
+    macros: [{ id: 'm0', index: 0, name: 'hi', steps: [{ type: 'text', text: 'hi' }] }],
+    customKeycodes: [{ id: 'y', name: 'MY_Y', description: '', action: tap('KC_Y') }],
+    tapDances: [{ id: 't', index: 0, name: 'TD_T', tap: q('KC_T'), hold: 0, doubleTap: q('KC_U'), tapHold: 0 }],
+    leaderSequences: [
+      { id: 'l1', keys: [q('QK_MACRO_0')], action: tap('KC_1') },
+      { id: 'l2', keys: [q('QK_USER_0'), q('QK_USER_0')], action: tap('KC_2') },
+      { id: 'l3', keys: [q('MO(1)'), q('C(KC_A)')], action: tap('KC_3') },
+      { id: 'l4', keys: [q('LCTL_T(KC_E)')], action: tap('KC_4') },
+      { id: 'l5', keys: [q('TD(0)')], action: tap('KC_5') },
+    ],
+  };
+}
+
+export const LEADER_KEYS_TESTS = [
+  'r0c0 r0c1 wait:500 => 1',
+  'r0c0 r0c2 r0c2 wait:500 => 2',
+  'r0c0 r0c3 r0c4 wait:500 => 3',
+  'r0c0 r0c5 wait:500 => 4',
+  'r0c0 r0c6 wait:500 => 5',
+  'r0c1 r0c2 => hiy',
+  'r0c6 wait:300 => t',
+];
 
 /**
  * Custom keycodes whose action taps what tap_code16 can't send: TG(1), a macro, CW_TOGG, a macro ticked "repeat while

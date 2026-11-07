@@ -298,7 +298,7 @@ export function mapProjectKeycodes(p: Project, fix: (v: number) => number): Proj
     keyLists: p.keyLists.map((l) => ({ ...l, keys: keep(l.keys) })),
     firmware: p.firmware.capsWordRules ? { ...p.firmware, capsWordRules: p.firmware.capsWordRules.map((r) => ({ ...r, keys: keep(r.keys) })) } : p.firmware,
     tapHoldActions: p.tapHoldActions.map((a) => ({ ...a, tap: fix(a.tap), hold: a.hold.type === 'key' ? { type: 'key', keycode: fix(a.hold.keycode) } : a.hold })),
-    leaderSequences: p.leaderSequences.map((s) => ({ ...s, action: action(s.action) })),
+    leaderSequences: p.leaderSequences.map((s) => ({ ...s, keys: s.keys.map(fix), action: action(s.action) })),
     customKeycodes: p.customKeycodes.map((c) => ({ ...c, action: mapOwnActionKeycodes(c.action, fix) })),
     languages: p.languages.map((l) => (l.osShortcut === undefined ? l : { ...l, osShortcut: fix(l.osShortcut) })),
     macros: p.macros.map((m) => ({ ...m, steps: m.steps.map((s) => (s.type === 'tap' || s.type === 'down' || s.type === 'up' ? { ...s, keycode: fix(s.keycode) } : s)) })),
