@@ -59,7 +59,7 @@ const tryHandlers = (handlers: readonly string[]) => handlers.map((h) => `${h}(d
 export function rawHidHookC(via: boolean, handlers: readonly string[]): string[] {
   return via
     ? ['bool via_command_kb(uint8_t *data, uint8_t length) {', `    return ${tryHandlers(handlers)};`, '}', '']
-    : ['void raw_hid_receive(uint8_t *data, uint8_t length) {', `    ${tryHandlers(handlers)};`, '}', ''];
+    : ['void raw_hid_receive(uint8_t *data, uint8_t length) {', handlers.length > 1 ? `    (void)(${tryHandlers(handlers)});` : `    ${tryHandlers(handlers)};`, '}', ''];
 }
 
 /** Own pipeline: always defined; tries the helpers that are on and that VIA doesn't own (none: false). */
