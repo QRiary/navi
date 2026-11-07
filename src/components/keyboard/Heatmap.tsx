@@ -98,6 +98,7 @@ export function HeatmapStrip({ max }: { max: number }) {
           </p>
         </Modal>
       )}
+      {file && <HeatmapCombos file={file} />}
     </div>
   );
 }
@@ -148,11 +149,17 @@ export function HeatmapOverlay() {
       </div>
     );
   }
-  const rows = comboRows(project.combos, file);
+  return null;
+}
+
+/** Combos by times fired, never fired first: a wrapping line in the strip (a card on the drawing covered keys). */
+function HeatmapCombos({ file }: { file: KeyCountsFile }) {
+  const combos = useProjectStore((s) => s.project?.combos) ?? [];
+  const rows = comboRows(combos, file);
   if (rows.length === 0) return null;
   return (
     <div className="heat-combos" data-find-id="heatmap:combos">
-      <div className="kicker">{t('Combos by times fired', 'Комбо по числу срабатываний')}</div>
+      <span className="kicker">{t('Combos by times fired', 'Комбо по числу срабатываний')}</span>
       <ul>
         {rows.map(({ combo, count }) => (
           <li key={combo.id} className={count === 0 ? 'is-zero' : ''}>

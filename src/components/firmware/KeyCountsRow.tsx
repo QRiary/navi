@@ -75,7 +75,7 @@ export function KeyCountsRow({ project }: { project: Project }) {
 
       {settings.route === 'board' && (
         <>
-          <p className="field-hint">
+          <p className="field-hint" style={{ margin: '8px 12px' }}>
             {t(
               'Counts since the last save are lost when the keyboard loses power, and each save wears the keyboard’s flash a little.',
               'Счётчики с последнего сохранения теряются, когда клавиатура теряет питание, и каждое сохранение немного изнашивает её флеш-память.',

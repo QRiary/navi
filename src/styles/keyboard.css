@@ -328,32 +328,34 @@
   z-index: 2;
 }
 
+/* Combos in the strip, one wrapping line under the legend (a card over the drawing covered keys). */
 .heat-combos {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 224px;
-  max-height: calc(100% - 64px);
-  overflow-y: auto;
-  padding: 12px;
-  background: var(--panel-background);
-  border: var(--border);
+  flex: 1 0 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
   font-size: var(--fs-xs);
 }
 
 .heat-combos ul {
-  margin: 8px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .heat-combos li {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 4px 0;
+  gap: 8px;
+  max-width: 220px;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
+}
+
+.heat-combo-count {
+  color: var(--text-secondary);
 }
 
 .heat-combos li.is-zero {
