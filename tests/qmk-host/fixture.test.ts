@@ -121,6 +121,8 @@ export function hostProject(): Project {
     firmware: {
       ...p.firmware,
       autoRepeat: { delay: 300, rate: 50 },
+      // counts_program_test.cpp is the user's navi_key_count_user
+      keyCounts: { route: 'program', saveMinutes: 30, programFile: '' },
       capsWordRules: [
         { id: 'cw-letters', keys: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((l) => q(`KC_${l}`)), shift: true },
         { id: 'cw-dot', keys: [q('KC_DOT')], shift: true, layers: [1] },
@@ -295,16 +297,39 @@ export function optionsHostProject(): Project {
   };
 }
 
+/**
+ * The key counts suite (counts/counts_test.cpp names the positions): the board route, layer keys on top, a combo.
+ */
+export function countsHostProject(): Project {
+  let p = createBlankProject('qmk host counts', 4, 10, false);
+  const id = activeKeymap(p).id;
+  const put = (layer: number, n: number, v: number) => (p = setKeycodes(p, id, layer, [[Math.floor(n / 10), n % 10]], v));
+  (['KC_A', 'LSFT_T(KC_B)', 'MO(1)', 'KC_C', 'KC_E', 'LT(2, KC_F)', 'KC_G', 'KC_H', 'MO(2)'] as const).forEach((k, n) => put(0, n, q(k)));
+  put(1, 3, q('KC_D'));
+  put(2, 3, q('KC_Z'));
+  return {
+    ...p,
+    combos: [{ id: 'cx', name: 'gh_x', keys: [[0, 6], [0, 7]], result: q('KC_X') }],
+    firmware: { ...p.firmware, layerKeysOnTop: true, keyCounts: { route: 'board', saveMinutes: 30, programFile: '' } },
+  };
+}
+
 const write = (dir: string, p: Project) => {
   const res = generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: false, encoderCount: 0 });
   const errors = res.issues.filter((i) => i.level === 'error');
   if (errors.length) throw new Error(JSON.stringify(errors));
   mkdirSync(dir, { recursive: true });
   for (const f of res.files) writeFileSync(join(dir, f.name), f.text);
+  const k = res.keyCounts;
+  if (k) {
+    const expect = [`#define NAVI_EXPECT_COUNTERS ${k.counters}`, `#define NAVI_EXPECT_HASH 0x${k.hash.toString(16)}UL`, `#define NAVI_EXPECT_ROWS ${k.rows}`, `#define NAVI_EXPECT_COLS ${k.cols}`];
+    writeFileSync(join(dir, 'counts_expect.h'), ['#pragma once', ...expect, ''].join('\n'));
+  }
 };
 
 it.skipIf(!out)('writes the generated keymap files for the QMK host tests', () => {
   write(out!, hostProject());
   write(join(out!, 'languages'), languageHostProject());
   write(join(out!, 'options'), optionsHostProject());
+  write(join(out!, 'counts'), countsHostProject());
 });

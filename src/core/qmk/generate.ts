@@ -19,14 +19,15 @@ import { configParams, configValueType } from './configParams';
 import { autoRepeatCode, REPEAT_SYMBOLS, type RepeatCase } from './autoRepeat';
 import { capsWordCode } from './capsWord';
 import { CAPS_WORD_QMK_DEFAULT } from '../project/capsWord';
-import { BOOTLOADER_HELPER_C, bootloaderHookC, bootloaderPipelineHookC } from './bootloaderReboot';
+import { BOOTLOADER_HELPER_C, rawHidHookC, rawHidPipelineHookC } from './bootloaderReboot';
+import { boardFitIssues, comboCountEventCode, KEY_COUNTS_LINES, KEY_COUNTS_RECORD_LINE, keyCountsCode, keyCountsConfig, keyCountsDecl, keyCountsPlan, keyCountsRecordCode, keyCountsSuspendCode, USER_EEPROM_RE, type KeyCountsLayout } from './keyCounts';
 import { LIFT_HELPERS_C, LIFT_SYMBOLS, liftedBlock, liftedLine, liftOf, liftSetting } from './heldMods';
 import { oneShotCancelActive, oneShotCancelIssues, oneShotCancelLines, oneShotCancelState } from './oneShotCancel';
 import { layerOnTopCallback, layerOnTopState, layerOnTopStubs } from './layerOnTop';
 import { languageDecl, languageEarlyCode, languageKeyName, languagePrototypes, languageRecordLines, languageSwitchCode, languageSymbolCode, languageViaMacroLines, LANGUAGE_SYMBOLS, planLanguages, routedMacroStatements, ROUTE_UNICODE_MODE } from './languages';
 import { checkLanguages, languageCName } from '../project/languages';
 import { checkLanguageActions, ownActionDoesSomething } from '../project/languageActions';
-import { checkCustom, customBlock, CUSTOM_FILES, GENERATED_SYMBOLS, hasCustomCode, NAVI_HOOKS, PIPELINE_MAX_HEADERS, PIPELINE_SYMBOLS, safeHeaderName, unsafeDefineValue, validCIdentifier, type CustomFile } from './customCode';
+import { checkCustom, customBlock, CUSTOM_FILES, GENERATED_SYMBOLS, hasCustomCode, KEY_COUNT_SYMBOLS, NAVI_HOOKS, PIPELINE_MAX_HEADERS, PIPELINE_SYMBOLS, safeHeaderName, unsafeDefineValue, validCIdentifier, type CustomFile } from './customCode';
 import { requiredFeatures } from '../features/required';
 import { RGB_MATRIX_EFFECTS } from '../lighting/effects';
 import { effectiveMaxBrightness, rgbTargetDefaults } from '../lighting/buildDefaults';
@@ -60,6 +61,8 @@ export interface GenerateResult {
   rules: Record<string, 'yes' | 'no'>;
   /** Functions/arrays created in keymap.c (own code must not define them a second time). */
   symbols: ReadonlySet<string>;
+  /** Key press counts on the board (firmware.keyCounts “board”): the table this firmware counts into, for reading it back. */
+  keyCounts?: KeyCountsLayout;
 }
 
 const HEADER = (project: Project) =>
@@ -360,7 +363,11 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   // Keycodes tap_code16 can't send, played as key events (playKey.ts): navi_play over navi_send.
   const plays = projectPlays(project);
   // navi_send is shared by tap-hold keys with actions, tap dances and navi_play; navi_sending only where navi_tap_holds reads it.
-  const sendingFlag = (tdC.sends || thActions.length > 0 || plays) && tapHoldInCode;
+  // Key press counts (Firmware → flash): both routes count in process_record; “board” keeps a table in the EEPROM.
+  const counts = keyCountsPlan(project, keymap, spec);
+  const board = counts?.route === 'board';
+  // navi_sending also tells the counting a key NAVI plays from a real press.
+  const sendingFlag = (tdC.sends || thActions.length > 0 || plays) && (tapHoldInCode || !!counts);
   // “Own pipeline”: the hooks get a _navi suffix, enums and prototypes go to navi.h, build settings to navi_*.
   const pipeline = project.firmware.pipeline?.enabled === true;
   const hookName = (qmk: keyof typeof NAVI_HOOKS) => (pipeline ? NAVI_HOOKS[qmk] : qmk);
@@ -404,6 +411,9 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   const holdKeys = hasHoldKeys(tapHold);
   // NAVI's tracking needs combo results as key presses: they become KC_NO, process_combo_event plays them.
   const comboEvents = replay && qmkComboList.some((q) => q.combo.result !== 0);
+  // Counting combos needs QMK's combo index: their results become KC_NO too, process_combo_event counts and plays them.
+  const comboCount = !!counts && qmkComboList.length > 0;
+  const comboHook = comboEvents || comboCount;
   const macros = project.macros.filter((m) => m.steps.length > 0);
   const sendStringCustoms = customs.filter((c) => ownActionDoesSomething(c.action));
 
@@ -414,7 +424,9 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   c.push('#include QMK_KEYBOARD_H');
   // NAVI restarts the keyboard into its bootloader on a Raw HID packet; VIA owns raw_hid_receive when it is on.
   const rebootOn = project.firmware.bootloaderReboot === true;
-  if (rebootOn && !via && !pipeline) c.push('#include "raw_hid.h"');
+  if ((rebootOn && !via && !pipeline) || board) c.push('#include "raw_hid.h"');
+  // TOTAL_EEPROM_BYTE_COUNT: the counts table's fit is checked at build time.
+  if (board) c.push('#include "eeprom.h"');
   // Secret text: the user's header and a fallback for each define (secretText.ts), before anything types them.
   const secrets = secretsCode(project);
   if (!pipeline && secrets.length) c.push('', ...secrets);
@@ -545,6 +557,11 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
 
   if (tdC.sends || plays) c.push(...naviSendCode({ flag: sendingFlag, guard: false }));
   if (plays) c.push(...playCode());
+  if (counts) {
+    if (pipeline) h.push(...keyCountsDecl(counts));
+    else c.push(...keyCountsDecl(counts));
+    c.push(...keyCountsCode(counts, cString));
+  }
   if (hasTd) {
     c.push(...tdC.lines);
     if (!pipeline && tdC.prototypes.length) c.push('// Your own tap dance functions (define them in your own lines below):', ...tdC.prototypes, '');
@@ -558,8 +575,9 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
       c.push(`const uint16_t PROGMEM ${q.name}_keys[] = { ${q.keys.map(kc).join(', ')}, COMBO_END };${on}`);
     });
     if (comboEvents) c.push('// Results are KC_NO here: process_combo_event plays them, so the tap-hold logic sees them like key presses.');
+    else if (comboCount) c.push('// Results are KC_NO here: process_combo_event counts each combo and plays its result.');
     c.push('combo_t key_combos[] = {');
-    qmkComboList.forEach((q) => c.push(`    COMBO(${q.name}_keys, ${comboEvents ? 'KC_NO' : kc(q.combo.result)}),`));
+    qmkComboList.forEach((q) => c.push(`    COMBO(${q.name}_keys, ${comboHook ? 'KC_NO' : kc(q.combo.result)}),`));
     c.push('};');
     if (comboTerms.length) {
       c.push('');
@@ -672,7 +690,9 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   if (preProcess) c.push(...preProcessHook(hookName('pre_process_record_user'), { lastPressed: holdKeys, spots: hasSpots(tapHold), replay, interrupters, comboLayer: comboRefs, comboEvents, tapDance: hasTd, tapDanceComboKeys: tdComboKeys.map(kc) }));
   if (comboEvents) {
     const played = qmkComboList.map((q) => ({ result: kc(q.combo.result), keys: q.combo.keys, name: q.name }));
-    c.push(...comboEventCode(hookName('process_combo_event'), played, { lastPressed: holdKeys, interrupters, spots: hasSpots(tapHold) }));
+    c.push(...comboEventCode(hookName('process_combo_event'), played, { lastPressed: holdKeys, interrupters, spots: hasSpots(tapHold), count: comboCount }));
+  } else if (comboCount) {
+    c.push(...comboCountEventCode(hookName('process_combo_event'), qmkComboList.map((q) => ({ result: kc(q.combo.result), name: q.name }))));
   }
   if (quickTap) c.push(...quickTapHook(hookName('get_quick_tap_term'), tapHold));
   if (holdPress) c.push(...holdOnOtherKeyPressHook(hookName('get_hold_on_other_key_press'), tapHold));
@@ -747,7 +767,7 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   if (ledsOn) c.push(...indicatorLedCode({ leds: project.firmware.indicatorLeds, layersOn: layersOnTop || pipeline ? 'navi_layers_on()' : 'layer_state' }));
   const ledRecord = indicatorLedRecordLine(project.firmware.indicatorLeds);
   // keyboard_post_init: what runs once at power-on (languages, LEDs).
-  const postInit = [...(lang?.layers ? ['    layer_state_set(layer_state); // the first language’s layer on at power-on'] : []), ...(ledsOn ? ['    navi_leds_init(); // indicator LED pins (and the split link)'] : [])];
+  const postInit = [...(lang?.layers ? ['    layer_state_set(layer_state); // the first language’s layer on at power-on'] : []), ...(ledsOn ? ['    navi_leds_init(); // indicator LED pins (and the split link)'] : []), ...(board ? [KEY_COUNTS_LINES.postInit] : [])];
   if (postInit.length) c.push(`void ${hookName('keyboard_post_init_user')}(void) {`, ...postInit, '}', '');
   // Key overrides on keys NAVI's code (or Caps Word) takes first: process_key_override sees them before (keyOverridesFirst.ts).
   const koFirst = keyOverridesFirstTriggers(spec, project, !!lang?.symbols);
@@ -756,9 +776,14 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   // The hand-over to the leader: with any other record code (it may take a sequence key), or for a sequence key that
   // isn't a plain key (Caps Word, tap dance, a key override… take those before process_leader).
   const leaderPass = leaders.length > 0 && (otherRecord || leaders.some((s) => s.keys.some((k) => k > 0xff)));
-  const recordHook = otherRecord || leaderPass;
+  const recordHook = otherRecord || leaderPass || !!counts;
+  if (counts) {
+    const sending = !sendingFlag ? null : thActions.length && !tdC.sends && !plays ? 'guarded' : 'plain';
+    c.push(...keyCountsRecordCode({ sending, replay }));
+  }
   if (recordHook) {
     c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
+    if (counts) c.push(KEY_COUNTS_RECORD_LINE);
     if (leaderPass) c.push(...leaderPassLines(leaders, kc));
     c.push(...ledRecord);
     if (layersOnTop) c.push('    navi_layer_keys(keycode, record); // layer keys bring their layer to the top');
@@ -821,22 +846,24 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
     c.push('');
   }
   // housekeeping_task: one function shared by the indicator LEDs and the task switcher key.
-  const housekeeping = [...(ledsOn ? [LED_HOUSEKEEPING_LINE] : []), ...(switcher ? taskSwitcherHousekeeping() : [])];
+  const housekeeping = [...(ledsOn ? [LED_HOUSEKEEPING_LINE] : []), ...(switcher ? taskSwitcherHousekeeping() : []), ...(board ? [KEY_COUNTS_LINES.housekeeping] : [])];
   if (housekeeping.length) c.push(`void ${hookName('housekeeping_task_user')}(void) {`, ...housekeeping, '}', '');
+  if (board) c.push(...keyCountsSuspendCode(hookName('suspend_power_down_user')));
 
   if (liftUsed) c.splice(liftAt, 0, ...LIFT_HELPERS_C);
 
-  if (rebootOn) {
-    c.push(...BOOTLOADER_HELPER_C);
-    if (via || !pipeline) c.push(...bootloaderHookC(via));
-  }
+  // NAVI's Raw HID packets (0x4E …): the bootloader restart and the board's key counts share one hook.
+  const rawHandlers = [...(rebootOn ? ['navi_bootloader_packet'] : []), ...(board ? ['navi_counts_packet'] : [])];
+  if (rebootOn) c.push(...BOOTLOADER_HELPER_C);
+  if (rawHandlers.length && (via || !pipeline)) c.push(...rawHidHookC(via, rawHandlers));
 
   // Which hooks the project fills (in both modes the same conditions as above).
   const hookUsed: Record<keyof typeof NAVI_HOOKS, boolean> = {
     process_record_user: recordHook,
     layer_state_set_user: layersOnTop || !!lang?.layers,
     keyboard_post_init_user: postInit.length > 0,
-    housekeeping_task_user: ledsOn || switcher,
+    housekeeping_task_user: ledsOn || switcher || board,
+    suspend_power_down_user: board,
     get_tapping_term: tappingTerms,
     get_quick_tap_term: quickTap,
     get_hold_on_other_key_press: holdPress,
@@ -845,13 +872,13 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
     get_combo_term: comboTerms.length > 0,
     combo_should_trigger: comboTrigger,
     combo_ref_from_layer: comboRefs,
-    process_combo_event: comboEvents,
+    process_combo_event: comboHook,
     leader_end_user: leaders.length > 0,
     caps_word_press_user: !!capsRules,
   };
   if (pipeline) {
     // Every *_navi function always exists, so the user's calls keep compiling as the project changes.
-    c.push('// Call it first from your raw_hid_receive: if (navi_raw_hid_receive(data, length)) return;', ...bootloaderPipelineHookC(rebootOn && !via), '');
+    c.push('// Call it first from your raw_hid_receive: if (navi_raw_hid_receive(data, length)) return;', ...rawHidPipelineHookC(via ? [] : rawHandlers), '');
     const allStubs: { hook: keyof typeof NAVI_HOOKS; guard?: string; lines: string[] }[] = [
       { hook: 'process_record_user', lines: ['bool process_record_navi(uint16_t keycode, keyrecord_t *record) {', '    return true;', '}'] },
       { hook: 'get_tapping_term', lines: ['uint16_t get_tapping_term_navi(uint16_t keycode, keyrecord_t *record) {', '    return TAPPING_TERM;', '}'] },
@@ -867,6 +894,7 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
       { hook: 'layer_state_set_user', lines: layerOnTopStubs(!hookUsed.layer_state_set_user) },
       { hook: 'keyboard_post_init_user', lines: ['void keyboard_post_init_navi(void) {}'] },
       { hook: 'housekeeping_task_user', lines: ['void housekeeping_task_navi(void) {}'] },
+      { hook: 'suspend_power_down_user', lines: ['void suspend_power_down_navi(void) {}'] },
       { hook: 'caps_word_press_user', lines: capsWordCode({ rules: CAPS_WORD_QMK_DEFAULT, keyLists: [], kc, layerIds, fn: 'caps_word_press_navi' }).slice(1, -1) },
     ];
     // Languages may write the layer callback without “layer keys on top”: navi_layers_on / navi_layer_off still stubs.
@@ -901,6 +929,7 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
     h.push('layer_state_t layer_state_set_navi(layer_state_t state);');
     h.push('void keyboard_post_init_navi(void);');
     h.push('void housekeeping_task_navi(void);');
+    h.push('void suspend_power_down_navi(void);');
     h.push('bool caps_word_press_navi(uint16_t keycode);');
     h.push('// Indicator LEDs (Lighting → indicator LEDs): define navi_led_user to light the LEDs set to “your code says so”;');
     h.push('// call navi_leds_update() after that state changed, navi_leds_mark_toggled(layer) for a layer you turn on yourself.');
@@ -932,7 +961,7 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   if (repeating) rules.DEFERRED_EXEC_ENABLE = 'yes';
   if (capsRules) rules.CAPS_WORD_ENABLE = 'yes';
   // With VIA on, VIA already turns raw HID on.
-  if (rebootOn && !via) rules.RAW_ENABLE = 'yes';
+  if (rawHandlers.length && !via) rules.RAW_ENABLE = 'yes';
   if (hasCombos) rules.COMBO_ENABLE = 'yes';
   if (hasOverrides) rules.KEY_OVERRIDE_ENABLE = 'yes';
   if (hasEncoders) rules.ENCODER_MAP_ENABLE = 'yes';
@@ -1004,6 +1033,33 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   if (permissive) define('PERMISSIVE_HOLD_PER_KEY');
   if (routeMode) define('UNICODE_SELECTED_MODES', routeMode);
   if (via && keymap.layers.length !== 4 && !('DYNAMIC_KEYMAP_LAYER_COUNT' in project.firmware.buildConfig)) define('DYNAMIC_KEYMAP_LAYER_COUNT', keymap.layers.length);
+  if (counts) {
+    for (const [name, value] of keyCountsConfig(counts)) define(name, value);
+    const ownC = [project.firmware.customReview ? '' : (project.firmware.custom?.['keymap.c'] ?? ''), ...(ownCode ?? []).map((f) => f.text)];
+    if (board) {
+      const viaLayers = Number(project.firmware.buildConfig.DYNAMIC_KEYMAP_LAYER_COUNT) || keymap.layers.length;
+      issues.push(...boardFitIssues(project, counts.layout, { via, viaLayers, encoders: encCount }));
+      if (ownC.some((t) => USER_EEPROM_RE.test(t))) {
+        issues.push({
+          level: 'warning',
+          where: 'key press counts',
+          message: {
+            en: 'Your own C reads or writes QMK’s user EEPROM block (eeconfig_*_user): the counts on the board take it over, so your saved values and the counts would overwrite each other. Use the “my own program” route, or move your values elsewhere.',
+            ru: 'Ваш C читает или пишет пользовательский блок EEPROM QMK (eeconfig_*_user): счётчики на клавиатуре занимают его, и ваши значения и счётчики будут затирать друг друга. Выберите способ «своя программа» или храните свои значения в другом месте.',
+          },
+        });
+      }
+    } else if (!ownC.some((t) => /\bnavi_key_count_user\s*\(/.test(t))) {
+      issues.push({
+        level: 'warning',
+        where: 'key press counts',
+        message: {
+          en: 'The “my own program” route calls navi_key_count_user(layer, row, col, kind) for each count: your own C must define it (docs/key-counts.md), or the build fails.',
+          ru: 'Способ «своя программа» вызывает navi_key_count_user(layer, row, col, kind) на каждое нажатие: ваш C должен её определить (docs/key-counts.md), иначе сборка не пройдёт.',
+        },
+      });
+    }
+  }
   if (ledsOn) {
     // The user's own split transactions: their SPLIT_TRANSACTION_IDS_USER must list NAVI's id (never a silent clash).
     const ownConfig = project.firmware.customReview ? [] : [project.firmware.custom?.['config.h'] ?? ''];
@@ -1048,7 +1104,7 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   if (comboRefs) generatedSymbols.add('navi_combo_at');
   if (hasTd && tdComboKeys.length) for (const name of ['navi_td_combo_keys', 'navi_td_combo_key']) generatedSymbols.add(name);
   if (!pipeline && comboRefs) generatedSymbols.add('combo_ref_from_layer');
-  if (!pipeline && comboEvents) generatedSymbols.add('process_combo_event');
+  if (!pipeline && comboHook) generatedSymbols.add('process_combo_event');
   if (comboRefs) for (const name of ['navi_key_layer', 'navi_layer_of']) generatedSymbols.add(name);
   if (comboEvents) for (const name of ['navi_combo', 'navi_combo_has', 'navi_in_press', 'navi_press_key', 'navi_press_keycode', 'navi_interrupter_at']) generatedSymbols.add(name);
   if (hasOverrides) generatedSymbols.add('key_overrides');
@@ -1072,7 +1128,9 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   if (!pipeline && leaders.length) generatedSymbols.add('leader_end_user');
   if (!pipeline && hookUsed.layer_state_set_user) generatedSymbols.add('layer_state_set_user');
   if (!pipeline && hookUsed.keyboard_post_init_user) generatedSymbols.add('keyboard_post_init_user');
-  if (!pipeline && ledsOn) generatedSymbols.add('housekeeping_task_user');
+  if (!pipeline && (ledsOn || board)) generatedSymbols.add('housekeeping_task_user');
+  if (!pipeline && board) generatedSymbols.add('suspend_power_down_user');
+  if (counts) for (const name of KEY_COUNT_SYMBOLS) generatedSymbols.add(name);
   if (pipeline || ledsOn) for (const name of LED_SYMBOLS) generatedSymbols.add(name);
   if (!pipeline && capsRules) generatedSymbols.add('caps_word_press_user');
   if (!pipeline && switcher) generatedSymbols.add('housekeeping_task_user');
@@ -1088,8 +1146,8 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   if (pipeline || layersOnTop) for (const name of ['navi_layers_on', 'navi_layer_off']) generatedSymbols.add(name);
   if (unicodeTable.length) generatedSymbols.add('unicode_map');
   if (rebootOn) generatedSymbols.add('navi_bootloader_packet');
-  if (rebootOn && via) generatedSymbols.add('via_command_kb');
-  if (rebootOn && !via && !pipeline) generatedSymbols.add('raw_hid_receive');
+  if (rawHandlers.length && via) generatedSymbols.add('via_command_kb');
+  if (rawHandlers.length && !via && !pipeline) generatedSymbols.add('raw_hid_receive');
   // Own pipeline: every *_navi function is defined (the QMK hooks are the user's).
   if (pipeline) for (const name of [...Object.values(NAVI_HOOKS), 'navi_raw_hid_receive']) generatedSymbols.add(name);
   for (const file of CUSTOM_FILES) {
@@ -1131,8 +1189,8 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
         hook: 'process_record_user',
         call: 'if (!process_record_navi(keycode, record)) return false;',
         why: {
-          en: [keysHandled && 'custom keycodes and macros', tdC.keys && 'tap dances play their keys at the dance key position', tapHoldInCode && 'tap-hold keys (call it first: it plays their actions)', layersOnTop && 'layer keys bring their layer to the top: it must see layer key releases', osCancel && 'a second tap of a one-shot mod key cancels it', ledRecord.length > 0 && 'indicator LEDs see toggle keys'].filter(Boolean).join('; '),
-          ru: [keysHandled && 'свои keycodes и макросы', tdC.keys && 'tap dance играют свои клавиши на месте клавиши TD', tapHoldInCode && 'тап-холд клавиши (вызывайте её первой: она играет их действия)', layersOnTop && 'клавиши слоёв поднимают свой слой наверх: она должна видеть отпускание клавиш слоёв', osCancel && 'второе нажатие one-shot модификатора отменяет его', ledRecord.length > 0 && 'светодиоды-индикаторы видят клавиши переключения слоёв'].filter(Boolean).join('; '),
+          en: [keysHandled && 'custom keycodes and macros', tdC.keys && 'tap dances play their keys at the dance key position', tapHoldInCode && 'tap-hold keys (call it first: it plays their actions)', layersOnTop && 'layer keys bring their layer to the top: it must see layer key releases', osCancel && 'a second tap of a one-shot mod key cancels it', ledRecord.length > 0 && 'indicator LEDs see toggle keys', counts && 'key presses are counted (call it first)'].filter(Boolean).join('; '),
+          ru: [keysHandled && 'свои keycodes и макросы', tdC.keys && 'tap dance играют свои клавиши на месте клавиши TD', tapHoldInCode && 'тап-холд клавиши (вызывайте её первой: она играет их действия)', layersOnTop && 'клавиши слоёв поднимают свой слой наверх: она должна видеть отпускание клавиш слоёв', osCancel && 'второе нажатие one-shot модификатора отменяет его', ledRecord.length > 0 && 'светодиоды-индикаторы видят клавиши переключения слоёв', counts && 'считаются нажатия клавиш (вызывайте её первой)'].filter(Boolean).join('; '),
         },
       },
       { hook: 'get_tapping_term', call: 'return get_tapping_term_navi(keycode, record);', why: { en: 'TAPPING_TERM_PER_KEY is on — without it the build fails', ru: 'включён TAPPING_TERM_PER_KEY — без неё сборка не пройдёт' } },
@@ -1150,7 +1208,13 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
       { hook: 'get_combo_term', call: 'return get_combo_term_navi(combo_index, combo);', why: { en: 'COMBO_TERM_PER_COMBO is on — without it the build fails', ru: 'включён COMBO_TERM_PER_COMBO — без неё сборка не пройдёт' } },
       { hook: 'combo_should_trigger', call: 'return combo_should_trigger_navi(combo_index, combo, keycode, record);', why: { en: 'COMBO_SHOULD_TRIGGER is on — combo layer limits and key spots', ru: 'включён COMBO_SHOULD_TRIGGER — ограничения комбинаций по слоям и местам клавиш' } },
       { hook: 'combo_ref_from_layer', call: 'return combo_ref_from_layer_navi(layer);', why: { en: 'combo reference layers — without it the build still passes, but combos read keys of the highest active layer', ru: 'опорные слои комбо — без неё сборка пройдёт, но комбо будут читать клавиши самого верхнего активного слоя' } },
-      { hook: 'process_combo_event', call: 'process_combo_event_navi(combo_index, pressed);', why: { en: 'combo results go through the tap-hold logic — without it the build still passes, but combos do nothing', ru: 'результаты комбо проходят через логику тап-холд — без неё сборка пройдёт, но комбо ничего не будут делать' } },
+      {
+        hook: 'process_combo_event',
+        call: 'process_combo_event_navi(combo_index, pressed);',
+        why: comboEvents
+          ? { en: 'combo results go through the tap-hold logic — without it the build still passes, but combos do nothing', ru: 'результаты комбо проходят через логику тап-холд — без неё сборка пройдёт, но комбо ничего не будут делать' }
+          : { en: 'combos are counted and play their results there — without it the build still passes, but combos do nothing', ru: 'комбо считаются и играют свои результаты там — без неё сборка пройдёт, но комбо ничего не будут делать' },
+      },
       { hook: 'leader_end_user', call: 'leader_end_navi();', why: { en: 'leader sequences', ru: 'последовательности leader' } },
       {
         hook: 'layer_state_set_user',
@@ -1164,28 +1228,30 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
         hook: 'keyboard_post_init_user',
         call: 'keyboard_post_init_navi();',
         why: {
-          en: [lang?.layers && 'the first language’s layer turns on at power-on', ledsOn && 'indicator LED pins are set up'].filter(Boolean).join('; '),
-          ru: [lang?.layers && 'слой первого языка включается при включении клавиатуры', ledsOn && 'настраиваются пины светодиодов-индикаторов'].filter(Boolean).join('; '),
+          en: [lang?.layers && 'the first language’s layer turns on at power-on', ledsOn && 'indicator LED pins are set up', board && 'the key press counts are read from the EEPROM'].filter(Boolean).join('; '),
+          ru: [lang?.layers && 'слой первого языка включается при включении клавиатуры', ledsOn && 'настраиваются пины светодиодов-индикаторов', board && 'счётчики нажатий читаются из EEPROM'].filter(Boolean).join('; '),
         },
       },
       {
         hook: 'housekeeping_task_user',
         call: 'housekeeping_task_navi();',
         why: {
-          en: [ledsOn && 'indicator LEDs follow their states (without it the build still passes, but the LEDs never change)', switcher && 'the task switcher key picks the window when its layer key is let go'].filter(Boolean).join('; '),
-          ru: [ledsOn && 'светодиоды-индикаторы следуют своим состояниям (без неё сборка пройдёт, но светодиоды не будут меняться)', switcher && 'клавиша переключателя окон выбирает окно, когда отпущена клавиша её слоя'].filter(Boolean).join('; '),
+          en: [ledsOn && 'indicator LEDs follow their states (without it the build still passes, but the LEDs never change)', switcher && 'the task switcher key picks the window when its layer key is let go', board && 'the key press counts are saved on their timer'].filter(Boolean).join('; '),
+          ru: [ledsOn && 'светодиоды-индикаторы следуют своим состояниям (без неё сборка пройдёт, но светодиоды не будут меняться)', switcher && 'клавиша переключателя окон выбирает окно, когда отпущена клавиша её слоя', board && 'счётчики нажатий сохраняются по таймеру'].filter(Boolean).join('; '),
         },
       },
       { hook: 'caps_word_press_user', call: 'return caps_word_press_navi(keycode);', why: { en: 'Caps Word key rules', ru: 'правила клавиш Caps Word' } },
+      { hook: 'suspend_power_down_user', call: 'suspend_power_down_navi();', why: { en: 'the key press counts are saved when the computer sleeps', ru: 'счётчики нажатий сохраняются, когда компьютер засыпает' } },
     ];
     // Said only while no file of the user's own C calls it (ownCode null = not read: warn).
-    if (rebootOn && !via && !ownCode?.some((f) => /\bnavi_raw_hid_receive\s*\(/.test(f.text))) {
+    if (rawHandlers.length && !via && !ownCode?.some((f) => /\bnavi_raw_hid_receive\s*\(/.test(f.text))) {
+      const lost = { en: [rebootOn && 'restart the keyboard into its bootloader', board && 'read the key press counts'].filter(Boolean).join(' or '), ru: [rebootOn && 'перезагрузить клавиатуру в загрузчик', board && 'прочитать счётчики нажатий'].filter(Boolean).join(' и ') };
       issues.push({
         level: 'warning',
         where: 'own pipeline: raw_hid_receive()',
         message: {
-          en: 'Your raw_hid_receive must call navi_raw_hid_receive(data, length) first (if it returns true, return): without it the build still passes, but NAVI can’t restart the keyboard into its bootloader (Firmware → Flash).',
-          ru: 'Ваша raw_hid_receive должна первой вызывать navi_raw_hid_receive(data, length) (если она вернула true — выйдите): без этого сборка пройдёт, но NAVI не сможет перезагрузить клавиатуру в загрузчик (Прошивка → Прошить).',
+          en: `Your raw_hid_receive must call navi_raw_hid_receive(data, length) first (if it returns true, return): without it the build still passes, but NAVI can’t ${lost.en} (Firmware → Flash).`,
+          ru: `Ваша raw_hid_receive должна первой вызывать navi_raw_hid_receive(data, length) (если она вернула true — выйдите): без этого сборка пройдёт, но NAVI не сможет ${lost.ru} (Прошивка → Прошить).`,
         },
       });
     }
@@ -1223,5 +1289,6 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
     issues,
     rules,
     symbols: generatedSymbols,
+    ...(counts?.route === 'board' ? { keyCounts: counts.layout } : {}),
   };
 }
