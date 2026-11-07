@@ -120,7 +120,7 @@ function standInCandidates(spec: KeycodeSpec, hold: HoldAction): number[] {
   return [STAND_IN_BASES, STAND_IN_OVERFLOW].flatMap((bases) => mods.flatMap((m) => bases.map((base) => encode(spec, { kind: 'mod-tap', mods: m, base }))));
 }
 
-function holdProblem(spec: KeycodeSpec, hold: HoldAction): { en: string; ru: string } | null {
+export function holdProblem(spec: KeycodeSpec, hold: HoldAction): { en: string; ru: string } | null {
   if (hold.type === 'mods') return (hold.mods & 0x0f) === 0 || hold.mods > 0x1f ? { en: 'Choose at least one modifier.', ru: 'Выберите хотя бы один модификатор.' } : null;
   if (hold.type === 'layer') {
     if (!Number.isInteger(hold.layer) || hold.layer < 0 || hold.layer > 15) return { en: 'A tap-hold key holds layers 0–15 only (QMK’s LT).', ru: 'Тап-холд клавиша удерживает только слои 0–15 (LT в QMK).' };

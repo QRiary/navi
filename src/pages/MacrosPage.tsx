@@ -82,7 +82,8 @@ export function MacrosPage() {
     matchesQuery(query, `MC_${i}`, m?.name, ...(m?.steps.map((s) => (s.type === 'text' ? s.text : s.type === 'secret' ? s.name : null)) ?? [])),
   );
   const macro = project.macros.find((m) => m.index === selected) ?? { id: '', index: selected, name: `M${selected}`, steps: [] };
-  const issues = checkMacroSteps(selected, macro.steps);
+  const viaBuild = project.firmware.buildFeatures.via === true;
+  const issues = checkMacroSteps(selected, macro.steps, { via: viaBuild });
   const update = (fn: (m: Macro) => Macro, label: string, coalesce?: string) => apply((p) => ({ ...p, macros: patchMacros(p.macros, selected, fn) }), label, coalesce ? { coalesce } : undefined);
   const setSteps = (steps: MacroStep[], label: string, coalesce?: string) => update((m) => ({ ...m, steps }), label, coalesce);
 
@@ -210,7 +211,7 @@ export function MacrosPage() {
           <div className="panel-box-body field">
             <MacroSteps
               steps={macro.steps}
-              keys="basic"
+              keys={viaBuild ? 'basic' : 'any'}
               emptyHint={
                 <EmptyState
                   what={t('A macro types its steps in order when you press its MC key: keys, text and pauses.', 'Макрос по нажатию своей клавиши MC выполняет шаги по порядку: клавиши, текст и паузы.')}
