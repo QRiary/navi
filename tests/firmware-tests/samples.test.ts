@@ -13,6 +13,8 @@
  *             out, so the macro types "ab" (also as generated-secret: the macro goes to [not checked])
  *   overrides Shift overrides on a macro, a custom keycode with an action and CW_TOGG (keys QMK's overrides would
  *             never see without navi_key_overrides_first); also as generated-overrides
+ *   overrides-any  Shift overrides whose replacement is no keyboard key (MO(1) held, a macro, CW_TOGG, a custom
+ *             keycode): played by navi_ko_play; also as generated-overrides-any
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -286,6 +288,8 @@ it.skipIf(!out)('writes the sample keymap folders for the firmware test runner',
   writeGenerated(join(out!, 'generated-secret'), secret());
   write(join(out!, 'overrides'), overrides(), ['r0c0 => hi', 'r0c1 => yo', 'r0c3 r0c4 r0c3 r0c4 => Aa', '+r0c2 r0c0 -r0c2 => ⟨LSFT⟩x⟨LSFT⟩', '+r0c2 r0c1 -r0c2 => ⟨LSFT⟩y⟨LSFT⟩', '+r0c2 r0c3 -r0c2 => ⟨LSFT⟩z⟨LSFT⟩']);
   writeGenerated(join(out!, 'generated-overrides'), overrides());
+  write(join(out!, 'overrides-any'), overridesAny(), OVERRIDES_ANY_TESTS);
+  writeGenerated(join(out!, 'generated-overrides-any'), overridesAny());
   writeFileSync(join(out!, 'generated-secret', 'secrets.h'), SECRETS_H);
 });
 
@@ -319,6 +323,42 @@ function overrides(): Project {
     ],
   };
 }
+
+/**
+ * Shift overrides whose replacement is no keyboard key: MO(1), a macro, CW_TOGG, a custom keycode with an action.
+ * QMK's own register would tap KC_4 for MO(1) (the value cut to 8 bits) and nothing for the rest; navi_ko_play plays them.
+ */
+function overridesAny(): Project {
+  const p = withKeys(createBlankProject('fw tests overrides any', 4, 10, false), [
+    [0, 0, 0, 'KC_LSFT'],
+    [0, 0, 1, 'KC_E'],
+    [0, 0, 2, 'KC_F'],
+    [1, 0, 2, 'KC_9'],
+    [0, 0, 3, 'KC_G'],
+    [0, 0, 4, 'KC_H'],
+    [0, 0, 5, 'KC_A'],
+    [0, 0, 6, 'KC_I'],
+  ]);
+  return {
+    ...p,
+    macros: [{ id: 'm0', index: 0, name: 'hi', steps: [{ type: 'text', text: 'hi' }] }],
+    customKeycodes: [{ id: 'yo', name: 'MY_YO', description: '', action: { type: 'send-string', text: 'yo' } }],
+    keyOverrides: [
+      { id: 'a', name: 'shift_layer', mods: 0x02, trigger: q('KC_E'), replacement: q('MO(1)') },
+      { id: 'b', name: 'shift_macro', mods: 0x02, trigger: q('KC_G'), replacement: q('QK_MACRO_0') },
+      { id: 'c', name: 'shift_caps', mods: 0x02, trigger: q('KC_H'), replacement: q('CW_TOGG') },
+      { id: 'd', name: 'shift_yo', mods: 0x02, trigger: q('KC_I'), replacement: q('QK_USER_0') },
+    ],
+  };
+}
+
+export const OVERRIDES_ANY_TESTS = [
+  '+r0c0 +r0c1 r0c2 -r0c1 -r0c0 => ⟨LSFT⟩9⟨LSFT⟩',
+  '+r0c0 +r0c1 -r0c1 -r0c0 r0c2 => ⟨LSFT⟩⟨LSFT⟩f',
+  '+r0c0 r0c3 -r0c0 => ⟨LSFT⟩hi⟨LSFT⟩',
+  '+r0c0 r0c4 -r0c0 r0c5 => ⟨LSFT⟩A',
+  '+r0c0 r0c6 -r0c0 => ⟨LSFT⟩yo⟨LSFT⟩',
+];
 
 function writeGenerated(dir: string, p: Project) {
   const on = { ...p, firmware: { ...p.firmware, tests: true } };

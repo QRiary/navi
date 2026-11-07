@@ -38,6 +38,7 @@ import { checkTapHolds, effectiveTapHolds } from '../project/tapHolds';
 import { checkTapHoldActions, effectiveTapHoldActions, projectOwnCodeRefs, type OwnCodeFile } from '../project/tapHoldActions';
 import { anyHoldsOn, caseLines, comboEventCode, hasHoldKeys, hasSpots, spotsCode, keyListsCode, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, naviSendCode, replayTracked, standInCheckCode, tapHoldsCode, type StandIn } from './tapHold';
 import { tapDanceCode } from './tapDance';
+import { KO_PLAY_CODE, PLAY_SYMBOLS, playCode, playedOverride, playsAsKey, projectPlays } from './playKey';
 import { KEY_OVERRIDES_FIRST_LINE, KEY_OVERRIDES_FIRST_SYMBOLS, keyOverridesFirstCode, keyOverridesFirstTriggers, keyOverrideOrderIssues } from './keyOverridesFirst';
 import { checkSecrets, secretsCode } from './secretText';
 import { isTextStep, textArg } from '../project/textSteps';
@@ -295,7 +296,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     ];
   };
   const tdC = tapDanceCode(tdSorted, kc, cString, lang, globalLift);
-  const tdReserved = tapDanceReservedNames(project, keymap, [...tdC.symbols, 'navi_send', 'navi_sending', ...standInName.values()]);
+  const tdReserved = tapDanceReservedNames(project, keymap, [...tdC.symbols, 'navi_send', 'navi_sending', ...PLAY_SYMBOLS, ...standInName.values()]);
   const issues: AdvancedIssue[] = [
     ...checkTapDances(spec, project.tapDances, tdReserved),
     ...checkCombos(project, project.combos, spec),
@@ -319,8 +320,10 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const tracked = replayTracked(tapHold);
   const replay = tracked.length > 0;
   const tapHoldInCode = thActions.length > 0 || replay;
-  // navi_send is shared by tap-hold keys with actions and tap dances; navi_sending only where navi_tap_holds reads it.
-  const sendingFlag = (tdC.sends || thActions.length > 0) && tapHoldInCode;
+  // Keycodes tap_code16 can't send, played as key events (playKey.ts): navi_play over navi_send.
+  const plays = projectPlays(project);
+  // navi_send is shared by tap-hold keys with actions, tap dances and navi_play; navi_sending only where navi_tap_holds reads it.
+  const sendingFlag = (tdC.sends || thActions.length > 0 || plays) && tapHoldInCode;
   // “Own pipeline”: the hooks get a _navi suffix, enums and prototypes go to navi.h, build settings to navi_*.
   const pipeline = project.firmware.pipeline?.enabled === true;
   const hookName = (qmk: keyof typeof NAVI_HOOKS) => (pipeline ? NAVI_HOOKS[qmk] : qmk);
@@ -500,8 +503,9 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const liftAt = c.length;
   if (lang) c.push(...languageEarlyCode({ project, keymap, plan: lang, layerIds, via, prototypes: !pipeline, lift: globalLift }));
 
+  if (tdC.sends || plays) c.push(...naviSendCode({ flag: sendingFlag, guard: false }));
+  if (plays) c.push(...playCode());
   if (hasTd) {
-    if (tdC.sends) c.push(...naviSendCode({ flag: sendingFlag, guard: false }));
     c.push(...tdC.lines);
     if (!pipeline && tdC.prototypes.length) c.push('// Your own tap dance functions (define them in your own lines below):', ...tdC.prototypes, '');
     c.push(...tdC.actions);
@@ -585,8 +589,13 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
 
   if (hasOverrides) {
     c.push('// ── Key overrides ────────────────────────────────────────────────────');
+    if (project.keyOverrides.some((o) => playsAsKey(o.replacement))) c.push(...KO_PLAY_CODE);
     project.keyOverrides.forEach((o) => {
       const layers = o.layers?.length ? o.layers.map((l) => `(1 << ${layerIds[l] ?? l})`).join(' | ') : null;
+      if (playsAsKey(o.replacement)) {
+        c.push(playedOverride({ name: o.name, mask: modsToMask(o.mods), trigger: kc(o.trigger), replacement: kc(o.replacement), layers: layers ?? '~0' }));
+        return;
+      }
       c.push(
         layers
           ? `const key_override_t ${o.name} = ko_make_with_layers(${modsToMask(o.mods)}, ${kc(o.trigger)}, ${kc(o.replacement)}, ${layers});`
@@ -684,7 +693,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       tap: kc(a.tap),
       hold: a.hold.type === 'key' ? { type: 'key', key: kc(a.hold.keycode) } : a.hold.type === 'layer' ? { type: 'layer', mask: a.hold.mods ? modMask(a.hold.mods) : null } : { type: 'mods', mask: modMask(a.hold.mods) },
     }));
-    if (thActions.length && !tdC.sends) c.push(...naviSendCode({ flag: sendingFlag, guard: true }));
+    if (thActions.length && !tdC.sends && !plays) c.push(...naviSendCode({ flag: sendingFlag, guard: true }));
     c.push(...tapHoldsCode({ standIns, tracked, interrupters: anyHoldsOn(tracked), layerOff: layersOnTop ? 'navi_layer_off' : 'layer_off', sending: sendingFlag }));
   }
   // For the user's own C: which MT / LT values are NAVI's stand-ins (their base key isn't what they tap).
@@ -985,7 +994,8 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   const generatedSymbols = new Set<string>(['keymaps']);
   if (hasEncoders) generatedSymbols.add('encoder_map');
   if (hasTd) for (const name of ['tap_dance_actions', ...tdC.symbols]) generatedSymbols.add(name);
-  if (tdC.sends) generatedSymbols.add('navi_send');
+  if (tdC.sends || plays) generatedSymbols.add('navi_send');
+  if (plays) for (const name of PLAY_SYMBOLS) generatedSymbols.add(name);
   if (sendingFlag) generatedSymbols.add('navi_sending');
   if (hasCombos) generatedSymbols.add('key_combos');
   if (!pipeline && comboTerms.length) generatedSymbols.add('get_combo_term');

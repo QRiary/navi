@@ -72,6 +72,11 @@ try {
   const genKo = await play('generated-overrides', 4, 10);
   check('generated-overrides: NAVI\'s own navi_tests.txt passes whole', genKo.status === 'pass' && genKo.passed > 0, genKo);
 
+  const koAny = await play('overrides-any', 4, 10);
+  check('overrides-any: Shift overrides play MO(1) while held, a macro, CW_TOGG and a custom keycode', koAny.status === 'pass' && koAny.passed === 5, koAny);
+  const genKoAny = await play('generated-overrides-any', 4, 10);
+  check('generated-overrides-any: NAVI\'s own navi_tests.txt passes whole', genKoAny.status === 'pass' && genKoAny.passed > 0, genKoAny);
+
   const all = await play('all-pipeline', 10, 6);
   check('all-pipeline: LEDs, the task switcher, a per-language key and a secret macro build together in the own pipeline', all.status === 'pass' && all.passed === 3, all);
 
