@@ -80,6 +80,11 @@ try {
   const leaderAny = await play('leader-any', 4, 10);
   check('leader-any: leader actions TG(1), a macro and CW_TOGG work', leaderAny.status === 'pass' && leaderAny.passed === 3, leaderAny);
 
+  const customAny = await play('custom-any', 4, 10);
+  check('custom-any: own keycodes tap TG(1), a macro, CW_TOGG (also auto-repeated and per language); a macro as a language\'s OS shortcut', customAny.status === 'pass' && customAny.passed === 7, customAny);
+  const genCustomAny = await play('generated-custom-any', 4, 10);
+  check('generated-custom-any: NAVI\'s own navi_tests.txt passes whole', genCustomAny.status === 'pass' && genCustomAny.passed > 0, genCustomAny);
+
   const all = await play('all-pipeline', 10, 6);
   check('all-pipeline: LEDs, the task switcher, a per-language key and a secret macro build together in the own pipeline', all.status === 'pass' && all.passed === 3, all);
 

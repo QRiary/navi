@@ -38,7 +38,7 @@ import { checkTapHolds, effectiveTapHolds } from '../project/tapHolds';
 import { checkTapHoldActions, effectiveTapHoldActions, projectOwnCodeRefs, type OwnCodeFile } from '../project/tapHoldActions';
 import { anyHoldsOn, caseLines, comboEventCode, hasHoldKeys, hasSpots, spotsCode, keyListsCode, holdOnOtherKeyPressHook, holdOnOtherKeyPressStub, modMask, permissiveHoldHook, permissiveHoldStub, planTapHolds, preProcessHook, preProcessStub, quickTapHook, quickTapStub, naviSendCode, replayTracked, standInCheckCode, tapHoldsCode, type StandIn } from './tapHold';
 import { tapDanceCode } from './tapDance';
-import { KO_PLAY_CODE, PLAY_SYMBOLS, playCode, playedOverride, playsAsKey, projectPlays, tapStatement } from './playKey';
+import { KO_PLAY_CODE, PLAY_SYMBOLS, playCode, playedOverride, playLoopIssues, playsAsKey, projectPlays, tapStatement } from './playKey';
 import { KEY_OVERRIDES_FIRST_LINE, KEY_OVERRIDES_FIRST_SYMBOLS, keyOverridesFirstCode, keyOverridesFirstTriggers, keyOverrideOrderIssues } from './keyOverridesFirst';
 import { checkSecrets, secretsCode } from './secretText';
 import { isTextStep, textArg } from '../project/textSteps';
@@ -278,20 +278,21 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   aliases.defines.forEach((a) => aliasOf.has(a.keycode) || aliasOf.set(a.keycode, a.cName));
   const kc = (v: number) => aliasOf.get(v) ?? qmkExpr(v);
   // An own keycode's action as C statements; a per-language one picks by navi_language() (without languages: `other`).
-  const basicActionLines = (a: CustomAction): string[] =>
-    a.type === 'send-string' ? [sendText(a.text, a.heldMods)] : a.type === 'tap' ? [`tap_code16(${kc(a.keycode)});`] : [];
-  const ownActionLines = (a: CustomKeycodeAction): string[] => {
-    if (a.type !== 'by-language') return basicActionLines(a);
+  // record: the C record a tapped keycode is played for (the key's own, or NULL where there is none: auto repeat).
+  const basicActionLines = (a: CustomAction, record: string): string[] =>
+    a.type === 'send-string' ? [sendText(a.text, a.heldMods)] : a.type === 'tap' ? [tapStatement(a.keycode, kc(a.keycode), record)] : [];
+  const ownActionLines = (a: CustomKeycodeAction, record: string): string[] => {
+    if (a.type !== 'by-language') return basicActionLines(a, record);
     const entries = project.languages.flatMap((l) => {
       const e = a.byLanguage.find((x) => x.language === l.id);
-      return e ? [{ name: `NAVI_LANG_${languageCName(l)}`, lines: basicActionLines(e.action) }] : [];
+      return e ? [{ name: `NAVI_LANG_${languageCName(l)}`, lines: basicActionLines(e.action, record) }] : [];
     });
-    if (!lang || !entries.length) return basicActionLines(a.other);
+    if (!lang || !entries.length) return basicActionLines(a.other, record);
     const branch = (lines: string[]) => [...lines.map((l) => `        ${l}`), '        break;'];
     return [
       'switch (navi_language()) { // per-language action',
       ...entries.flatMap((e) => [`    case ${e.name}:`, ...branch(e.lines)]),
-      ...(entries.length < project.languages.length ? ['    default: // other languages', ...branch(basicActionLines(a.other))] : []),
+      ...(entries.length < project.languages.length ? ['    default: // other languages', ...branch(basicActionLines(a.other, record))] : []),
       '}',
     ];
   };
@@ -313,6 +314,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
   issues.push(...checkLanguages(project, keymap));
   issues.push(...oneShotCancelIssues(project));
   issues.push(...checkLanguageActions(project));
+  issues.push(...playLoopIssues(spec, project));
   issues.push(...tdC.issues);
   issues.push(...checkSecrets(spec, project, via, new Set([...tdReserved, ...aliases.defines.map((a) => a.cName)])));
   const langNames = new Map(project.languages.map((l) => [l.id, `NAVI_LANG_${languageCName(l)}`]));
@@ -676,7 +678,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
       })),
       ...repeatCustoms.map((ck) => ({
         label: ck.name,
-        body: ownActionLines(ck.action),
+        body: ownActionLines(ck.action, 'NULL'),
       })),
     ];
     c.push(...autoRepeatCode({ delay, rate, cases, fallback: lang?.symbols ? ['navi_send_text(navi_symbol_text);'] : undefined }));
@@ -756,7 +758,7 @@ export function generateKeymap({ project, keymap, spec, via, encoderCount, maxBr
     c.push('    if (!record->event.pressed) return true;');
     c.push('    switch (keycode) {');
     pressCustoms.forEach((ck) => {
-      const lines = ownActionLines(ck.action);
+      const lines = ownActionLines(ck.action, 'record');
       if (lines.length === 1) c.push(`        case ${ck.name}: ${lines[0]} return false;`);
       else c.push(`        case ${ck.name}:`, ...lines.map((l) => `            ${l}`), '            return false;');
     });

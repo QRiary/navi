@@ -33,6 +33,53 @@ describe('leader action = any keycode', () => {
   });
 });
 
+describe('custom keycode “press a key” = any keycode', () => {
+  const tap = (k: string) => ({ type: 'tap' as const, keycode: q(k) });
+  const base = createBlankProject('custom any', 4, 10, false);
+  it('played for the key’s own record; auto repeat has none (NULL); keys with mods stay tap_code16', () => {
+    const p: Project = {
+      ...base,
+      macros: [{ id: 'm', index: 0, name: 'hi', steps: [{ type: 'text', text: 'hi' }] }],
+      customKeycodes: [
+        { id: 'a', name: 'MY_LAYER', description: '', action: tap('TG(1)') },
+        { id: 'b', name: 'MY_CTRL', description: '', action: tap('C(KC_A)') },
+        { id: 'c', name: 'MY_REP', description: '', action: tap('QK_MACRO_0'), repeat: true },
+      ],
+    };
+    const c = keymapC(p);
+    expect(c).toContain('case MY_LAYER: navi_play_tap(TG(L_LAYER_1), record); return false;');
+    expect(c).toContain('case MY_CTRL: tap_code16(LCTL(KC_A)); return false;');
+    expect(c).toContain('        case MY_REP:\n            navi_play_tap(MC_0, NULL);');
+  });
+
+  it('a language’s OS shortcut tap_code16 can’t send is played', () => {
+    const langs = (shortcut: string): Project => ({
+      ...base,
+      macros: [{ id: 'm', index: 0, name: 'os', steps: [{ type: 'text', text: 'os' }] }],
+      languages: [
+        { id: 'en', name: 'English', code: 'en', plainKeys: true, osShortcut: q('LGUI(KC_SPC)') },
+        { id: 'xx', name: 'Other', code: 'xx', plainKeys: true, osShortcut: q(shortcut) },
+      ],
+    });
+    expect(keymapC(langs('LALT(KC_LSFT)'))).toContain('if (navi_lang_shortcuts[language] != KC_NO) tap_code16(navi_lang_shortcuts[language]);');
+    expect(keymapC(langs('QK_MACRO_0'))).toContain('if (navi_lang_shortcuts[language] != KC_NO) navi_play_tap(navi_lang_shortcuts[language], NULL);');
+  });
+
+  it('a key that plays itself, straight or through a macro, is an error', () => {
+    const p: Project = {
+      ...base,
+      macros: [{ id: 'm', index: 0, name: 'm', steps: [{ type: 'tap', keycode: q('QK_USER_1') }] }],
+      customKeycodes: [
+        { id: 'a', name: 'MY_SELF', description: '', action: tap('QK_USER_0') },
+        { id: 'b', name: 'MY_LOOP', description: '', action: tap('QK_MACRO_0') },
+        { id: 'c', name: 'MY_FINE', description: '', action: tap('QK_MACRO_0') },
+      ],
+    };
+    const loops = gen(p).issues.filter((i) => i.message.en.includes('plays itself'));
+    expect(loops.map((i) => i.where).sort()).toEqual(['MC_0', 'MY_LOOP', 'MY_SELF']);
+  });
+});
+
 describe('key override replacement = any keycode', () => {
   const ko = (name: string, replacement: string, layers?: number[]): KeyOverride => ({ id: name, name, mods: 0x02, trigger: q('KC_E'), replacement: q(replacement), ...(layers ? { layers } : {}) });
   const project = (overrides: KeyOverride[]): Project => ({ ...createBlankProject('ko any', 4, 10, false), keyOverrides: overrides });

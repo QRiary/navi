@@ -16,6 +16,8 @@
  *   overrides-any  Shift overrides whose replacement is no keyboard key (MO(1) held, a macro, CW_TOGG, a custom
  *             keycode): played by navi_ko_play; also as generated-overrides-any
  *   leader-any  leader actions TG(1), a macro and CW_TOGG, played as taps (tap_code16 can't send them)
+ *   custom-any  custom keycodes tapping TG(1), a macro, CW_TOGG (also auto-repeated and per language), a macro as a
+ *             language's OS shortcut; also as generated-custom-any
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -25,6 +27,7 @@ import { loadSpec } from '../../src/core/keycodes/spec';
 import { TASK_SWITCHER_NAME, taskSwitcherKeycode } from '../../src/core/keycodes/taskSwitcher';
 import { createBlankProject, createDilemmaProject } from '../../src/core/project/factory';
 import { activeKeymap, setKeycodes } from '../../src/core/project/ops';
+import { languageKeycodes } from '../../src/core/project/languages';
 import { ensureTapHold } from '../../src/core/project/tapHoldActions';
 import type { Project } from '../../src/core/project/types';
 import { generateKeymap } from '../../src/core/qmk/generate';
@@ -292,6 +295,8 @@ it.skipIf(!out)('writes the sample keymap folders for the firmware test runner',
   write(join(out!, 'overrides-any'), overridesAny(), OVERRIDES_ANY_TESTS);
   writeGenerated(join(out!, 'generated-overrides-any'), overridesAny());
   write(join(out!, 'leader-any'), leaderAny(), LEADER_ANY_TESTS);
+  write(join(out!, 'custom-any'), customAny(), CUSTOM_ANY_TESTS);
+  writeGenerated(join(out!, 'generated-custom-any'), customAny());
   writeFileSync(join(out!, 'generated-secret', 'secrets.h'), SECRETS_H);
 });
 
@@ -382,6 +387,46 @@ function leaderAny(): Project {
 }
 
 export const LEADER_ANY_TESTS = ['r0c0 r0c1 wait:500 r0c2 => 9', 'r0c0 r0c2 wait:500 => hi', 'r0c0 r0c2 r0c2 wait:500 r0c1 => A'];
+
+/**
+ * Custom keycodes whose action taps what tap_code16 can't send: TG(1), a macro, CW_TOGG, a macro ticked "repeat while
+ * held" (auto repeat: no source key), a per-language action's "other" entry; and a language whose OS shortcut is a macro.
+ */
+function customAny(): Project {
+  const p = withKeys(createBlankProject('fw tests custom any', 4, 10, false), [
+    [0, 0, 0, 'QK_USER_0'],
+    [0, 0, 1, 'QK_USER_1'],
+    [0, 0, 2, 'KC_B'],
+    [1, 0, 2, 'KC_9'],
+    [0, 0, 3, 'QK_USER_2'],
+    [0, 0, 4, 'KC_A'],
+    [0, 0, 5, 'QK_USER_3'],
+    [0, 0, 6, 'QK_USER_4'],
+  ]);
+  const toOther = languageKeycodes(spec, 1).to;
+  activeKeymap(p).layers[0]!.keys[7] = toOther;
+  const tap = (k: string) => ({ type: 'tap' as const, keycode: q(k) });
+  return {
+    ...p,
+    macros: [
+      { id: 'm0', index: 0, name: 'hi', steps: [{ type: 'text', text: 'hi' }] },
+      { id: 'm1', index: 1, name: 'os', steps: [{ type: 'text', text: 'os' }] },
+    ],
+    customKeycodes: [
+      { id: 'l', name: 'MY_LAYER', description: '', action: tap('TG(1)') },
+      { id: 'm', name: 'MY_MAC', description: '', action: tap('QK_MACRO_0') },
+      { id: 'c', name: 'MY_CW', description: '', action: tap('CW_TOGG') },
+      { id: 'r', name: 'MY_REP', description: '', action: tap('QK_MACRO_0'), repeat: true },
+      { id: 'b', name: 'MY_BYL', description: '', action: { type: 'by-language', byLanguage: [{ language: 'en', action: tap('QK_MACRO_1') }], other: tap('QK_MACRO_0') } },
+    ],
+    languages: [
+      { id: 'en', name: 'English', code: 'en', plainKeys: true },
+      { id: 'xx', name: 'Other', code: 'xx', plainKeys: true, osShortcut: q('QK_MACRO_1') },
+    ],
+  };
+}
+
+export const CUSTOM_ANY_TESTS = ['r0c0 r0c2 => 9', 'r0c1 => hi', 'r0c3 r0c4 => A', 'r0c5 => hi', 'r0c6 => os', 'r0c7 => os', 'r0c7 r0c6 => oshi'];
 
 function writeGenerated(dir: string, p: Project) {
   const on = { ...p, firmware: { ...p.firmware, tests: true } };

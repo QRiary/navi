@@ -6,7 +6,11 @@
  * REPEAT_KEY_ENABLE), like a key of the keymap: key override replacements, leader actions, custom keycode actions,
  * language shortcuts, macro key steps. Keys up to 0x1FFF keep the cheap tap_code16 path (same output as before).
  */
-import { ownActionKeycodes } from '../project/languageActions';
+import type { AdvancedIssue } from '../features/advanced';
+import { toQmk } from '../keycodes/codec';
+import type { KeycodeSpec } from '../keycodes/spec';
+import { ownActionDoesSomething, ownActionKeycodes } from '../project/languageActions';
+import { languageKeyOf } from '../project/languages';
 import type { Project } from '../project/types';
 
 export const PLAY_SYMBOLS = ['navi_play', 'navi_play_tap', 'navi_ko_play'] as const;
@@ -24,6 +28,55 @@ export function playedKeycodes(project: Project): number[] {
   // VIA plays its own macros (one byte per key); without VIA the macros are NAVI's C.
   if (project.firmware.buildFeatures.via !== true) {
     for (const m of project.macros) for (const s of m.steps) if (s.type === 'tap' || s.type === 'down' || s.type === 'up') out.push(s.keycode);
+  }
+  return out;
+}
+
+/**
+ * A key NAVI's code handles that plays itself, straight or through others (a custom keycode tapping a macro whose
+ * step taps that custom keycode): the C would call itself until the keyboard's stack runs out. Edges: an own keycode's
+ * action, a macro's key steps (VIA off), a language key's OS shortcuts. Only played keycodes (above 0x1FFF) recurse.
+ */
+export function playLoopIssues(spec: KeycodeSpec, project: Project): AdvancedIssue[] {
+  const customStart = spec.rangeByDefine.get('QK_USER')?.start ?? 0x7e40;
+  const macroStart = spec.rangeByDefine.get('QK_MACRO')?.start ?? 0x7700;
+  const via = project.firmware.buildFeatures.via === true;
+  const shortcuts = project.firmware.textRoute === 'own-program' ? [] : project.languages.flatMap((l) => (l.osShortcut !== undefined ? [l.osShortcut] : []));
+  const next = (v: number): number[] => {
+    const ck = v >= customStart ? project.customKeycodes[v - customStart] : undefined;
+    if (ck) return ownActionDoesSomething(ck.action) ? ownActionKeycodes(ck.action) : [];
+    if (languageKeyOf(spec, project, v)) return shortcuts;
+    const m = !via && v >= macroStart ? project.macros.find((x) => x.index === v - macroStart) : undefined;
+    return m ? m.steps.flatMap((s) => (s.type === 'tap' || s.type === 'down' || s.type === 'up' ? [s.keycode] : [])) : [];
+  };
+  const loops = (from: number): boolean => {
+    const seen = new Set<number>();
+    const walk = (v: number): boolean => {
+      for (const n of next(v).filter(playsAsKey)) {
+        if (n === from) return true;
+        if (seen.has(n)) continue;
+        seen.add(n);
+        if (walk(n)) return true;
+      }
+      return false;
+    };
+    return walk(from);
+  };
+  const starts = [
+    ...project.customKeycodes.map((_, i) => customStart + i),
+    ...(via ? [] : project.macros.map((m) => macroStart + m.index)),
+    // A language key as an OS shortcut: every language key taps the shortcuts, so it reaches itself.
+    ...new Set(shortcuts.filter((v) => languageKeyOf(spec, project, v))),
+  ];
+  const out: AdvancedIssue[] = [];
+  for (const v of starts) {
+    if (!loops(v)) continue;
+    const name = v >= customStart ? project.customKeycodes[v - customStart].name : toQmk(spec, v);
+    out.push({
+      level: 'error',
+      where: name,
+      message: { en: `${name} plays itself (straight or through other keys): the keyboard would hang.`, ru: `${name} нажимает сам себя (сразу или через другие клавиши): клавиатура зависнет.` },
+    });
   }
   return out;
 }
