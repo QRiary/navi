@@ -64,7 +64,7 @@ beforeAll(async () => {
 let generate: (p: Project) => { name: string; text: string }[];
 
 /** disk 'navi': the folder holds exactly what NAVI would write now, as NAVI wrote it. */
-function setup(opts: { disk?: { name: string; text: string; navi?: boolean }[] | 'navi'; tick?: boolean; compileCode?: number; runTests?: boolean; tests?: boolean; runner?: string; testResult?: unknown } = {}) {
+function setup(opts: { disk?: { name: string; text: string; navi?: boolean }[] | 'navi'; tick?: boolean; compileCode?: number; runTests?: boolean; tests?: boolean; runner?: string; testResult?: unknown; keymapTests?: { failures: unknown[]; more: number } } = {}) {
   calls.length = 0;
   vi.mocked(raw.sendRawPacket).mockReset();
   toasts.useToastStore.setState({ toasts: [] });
@@ -86,9 +86,10 @@ function setup(opts: { disk?: { name: string; text: string; navi?: boolean }[] |
     loadSources: async () => {},
     ensureOwnCode: async () => {},
     refreshFirmware: async () => {},
-    compile: vi.fn(async () => {
-      calls.push('compile');
-      return { job: 1, code: opts.compileCode ?? 0, firmware: fw as never, durationMs: 1 };
+    compile: vi.fn(async (_kb: string, _km: string, _env?: unknown, _par?: unknown, o?: { acceptTests?: boolean }) => {
+      calls.push(o?.acceptTests ? 'compile accept' : 'compile');
+      if (opts.keymapTests && !o?.acceptTests) return { job: 1, code: 2, firmware: null, durationMs: 1, keymapTests: opts.keymapTests } as never;
+      return { job: 1, code: opts.compileCode ?? 0, firmware: fw as never, durationMs: 1, keymapTests: null };
     }),
   });
   store.useBuildFlashStore.setState({ phase: 'idle', review: [], pressWhy: '' });
@@ -183,6 +184,46 @@ describe('build + flash', () => {
     await runToEnd();
     expect(calls).toEqual(['compile']);
     expect(toasts.useToastStore.getState().toasts.some((t) => t.tone === 'error' && /exit code 2|код 2/.test(t.message))).toBe(true);
+  });
+
+  describe('the keymap’s own tests fail in the build', () => {
+    const failed = { failures: [{ where: 's.txt:1', scenario: 'a b', expected: 'x', actual: 'y' }], more: 0 };
+
+    it('asks; accepting builds again with acceptTests and the run goes on', async () => {
+      setup({ disk: 'navi', keymapTests: failed });
+      scans = [{ ...empty(), uf2Drives: [drive] }, keyboardBack()];
+      const p = store.useBuildFlashStore.getState().run();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.useBuildFlashStore.getState().phase).toBe('tests-failed');
+      expect(store.useBuildFlashStore.getState().testFailures).toEqual(failed);
+      store.useBuildFlashStore.getState().answerTests(true);
+      for (let i = 0; i < 200 && store.useBuildFlashStore.getState().phase !== 'idle'; i++) await vi.advanceTimersByTimeAsync(500);
+      await p;
+      expect(calls).toEqual(['compile', 'compile accept', 'uf2']);
+    });
+
+    it('stop: no second build, nothing flashed', async () => {
+      setup({ disk: 'navi', keymapTests: failed });
+      scans = [empty()];
+      const p = store.useBuildFlashStore.getState().run();
+      await vi.advanceTimersByTimeAsync(0);
+      store.useBuildFlashStore.getState().answerTests(false);
+      await p;
+      expect(calls).toEqual(['compile']);
+      expect(store.useBuildFlashStore.getState().phase).toBe('idle');
+      expect(toasts.useToastStore.getState().toasts.filter((x) => x.tone === 'error')).toEqual([]);
+    });
+
+    it('cancel while asking ends the run quietly', async () => {
+      setup({ disk: 'navi', keymapTests: failed });
+      scans = [empty()];
+      const p = store.useBuildFlashStore.getState().run();
+      await vi.advanceTimersByTimeAsync(0);
+      store.useBuildFlashStore.getState().cancel();
+      await p;
+      expect(calls).toEqual(['compile']);
+      expect(store.useBuildFlashStore.getState().phase).toBe('idle');
+    });
   });
 
   it('first flash of a board without a saved CURRENT.UF2: saves it, then flashes', async () => {

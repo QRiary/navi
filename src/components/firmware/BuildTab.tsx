@@ -17,6 +17,7 @@ import { ErrorDetails } from '../ErrorDetails';
 import { useProjectStore } from '../../store/projectStore';
 import { autoJobs, useQmkStore } from '../../store/qmkStore';
 import { BuildLog } from './BuildLog';
+import { KeymapTestFailures } from './KeymapTestFailures';
 import { useGenerated } from './FilesTab';
 import { t } from '../../i18n';
 
@@ -214,6 +215,24 @@ export function BuildTab() {
               : t(`Build failed (exit code ${last.code}). See the errors above the log.`, `Сборка не удалась (код ${last.code}). Ошибки — над логом.`)}{' '}
             {last.firmware && <a href={href({ section: 'firmware', tab: 'flash' })}>{t('→ flash', '→ прошить')}</a>}
           </span>
+        </div>
+      )}
+      {last && !running && last.code !== 0 && !!last.keymapTests?.failures.length && (
+        <div>
+          <p className="field-hint">
+            {t(
+              'Your keymap’s own tests expected something else from these keys. If you changed them on purpose, accept the new results: the tests are updated and the build goes on.',
+              'Собственные тесты вашей раскладки ждали от этих клавиш другого. Если вы изменили их намеренно, примите новые результаты: тесты обновятся, и сборка продолжится.',
+            )}
+          </p>
+          <KeymapTestFailures failures={last.keymapTests.failures} more={last.keymapTests.more} />
+          <button
+            className="btn btn--primary"
+            {...whyDisabled(running && t('Wait: the build is running', 'Подождите: идёт сборка'))}
+            onClick={() => void compile(kb!, project.firmware.keymap, buildEnv, build.parallel, { acceptTests: true })}
+          >
+            <Hammer size={14} strokeWidth={1.5} /> {t('accept new results and build', 'принять новые результаты и собрать')}
+          </button>
         </div>
       )}
       {(job?.kind === 'compile' || last) && <BuildLog />}

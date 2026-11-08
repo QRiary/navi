@@ -146,3 +146,26 @@ crash, no summary).
 
 `npm run test:fw` checks the runner end to end: sample keymaps NAVI generates (`tests/firmware-tests/samples.test.ts`)
 with hand-written `navi_tests.txt` files, built and played exactly as the app does.
+
+## Your keymap's own tests in the build
+
+A keymap can run its own tests as a step of `qmk compile` (a snapshot of key scenarios, say). When a key is changed on
+purpose those tests fail; NAVI shows the failing cases and can rebuild with the new results accepted. The keymap's
+test step opts in by following this contract (NAVI never reads the keymap's test files):
+
+- On failure the build prints a line exactly `NAVI-KEYMAP-TESTS: failed` (anywhere in the output), and each failing
+  case as a block:
+  ```
+  <where>: <scenario>
+    expected: <text>
+    actual:   <text>
+  ```
+  `<where>` is `file:line` (e.g. `snapshot.txt:1490`); the scenario is the rest of the line; the two lines below start
+  with two spaces. A `file:line:` line not followed by `expected:` (gtest's `x.cpp:53: Failure`) is not a case. NAVI
+  shows the first 200 cases and counts the rest.
+- "Accept new results and build" runs the same build with `-e NAVI_ACCEPT_TESTS=yes`; the step then updates its
+  expectations instead of failing. NAVI sets this variable itself, only on that button (it is not a build option the
+  user can set).
+- In "Build + flash" a dialog lists the cases; accepting rebuilds and the run goes on to the restart and flash. On
+  Firmware → Build the same list and button sit under the failure notice.
+- `firmware.runTests` (NAVI's own runner above) is separate: its failures stay hard stops.
