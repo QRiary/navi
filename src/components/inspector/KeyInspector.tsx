@@ -9,6 +9,7 @@ import { friendlyName } from '../../core/keycodes/friendly';
 import { keyLabel } from '../../core/keycodes/labels';
 import { keycodeNeeds, needStatus, needsCode } from '../../core/keycodes/requirements';
 import { FEATURE_BY_ID } from '../../core/features/registry';
+import { keyLockSkips } from '../../core/project/keyLock';
 import { effectiveKeycode, getKeycode } from '../../core/project/ops';
 import { hardwareFacts } from '../../lib/hardwareFacts';
 import { assignTapHoldToSelection, assignToSelection, clearSelection, copySelection, findKeycode, pasteToSelection, selectPositions } from '../../lib/keymapActions';
@@ -151,6 +152,7 @@ export function KeyInspector() {
   const code = needsCode(spec, value);
   const standIn = project.tapHoldActions.some((a) => a.keycode === value);
   const eff = effectiveKeycode(project, keymap, key.matrix, [layer]);
+  const lockSkips = keyLockSkips(spec, keymap, layer, value);
 
   return (
     <div className="inspector-body">
@@ -164,7 +166,7 @@ export function KeyInspector() {
           {eff.fromLayer})
         </p>
       )}
-      {(req.length > 0 || code || standIn) && (
+      {(req.length > 0 || code || standIn || lockSkips) && (
         <div className="field">
           <span className="field-label">{t('firmware', 'прошивка')}</span>
           {req.map((need) => {
@@ -177,6 +179,14 @@ export function KeyInspector() {
               </div>
             );
           })}
+          {lockSkips && (
+            <p className="field-hint">
+              {t(
+                "Key Lock can't hold this key: QMK locks only plain keys, so QK_LOCK on this layer skips a tap-hold or other special key.",
+                'Key Lock не удержит эту клавишу: QMK фиксирует только обычные клавиши, поэтому QK_LOCK на этом слое пропускает тап-холд и другие особые клавиши.',
+              )}
+            </p>
+          )}
           {standIn && (
             <p className="field-hint">
               {t(

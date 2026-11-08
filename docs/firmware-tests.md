@@ -58,6 +58,13 @@ result is a tap dance, and a scenario whose text holds a word NAVI's file check 
 The task switcher key (`NAVI_TASK_SWITCH`) is tested on every layer it shows on, tapped once (`⟨C-A-TAB⟩`) and
 twice (`⟨C-A-TAB⟩⟨C-A-TAB⟩`), with `⟨ENT⟩` after the release of the layer key holding that layer; as a combo result, a
 tap dance or tap-hold slot, a key override's trigger or on a language's layer it's left out.
+Key Lock (`QK_LOCK`) is tested on every layer the tests reach that has its own `QK_LOCK` key: `QK_LOCK QK_LOCK`
+(`∅`), and `QK_LOCK <key> <key>` for every other key on that layer. Key Lock holds only a keycode of `0xFF` or less
+(plain keys, modifiers, media and mouse keys), so such a key gives one tap; any other (`MT`, `LT`, a key with mods,
+a macro…) works as if `QK_LOCK` weren't pressed and gives two. `QK_LOCK <key> QK_LOCK <key>` is tested once per layer
+on a plain key (two taps: the second press goes through while the key is still held). Left out: combo spots, keys
+that change layers or Caps Word, and routes through an `OSL()` tap; a one-shot mod after `QK_LOCK` goes to
+`[not checked]`.
 The lines are for people to read; a harness skips the section.
 
 ### `[tests]`: scenarios and their expected output
