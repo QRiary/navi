@@ -102,6 +102,9 @@ try {
   const genMacrosAny = await play('generated-macros-any', 4, 10);
   check('generated-macros-any: NAVI\'s own navi_tests.txt passes whole', genMacrosAny.status === 'pass' && genMacrosAny.passed > 0, genMacrosAny);
 
+  const genLock = await play('generated-key-lock', 4, 10);
+  check('generated-key-lock: Key Lock holds plain keys and a modifier, not a mod-tap or a shifted key; NAVI\'s own navi_tests.txt passes whole', genLock.status === 'pass' && genLock.passed > 0, genLock);
+
   const hw = await play('own-hardware', 4, 10);
   check('own-hardware: own C including transactions.h unguarded, sending raw HID and keeping code in LIB_SRC builds; GUI + Space reads ⟨G- ⟩', hw.status === 'pass' && hw.passed === 3, hw);
   const genHw = await play('generated-own-hardware', 4, 10);

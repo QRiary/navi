@@ -162,3 +162,27 @@ describe('the task switcher key', () => {
     expect(section(file(p), 'not checked').some((l) => l.startsWith('combo CM_SW: the task switcher key'))).toBe(true);
   });
 });
+
+describe('Key Lock', () => {
+  // Layer 1 (held by r0c3): QK_LOCK, Esc, Alt-tap Esc, Shift; r0c2 falls through to LSFT_T(KC_C).
+  const locked = () =>
+    board((p) => {
+      const l1 = activeKeymap(p).layers[1]!.keys;
+      [l1[0], l1[1], l1[4], l1[5]] = ['QK_LOCK', 'KC_ESC', 'LALT_T(KC_ESC)', 'KC_LSFT'].map(kc);
+    });
+  it('holds a plain key and a modifier until their next press; a mod-tap is tapped twice', () => {
+    const t = tests(file(locked()));
+    expect(t).toContain('+r0c3 r0c0 -r0c3 => ∅');
+    expect(t).toContain('+r0c3 r0c0 r0c0 -r0c3 => ∅');
+    expect(t).toContain('+r0c3 r0c0 r0c1 r0c1 -r0c3 => ⟨ESC⟩');
+    expect(t).toContain('+r0c3 r0c0 r1c0 r1c0 -r0c3 => ⟨ESC⟩⟨ESC⟩');
+    expect(t).toContain('+r0c3 r0c0 r1c1 r1c1 -r0c3 => ⟨LSFT⟩');
+    expect(t).toContain('+r0c3 r0c0 r0c2 r0c2 -r0c3 => cc');
+    // QK_LOCK again on a held key: the press goes through again, the key stays held.
+    expect(t).toContain('+r0c3 r0c0 r0c1 r0c0 r0c1 -r0c3 => ⟨ESC⟩⟨ESC⟩');
+    expect(section(file(locked()), 'not checked').some((l) => l.includes('QK_LOCK'))).toBe(false);
+  });
+  it('a layer without QK_LOCK gets no Key Lock lines', () => {
+    expect(file(board())).not.toContain('Key Lock');
+  });
+});

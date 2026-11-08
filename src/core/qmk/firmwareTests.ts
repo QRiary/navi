@@ -3,7 +3,7 @@
  * The format is docs/firmware-tests.md; a harness plays the file in QMK's unit test framework.
  *
  * Every expectation comes from the project's keycodes alone, never from the generated C: what a key sends is worked
- * out here (a small model of QMK's keys, layers, tap-hold, tap dance, combos, key overrides and Caps Word) and run
+ * out here (a small model of QMK's keys, layers, tap-hold, tap dance, combos, key overrides, Caps Word and Key Lock) and run
  * through `Typist`, a copy of how the harness turns HID reports into text. Anything the model can't be sure of goes
  * to [not checked] with a reason instead of a guessed expectation.
  */
@@ -15,6 +15,7 @@ import { aliasLookup } from '../project/aliases';
 import { CAPS_WORD_QMK_DEFAULT, capsWordEveryLayer, capsWordRuleKeys } from '../project/capsWord';
 import { languageKeyOf } from '../project/languages';
 import { firstLanguageAction } from '../project/languageActions';
+import { keyLockHolds } from '../project/keyLock';
 import { layerRefs, type LayerRef } from '../project/layerRefs';
 import { activeKeymap } from '../project/ops';
 import { effectiveTapHolds } from '../project/tapHolds';
@@ -187,6 +188,8 @@ interface Behavior {
   capsWord?: boolean;
   /** The task switcher key: its tap opens the switcher, a second one moves (Tab), leaving its layer picks (Enter). */
   switcher?: boolean;
+  /** QK_LOCK (Key Lock): tested with the keys after it. */
+  keyLock?: boolean;
 }
 
 /** What the task switcher key sends (qmk/taskSwitcher.ts): Ctrl+Alt+Tab (weak mods) down on the press, up on the release, then Enter. */
@@ -368,6 +371,7 @@ function namedBehavior(c: Ctx, v: number, key: string): Behavior {
   const why = (reason: string): Behavior => ({ tap: { why: reason }, term: 0 });
   if (ENDS_TEST.has(key)) return why(`${c.kc(v)}, it would end the test`);
   if (key === 'QK_CAPS_WORD_TOGGLE') return { tap: NOTHING, term: 0, capsWord: true };
+  if (key === 'QK_LOCK') return { tap: NOTHING, term: 0, keyLock: true };
   const range = (define: string) => {
     const r = spec.rangeByDefine.get(define);
     return !!r && v >= r.start && v <= r.end;
@@ -432,6 +436,8 @@ interface Route {
   label: string;
   /** The newest step holds a layer: its release turns the layer off after this many `end` ops (its own mods). */
   leaveAt?: number;
+  /** An OSL tap is on the way: the next key press ends that layer. */
+  oneShotLayer?: boolean;
 }
 
 const spotName = ([r, col]: MatrixPos) => `r${r}c${col}`;
@@ -626,6 +632,46 @@ export function firmwareTestsFile(project: Project, spec: KeycodeSpec, ownCode?:
         withRoute(route, [`${spotName(pos)}:${holdTime(b.term)}`], tapOps(b.hold!));
       }
     }
+    // Key Lock (process_key_lock.c): QK_LOCK sets `watching`; the next key down of 0xFF or less (a one-shot mod
+    // turned back into its mod bits) goes through with its release masked, and its next press is swallowed (that
+    // release goes through). Any other key clears `watching` and works as usual; a second QK_LOCK toggles it off.
+    // Combo spots are left out (the combo buffer holds their presses back).
+    const free = (pos: MatrixPos) => !route.held.includes(spotName(pos)) && !comboSpots.has(spotName(pos));
+    const lockPos = route.oneShotLayer ? undefined : spots.find((pos) => free(pos) && behaviorOf(own(pos)).keyLock);
+    if (lockPos) {
+      const l = spotName(lockPos);
+      out.tests.push(`# Layer ${layerName(li)}: Key Lock (QK_LOCK at ${l}), then each key tapped twice, ${route.label}`);
+      withRoute(route, [l, l], []);
+      let again = false;
+      for (const pos of spots) {
+        const s = spotName(pos);
+        if (!free(pos) || s === l) continue;
+        const { value } = keyAt(c, route.state, pos);
+        if (value === 0 || decode(spec, value).kind === 'tap-dance') continue;
+        const b = behaviorOf(value);
+        if (b.keyLock) continue;
+        if (b.oneShot) {
+          out.notChecked.push(`${s} after QK_LOCK on layer ${layerName(li)}: one-shot mods (Key Lock holds their mod bits as a key code)`);
+          continue;
+        }
+        if (isWhy(b.tap) || b.tapLayer || b.capsWord || b.switcher) continue;
+        const p = b.tap;
+        const ops = tapOps(p);
+        if (textRouted(ops)) continue;
+        if (!keyLockHolds(spec, value)) {
+          withRoute(route, [l, s, s], [...ops, ...ops]);
+          continue;
+        }
+        // Held from the first press to the second release: the same reports as one tap.
+        withRoute(route, [l, s, s], ops);
+        // QK_LOCK again while it is held: the press goes through, and register_code presses a held key anew
+        // (action.c: del_key, then add_key); its release stays masked.
+        if (!again && p.down.length === 1 && p.down[0].t === 'down' && p.up.length === 1) {
+          withRoute(route, [l, s, l, s], [...p.down, ...p.up, ...p.down]);
+          again = true;
+        }
+      }
+    }
   });
 
   // Tap dances: each slot that is set, on the first spot it is reachable at.
@@ -773,6 +819,7 @@ function routeInto(c: Ctx, from: Route, target: number, refs: LayerRef[], behavi
       held: [...from.held, s],
       label: `${from.label === 'at power-on' ? '' : `${from.label}, then `}holding ${s} (${c.kc(r.keycode)})`,
       leaveAt: mods ? 1 : 0,
+      oneShotLayer: from.oneShotLayer,
     };
   }
   // Tap-type routes: only from the power-on state with nothing held (the tap must not be mixed with a held key).
@@ -789,6 +836,7 @@ function routeInto(c: Ctx, from: Route, target: number, refs: LayerRef[], behavi
     end: [...from.end],
     held: [...from.held, ...(how === 'OSL' ? [] : [])],
     label: `after tapping ${s} (${c.kc(r.keycode)})`,
+    oneShotLayer: how === 'OSL',
   };
 }
 

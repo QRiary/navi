@@ -312,6 +312,7 @@ it.skipIf(!out)('writes the sample keymap folders for the firmware test runner',
   writeGenerated(join(out!, 'generated-custom-any'), customAny());
   write(join(out!, 'macros-any'), macrosAny(), MACROS_ANY_TESTS);
   writeGenerated(join(out!, 'generated-macros-any'), macrosAny());
+  writeGenerated(join(out!, 'generated-key-lock'), keyLock());
   writeFileSync(join(out!, 'generated-secret', 'secrets.h'), SECRETS_H);
   const hw = { 'rules.mk': HARDWARE_RULES, 'config.h': HARDWARE_CONFIG, 'own.c': HARDWARE_OWN_C, 'lib.c': HARDWARE_LIB_C };
   write(join(out!, 'own-hardware'), ownHardware(true), ['r0c0 => a', 'r0c1 => y', 'r0c2 => ⟨G- ⟩'], hw);
@@ -622,6 +623,25 @@ function macrosAny(): Project {
 }
 
 export const MACROS_ANY_TESTS = ['r0c0 => ⟨C-a⟩', 'r0c1 r0c2 => 9', 'r0c3 r0c2 => 9', 'r0c3 r0c4 r0c2 => b', 'r0c5 => yo', 'r0c6 r0c2 => 9'];
+
+/**
+ * Key Lock (QK_LOCK) on two layers: plain keys, a modifier, a media key, a mod-tap and a shifted key (both above
+ * 0xFF: Key Lock can't hold them), layer 1 reached by holding MO(1) and falling through to layer 0's keys.
+ */
+function keyLock(): Project {
+  return withKeys(createBlankProject('fw tests key lock', 4, 10, false), [
+    [0, 0, 0, 'KC_A'],
+    [0, 0, 1, 'QK_LOCK'],
+    [0, 0, 2, 'KC_LSFT'],
+    [0, 0, 3, 'LALT_T(KC_ESC)'],
+    [0, 0, 4, 'S(KC_3)'],
+    [0, 0, 5, 'KC_MUTE'],
+    [0, 1, 0, 'MO(1)'],
+    [1, 0, 0, 'KC_ESC'],
+    [1, 0, 6, 'QK_LOCK'],
+    [1, 0, 7, 'KC_P5'],
+  ]);
+}
 
 function writeGenerated(dir: string, p: Project) {
   const on = { ...p, firmware: { ...p.firmware, tests: true } };
