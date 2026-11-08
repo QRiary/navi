@@ -34,6 +34,14 @@ export function heatColor(count: number, max: number): string | null {
 /** The count that sits at position p of the legend bar (inverse of heatPosition). */
 export const countAtPosition = (p: number, max: number): number => Math.round(max * p * p);
 
+/** A legend label of at most 4 characters (978, 3.9k, 16k, 880k, 2.4M): full counts of 5+ digits overlap on the bar.
+ *  `k` is the thousands suffix in the UI language. */
+export function shortCount(n: number, k = 'k'): string {
+  if (n < 1000) return String(n);
+  const [v, unit] = n < 999_500 ? [n / 1000, k] : [n / 1_000_000, 'M'];
+  return `${v < 9.95 ? v.toFixed(1).replace(/\.0$/, '') : Math.round(v)}${unit}`;
+}
+
 const luminance = (c: string) => {
   const [r, g, b] = hex(c).map((v) => {
     const s = v / 255;

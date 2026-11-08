@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { comboRows, contrastRatio, countAtPosition, heatColor, heatPosition, HEAT_STOPS, inkOn } from './heatmap';
+import { comboRows, contrastRatio, countAtPosition, heatColor, heatPosition, HEAT_STOPS, inkOn, shortCount } from './heatmap';
+
+describe('shortCount', () => {
+  it('keeps a legend label at most 4 characters, so 5 ticks on the 200px bar never touch', () => {
+    expect(shortCount(978)).toBe('978');
+    expect(shortCount(3910)).toBe('3.9k');
+    expect(shortCount(8798)).toBe('8.8k');
+    expect(shortCount(9960)).toBe('10k');
+    expect(shortCount(15640)).toBe('16k');
+    expect(shortCount(879815)).toBe('880k');
+    expect(shortCount(2_400_000)).toBe('2.4M');
+    expect(shortCount(15640, 'к')).toBe('16к');
+  });
+});
 import { emptyKeyCounts } from '../core/project/keyCounts';
 import type { Combo } from '../core/project/types';
 

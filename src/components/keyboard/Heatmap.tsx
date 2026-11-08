@@ -10,7 +10,7 @@ import { InfoTip } from '../InfoTip';
 import { Modal } from '../Modal';
 import { comboCountKey, spotCounts, spotTotal, type KeyCountsFile } from '../../core/project/keyCounts';
 import type { Combo, Keymap } from '../../core/project/types';
-import { comboRows, countAtPosition, heatColor, HEAT_STOPS, inkOn } from '../../lib/heatmap';
+import { comboRows, countAtPosition, heatColor, HEAT_STOPS, inkOn, shortCount } from '../../lib/heatmap';
 import { navigate } from '../../lib/router';
 import { whyDisabled } from '../../lib/whyDisabled';
 import { useKeyCountsStore } from '../../store/keyCountsStore';
@@ -42,8 +42,8 @@ export function HeatmapStrip({ max }: { max: number }) {
           <div className="heat-legend-bar" style={{ background: gradient }} />
           <div className="heat-legend-ticks">
             {(max > 0 ? LEGEND_TICKS : []).map((p) => (
-              <span key={p} style={{ left: `${p * 100}%` }}>
-                {p === 0 ? 0 : countAtPosition(p, max)}
+              <span key={p} style={{ left: `${p * 100}%` }} title={String(countAtPosition(p, max))}>
+                {shortCount(countAtPosition(p, max), t('k', 'к'))}
               </span>
             ))}
           </div>
