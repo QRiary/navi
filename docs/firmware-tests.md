@@ -62,9 +62,14 @@ Key Lock (`QK_LOCK`) is tested on every layer the tests reach that has its own `
 (`∅`), and `QK_LOCK <key> <key>` for every other key on that layer. Key Lock holds only a keycode of `0xFF` or less
 (plain keys, modifiers, media and mouse keys), so such a key gives one tap; any other (`MT`, `LT`, a key with mods,
 a macro…) works as if `QK_LOCK` weren't pressed and gives two. `QK_LOCK <key> QK_LOCK <key>` is tested once per layer
-on a plain key (two taps: the second press goes through while the key is still held). Left out: combo spots, keys
-that change layers or Caps Word, and routes through an `OSL()` tap; a one-shot mod after `QK_LOCK` goes to
-`[not checked]`.
+on a plain key (two taps: the second press goes through while the key is still held). Combo keys are tested too (a
+lone tap leaves QMK's combo buffer as a plain press and release before Key Lock sees it). Left out: keys that change
+layers or Caps Word, and routes through an `OSL()` tap; a one-shot mod after `QK_LOCK` goes to `[not checked]`.
+
+A layer is reached by holding a layer key (`MO`, `LT`, `LM`, then one more on the layer it reaches), by tapping
+`TG` / `TO` / `DF` / `OSL` on a power-on layer, or by holding a layer key, tapping `TG` on the layer it reaches and
+letting the hold go (`+r5c4 wait:250 r4c5 -r5c4`). The toggled layer can't leak into the next scenario: each one is
+played from a fresh keyboard.
 The lines are for people to read; a harness skips the section.
 
 ### `[tests]`: scenarios and their expected output
