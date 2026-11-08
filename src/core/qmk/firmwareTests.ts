@@ -636,7 +636,9 @@ export function firmwareTestsFile(project: Project, spec: KeycodeSpec, ownCode?:
     // turned back into its mod bits) goes through with its release masked, and its next press is swallowed (that
     // release goes through). Any other key clears `watching` and works as usual; a second QK_LOCK toggles it off.
     // Combo spots are left out (the combo buffer holds their presses back).
-    const free = (pos: MatrixPos) => !route.held.includes(spotName(pos)) && !comboSpots.has(spotName(pos));
+    // A combo key tapped alone works as every other key: QMK's combo buffer (pre_process_record_quantum, before Key
+    // Lock) replays its press and release once the release comes before the combo term.
+    const free = (pos: MatrixPos) => !route.held.includes(spotName(pos));
     const lockPos = route.oneShotLayer ? undefined : spots.find((pos) => free(pos) && behaviorOf(own(pos)).keyLock);
     if (lockPos) {
       const l = spotName(lockPos);
@@ -798,6 +800,8 @@ function routeInto(c: Ctx, from: Route, target: number, refs: LayerRef[], behavi
     const tap = (TAP_HOWS as readonly string[]).indexOf(r.how);
     const rank = r.how === 'MO' ? 0 : r.how === 'LT' ? 1 : tap >= 0 ? 2 + tap : r.how === 'LM' ? 6 : -1;
     if (rank < 0) continue;
+    // From a held layer, the only tap played is TG (tapped, then the hold let go).
+    if (from.held.length && tap >= 0 && !(r.how === 'TG' && from.held.length === 1)) continue;
     candidates.push({ r, pos, rank: rank + (ownNamed(r.keycode) ? 10 : 0) });
   }
   candidates.sort((a, b) => a.rank - b.rank || a.pos[0] - b.pos[0] || a.pos[1] - b.pos[1]);
@@ -822,8 +826,24 @@ function routeInto(c: Ctx, from: Route, target: number, refs: LayerRef[], behavi
       oneShotLayer: from.oneShotLayer,
     };
   }
-  // Tap-type routes: only from the power-on state with nothing held (the tap must not be mixed with a held key).
-  if (from.held.length) return null;
+  // TG on a layer reached by a hold: hold, tap TG, let the hold go (`+h wait TG -h`). QMK toggles the layer, then the
+  // release turns the held layer off (layer_off, also when it was on before); nothing is held during the test.
+  // Each scenario is a forked child of a player that never plays, so the toggled layer can't leak into the next one.
+  if (from.held.length) {
+    const heldLayer = st.on[st.on.length - 1];
+    if (r.how !== 'TG' || from.held.length !== 1 || heldLayer === undefined || heldLayer === target) return null;
+    const on = st.on.filter((l) => l !== heldLayer);
+    return {
+      state: { base: st.base, on: on.includes(target) ? on.filter((l) => l !== target) : [...on, target] },
+      before: [...from.before, s, ...from.after],
+      after: [],
+      start: [...from.start, ...from.end],
+      end: [],
+      held: [],
+      label: `${from.label}, tapping ${s} (${c.kc(r.keycode)}), then letting ${from.held[0]} go`,
+    };
+  }
+  // Other tap-type routes: only from the power-on state with nothing held (the tap must not be mixed with a held key).
   const how = r.how as (typeof TAP_HOWS)[number];
   const state: LayerState =
     how === 'TO' ? { base: st.base, on: [target] } : how === 'DF' ? { base: target, on: [...st.on] } : st.on.includes(target) ? { base: st.base, on: st.on.filter((l) => l !== target) } : { base: st.base, on: [...st.on, target] };

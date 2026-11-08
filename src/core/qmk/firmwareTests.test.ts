@@ -182,6 +182,20 @@ describe('Key Lock', () => {
     expect(t).toContain('+r0c3 r0c0 r0c1 r0c0 r0c1 -r0c3 => ⟨ESC⟩⟨ESC⟩');
     expect(section(file(locked()), 'not checked').some((l) => l.includes('QK_LOCK'))).toBe(false);
   });
+  it('on a layer turned on by a TG key on a held layer: hold, tap TG, let go; combo keys included', () => {
+    const p = board((p) => {
+      const km = activeKeymap(p);
+      km.layers[1]!.keys[4] = kc('TG(3)');
+      km.layers[3]!.keys = ['QK_LOCK', 'LALT_T(KC_ESC)', 'KC_SPC', 'KC_TRNS', 'KC_TRNS', 'KC_TRNS', 'KC_TRNS', 'KC_TRNS'].map(kc);
+      p.combos = [{ id: 'c', name: 'CM_ENT', keys: [[0, 1], [0, 2]], result: kc('KC_ENT') }];
+    });
+    const text = file(p);
+    expect(text).toContain('# Layer 3 (Layer 3): every key tapped, holding r0c3 (MO(L_LAYER_1)), tapping r1c0 (TG(L_LAYER_3)), then letting r0c3 go');
+    const t = tests(text);
+    expect(t).toContain('+r0c3 r1c0 -r0c3 r0c0 r0c1 r0c1 => ⟨ESC⟩⟨ESC⟩');
+    expect(t).toContain('+r0c3 r1c0 -r0c3 r0c0 r0c2 r0c2 => ␣');
+    expect(t).toContain('+r0c3 r1c0 -r0c3 r1c0 => d'); // layer 1 is off again: r1c0 falls through to layer 0
+  });
   it('a layer without QK_LOCK gets no Key Lock lines', () => {
     expect(file(board())).not.toContain('Key Lock');
   });
