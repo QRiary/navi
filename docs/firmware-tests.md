@@ -58,6 +58,18 @@ result is a tap dance, and a scenario whose text holds a word NAVI's file check 
 The task switcher key (`NAVI_TASK_SWITCH`) is tested on every layer it shows on, tapped once (`⟨C-A-TAB⟩`) and
 twice (`⟨C-A-TAB⟩⟨C-A-TAB⟩`), with `⟨ENT⟩` after the release of the layer key holding that layer; as a combo result, a
 tap dance or tap-hold slot, a key override's trigger or on a language's layer it's left out.
+Key Lock (`QK_LOCK`) is tested on every layer the tests reach that has its own `QK_LOCK` key: `QK_LOCK QK_LOCK`
+(`∅`), and `QK_LOCK <key> <key>` for every other key on that layer. Key Lock holds only a keycode of `0xFF` or less
+(plain keys, modifiers, media and mouse keys), so such a key gives one tap; any other (`MT`, `LT`, a key with mods,
+a macro…) works as if `QK_LOCK` weren't pressed and gives two. `QK_LOCK <key> QK_LOCK <key>` is tested once per layer
+on a plain key (two taps: the second press goes through while the key is still held). Combo keys are tested too (a
+lone tap leaves QMK's combo buffer as a plain press and release before Key Lock sees it). Left out: keys that change
+layers or Caps Word, and routes through an `OSL()` tap; a one-shot mod after `QK_LOCK` goes to `[not checked]`.
+
+A layer is reached by holding a layer key (`MO`, `LT`, `LM`, then one more on the layer it reaches), by tapping
+`TG` / `TO` / `DF` / `OSL` on a power-on layer, or by holding a layer key, tapping `TG` on the layer it reaches and
+letting the hold go (`+r5c4 wait:250 r4c5 -r5c4`). The toggled layer can't leak into the next scenario: each one is
+played from a fresh keyboard.
 The lines are for people to read; a harness skips the section.
 
 ### `[tests]`: scenarios and their expected output
@@ -99,6 +111,17 @@ What the computer would get, decoded as a US QWERTY layout types it:
 
 A key held while another is pressed shows once, when it's first pressed (an auto-repeating OS isn't modeled).
 
+## Behavior changes since the last build
+
+The same model also runs without writing the file. Each time NAVI writes the keymap files (Firmware → Files, or
+"Build + flash") it keeps that project as the baseline (`<userData>/projects/<id>/built.json`, never in the
+project file). After every edit it builds the scenarios for the baseline and for the current project and
+compares them by id and by output. A changed scenario is turned into one sentence per cause: Key Lock now
+ignoring a key, a combo no longer firing on a layer, a key override or Caps Word giving something else, a
+layer no longer reachable, a transparent spot showing a change from below. The scenarios go underneath as
+was / now lines. The edited key's own tap and hold on its own layer are left out, since that's the edit itself.
+A changed scenario no sentence covers is listed under "other changes". The full list is on Firmware → Build;
+the key inspector, the Advanced tabs and the Layers page show the lines about what is selected there.
 ## NAVI's runner
 
 Firmware → Flash has the tick "Run the firmware tests before flashing" (`firmware.runTests`) and a "Run firmware
@@ -146,3 +169,26 @@ crash, no summary).
 
 `npm run test:fw` checks the runner end to end: sample keymaps NAVI generates (`tests/firmware-tests/samples.test.ts`)
 with hand-written `navi_tests.txt` files, built and played exactly as the app does.
+
+## Your keymap's own tests in the build
+
+A keymap can run its own tests as a step of `qmk compile` (a snapshot of key scenarios, say). When a key is changed on
+purpose those tests fail; NAVI shows the failing cases and can rebuild with the new results accepted. The keymap's
+test step opts in by following this contract (NAVI never reads the keymap's test files):
+
+- On failure the build prints a line exactly `NAVI-KEYMAP-TESTS: failed` (anywhere in the output), and each failing
+  case as a block:
+  ```
+  <where>: <scenario>
+    expected: <text>
+    actual:   <text>
+  ```
+  `<where>` is `file:line` (e.g. `snapshot.txt:1490`); the scenario is the rest of the line; the two lines below start
+  with two spaces. A `file:line:` line not followed by `expected:` (gtest's `x.cpp:53: Failure`) is not a case. NAVI
+  shows the first 200 cases and counts the rest.
+- "Accept new results and build" runs the same build with `-e NAVI_ACCEPT_TESTS=yes`; the step then updates its
+  expectations instead of failing. NAVI sets this variable itself, only on that button (it is not a build option the
+  user can set).
+- In "Build + flash" a dialog lists the cases; accepting rebuilds and the run goes on to the restart and flash. On
+  Firmware → Build the same list and button sit under the failure notice.
+- `firmware.runTests` (NAVI's own runner above) is separate: its failures stay hard stops.

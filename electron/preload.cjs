@@ -50,6 +50,8 @@ contextBridge.exposeInMainWorld('navi', {
     readRevision: invoke('navi:projects:read-revision'),
     remove: invoke('navi:projects:remove'),
     restore: invoke('navi:projects:restore'),
+    readBuilt: invoke('navi:projects:read-built'),
+    saveBuilt: invoke('navi:projects:save-built'),
   },
   qmk: {
     detect: invoke('navi:qmk:detect'),

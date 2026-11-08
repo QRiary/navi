@@ -15,6 +15,7 @@ const { allowedBuildOption, insideDir, joinInside, readTextIfExists, safeFileNam
 const { createTrustStore, scanFolders, trustDialogDetail, trustRefusal } = require('./trust.cjs');
 const { createKeymapWrites } = require('./keymapWrites.cjs');
 const { stageAndRun, testsSupported } = require('./firmwareTests.cjs');
+const { parseKeymapTests } = require('./keymapTests.cjs');
 
 const KB_RE = /^[a-z0-9_][a-z0-9_/.+-]{0,150}$/i;
 const KM_RE = /^[a-z0-9_][a-z0-9_-]{0,60}$/i;
@@ -783,7 +784,7 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
   ipcMain.handle('navi:qmk:write-keyboard', (_e, home, kb, files) => writeKeyboard(dataDir, validatePath(home), kb, files));
 
   /** Build: a real qmk compile. The result is copied into the firmware archive. */
-  ipcMain.handle('navi:qmk:compile', async (_e, settings, { home, userspace: us, keyboard, keymap, keymapDir: shown, env, parallel }) => {
+  ipcMain.handle('navi:qmk:compile', async (_e, settings, { home, userspace: us, keyboard, keymap, keymapDir: shown, env, parallel, acceptTests }) => {
     validatePath(home);
     const userspace = checkUserspace(us);
     checkKb(keyboard);
@@ -802,6 +803,9 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
       if (!allowedBuildOption(k, v)) throw new Error(`build option is not allowed: ${k}`);
       args.push('-e', validateArg(`${k}=${v}`));
     }
+    // A fixed NAVI constant, not user input (so not through allowedBuildOption): tells the keymap's own test step
+    // (docs/firmware-tests.md) to accept the new results.
+    if (acceptTests === true) args.push('-e', 'NAVI_ACCEPT_TESTS=yes');
     let jobId = null;
     const started = Date.now();
     const before = firmwareSnapshot(home, userspace, keyboard, keymap);
@@ -818,7 +822,7 @@ function registerQmkIpc({ ipcMain, getWindow, dataDir, firmwareDir }) {
       const built = findBuiltFirmware({ home, userspace, kb: keyboard, km: keymap, output: result.output, before });
       if (built) firmware = archiveFirmware(firmwareDir, built, { source: 'build', keyboard, keymap, durationMs: Date.now() - started });
     }
-    const payload = { job: jobId, code: result.code, firmware, durationMs: Date.now() - started };
+    const payload = { job: jobId, code: result.code, firmware, durationMs: Date.now() - started, keymapTests: result.code !== 0 ? parseKeymapTests(result.output) : null };
     send('navi:qmk:done', payload);
     return payload;
   });

@@ -49,7 +49,7 @@ export interface QmkState {
   loadTrustedFolders(): Promise<void>;
   grantTrust(keyboard: string, keymap: string): Promise<void>;
   revokeTrust(dir: string): Promise<void>;
-  compile(keyboard: string, keymap: string, env?: Record<string, string>, parallel?: number): Promise<CompileResult | null>;
+  compile(keyboard: string, keymap: string, env?: Record<string, string>, parallel?: number, opts?: { acceptTests?: boolean }): Promise<CompileResult | null>;
   /** Firmware tests of the project's target (gated like a build in the main process); null = refused, see `error`. */
   runTests(project: Project): Promise<FirmwareTestResult | null>;
   runDiagnostic(cmd: 'doctor' | 'version' | 'env'): Promise<void>;
@@ -265,11 +265,12 @@ export const useQmkStore = create<QmkState>()((set, get) => {
       }
     },
 
-    async compile(keyboard, keymap, env, requested) {
+    async compile(keyboard, keymap, env, requested, opts) {
       const home = get().home();
       if (!navi || !home) return null;
       const parallel = requested ?? autoJobs();
-      const extra = `${parallel ? ` -j ${parallel}` : ''}${Object.entries(env ?? {}).map(([k, v]) => ` -e ${k}=${v}`).join('')}`;
+      const acceptTests = opts?.acceptTests === true;
+      const extra = `${parallel ? ` -j ${parallel}` : ''}${Object.entries(env ?? {}).map(([k, v]) => ` -e ${k}=${v}`).join('')}${acceptTests ? ' -e NAVI_ACCEPT_TESTS=yes' : ''}`;
       set({ log: [{ stream: 'app', text: `$ qmk compile -kb ${keyboard} -km ${keymap}${extra}` }], lastCompile: null, error: null, errorDetail: null, job: { id: null, kind: 'compile', running: true, startedAt: Date.now() } });
       try {
         // The build must use the folder the user sees (the main process checks it against NAVI's lookup and QMK's dry run).
@@ -277,7 +278,7 @@ export const useQmkStore = create<QmkState>()((set, get) => {
         if (!get().keymapSources || s?.keyboard !== keyboard || s.keymap !== keymap) await get().loadSources(keyboard, keymap);
         const keymapDir = get().keymapSources?.dir;
         if (!keymapDir) throw new Error(get().errorDetail ?? 'Could not resolve the keymap folder');
-        const res = await navi.qmk.compile(qmkSettings(), { home, userspace: get().userspace(), keyboard, keymap, keymapDir, env, parallel });
+        const res = await navi.qmk.compile(qmkSettings(), { home, userspace: get().userspace(), keyboard, keymap, keymapDir, env, parallel, acceptTests });
         set({ lastCompile: res, job: { ...(get().job ?? { kind: 'compile', startedAt: Date.now() }), id: res.job, running: false } });
         await get().refreshFirmware();
         return res;

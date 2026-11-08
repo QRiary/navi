@@ -9,6 +9,8 @@ import { friendlyName } from '../../core/keycodes/friendly';
 import { keyLabel } from '../../core/keycodes/labels';
 import { keycodeNeeds, needStatus, needsCode } from '../../core/keycodes/requirements';
 import { FEATURE_BY_ID } from '../../core/features/registry';
+import { changesOfKey } from '../../core/qmk/behaviorChanges';
+import { BehaviorChangesHere } from '../firmware/BehaviorChanges';
 import { effectiveKeycode, getKeycode } from '../../core/project/ops';
 import { hardwareFacts } from '../../lib/hardwareFacts';
 import { assignTapHoldToSelection, assignToSelection, clearSelection, copySelection, findKeycode, pasteToSelection, selectPositions } from '../../lib/keymapActions';
@@ -164,6 +166,7 @@ export function KeyInspector() {
           {eff.fromLayer})
         </p>
       )}
+      <BehaviorChangesHere pick={(cs) => changesOfKey(cs, project, layer, key.matrix!)} />
       {(req.length > 0 || code || standIn) && (
         <div className="field">
           <span className="field-label">{t('firmware', 'прошивка')}</span>

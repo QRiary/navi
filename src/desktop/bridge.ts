@@ -88,6 +88,16 @@ export interface CompileResult {
   code: number | null;
   firmware: FirmwareInfo | null;
   durationMs: number;
+  /** The keymap's own tests failed in this build (electron/keymapTests.cjs); null = not that kind of failure. */
+  keymapTests: { failures: KeymapTestFailure[]; more: number } | null;
+}
+
+/** One failing case of the keymap's own tests: `where` is `file:line`. */
+export interface KeymapTestFailure {
+  where: string;
+  scenario: string;
+  expected: string;
+  actual: string;
 }
 
 /**
@@ -220,6 +230,9 @@ export interface NaviBridge {
     remove(id: string): Promise<void>;
     /** Undo of remove: the project comes back from the trash (not its file link). false when there is nothing to restore. */
     restore(id: string): Promise<boolean>;
+    /** The project as NAVI last wrote its keymap files (null: never). */
+    readBuilt(id: string): Promise<string | null>;
+    saveBuilt(id: string, text: string): Promise<void>;
   };
   qmk: {
     detect(settings: QmkSettings): Promise<QmkEnvironment>;
@@ -230,7 +243,7 @@ export interface NaviBridge {
     readOwnCode(home: string, userspace: string | null, kb: string, km: string): Promise<{ path: string; text: string }[]>;
     writeKeymap(home: string, userspace: string | null, kb: string, km: string, files: { name: string; text: string }[]): Promise<{ dir: string; backup: string | null }>;
     writeKeyboard(home: string, kb: string, files: { name: string; text: string }[]): Promise<{ dir: string; backup: string | null }>;
-    compile(settings: QmkSettings, opts: { home: string; userspace: string | null; keyboard: string; keymap: string; keymapDir: string; env?: Record<string, string>; parallel?: number }): Promise<CompileResult>;
+    compile(settings: QmkSettings, opts: { home: string; userspace: string | null; keyboard: string; keymap: string; keymapDir: string; env?: Record<string, string>; parallel?: number; acceptTests?: boolean }): Promise<CompileResult>;
     /** Firmware tests (electron/firmwareTests.cjs): gated like a build; a refusal rejects. */
     runTests(settings: QmkSettings, opts: { home: string; userspace: string | null; keyboard: string; keymap: string; keymapDir: string; rows: number; cols: number; customReview: boolean }): Promise<FirmwareTestResult>;
     run(settings: QmkSettings, command: 'doctor' | 'version' | 'env'): Promise<{ job: number | null; code: number | null }>;

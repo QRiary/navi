@@ -312,6 +312,8 @@ it.skipIf(!out)('writes the sample keymap folders for the firmware test runner',
   writeGenerated(join(out!, 'generated-custom-any'), customAny());
   write(join(out!, 'macros-any'), macrosAny(), MACROS_ANY_TESTS);
   writeGenerated(join(out!, 'generated-macros-any'), macrosAny());
+  writeGenerated(join(out!, 'generated-key-lock'), keyLock());
+  writeGenerated(join(out!, 'generated-key-lock-toggled'), keyLockToggled());
   writeFileSync(join(out!, 'generated-secret', 'secrets.h'), SECRETS_H);
   const hw = { 'rules.mk': HARDWARE_RULES, 'config.h': HARDWARE_CONFIG, 'own.c': HARDWARE_OWN_C, 'lib.c': HARDWARE_LIB_C };
   write(join(out!, 'own-hardware'), ownHardware(true), ['r0c0 => a', 'r0c1 => y', 'r0c2 => ⟨G- ⟩'], hw);
@@ -622,6 +624,44 @@ function macrosAny(): Project {
 }
 
 export const MACROS_ANY_TESTS = ['r0c0 => ⟨C-a⟩', 'r0c1 r0c2 => 9', 'r0c3 r0c2 => 9', 'r0c3 r0c4 r0c2 => b', 'r0c5 => yo', 'r0c6 r0c2 => 9'];
+
+/**
+ * Key Lock (QK_LOCK) on two layers: plain keys, a modifier, a media key, a mod-tap and a shifted key (both above
+ * 0xFF: Key Lock can't hold them), layer 1 reached by holding MO(1) and falling through to layer 0's keys.
+ */
+function keyLock(): Project {
+  return withKeys(createBlankProject('fw tests key lock', 4, 10, false), [
+    [0, 0, 0, 'KC_A'],
+    [0, 0, 1, 'QK_LOCK'],
+    [0, 0, 2, 'KC_LSFT'],
+    [0, 0, 3, 'LALT_T(KC_ESC)'],
+    [0, 0, 4, 'S(KC_3)'],
+    [0, 0, 5, 'KC_MUTE'],
+    [0, 1, 0, 'MO(1)'],
+    [1, 0, 0, 'KC_ESC'],
+    [1, 0, 6, 'QK_LOCK'],
+    [1, 0, 7, 'KC_P5'],
+  ]);
+}
+
+/**
+ * Key Lock on a toggled layer, as on the owner's GAME layer: hold LT(1, KC_I), tap TG(2) there, let the hold go.
+ * Layer 2 has QK_LOCK, a mod-tap Esc and Space, which are a combo (Enter) on layer 2 only.
+ */
+function keyLockToggled(): Project {
+  const p = withKeys(createBlankProject('fw tests key lock toggled', 4, 10, false), [
+    [0, 0, 0, 'KC_A'],
+    [0, 1, 0, 'LT(1,KC_I)'],
+    [0, 1, 1, 'KC_B'],
+    [0, 1, 2, 'KC_C'],
+    [1, 0, 8, 'TG(2)'],
+    [2, 0, 1, 'QK_LOCK'],
+    [2, 1, 1, 'LALT_T(KC_ESC)'],
+    [2, 1, 2, 'KC_SPC'],
+    [2, 1, 3, 'KC_P5'],
+  ]);
+  return { ...p, combos: [{ id: 'ent', name: 'CM_ENT', keys: [[1, 1], [1, 2]], result: q('KC_ENT'), layers: [2] }] };
+}
 
 function writeGenerated(dir: string, p: Project) {
   const on = { ...p, firmware: { ...p.firmware, tests: true } };

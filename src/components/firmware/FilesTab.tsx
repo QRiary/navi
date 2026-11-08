@@ -16,6 +16,7 @@ import { whyDisabled } from '../../lib/whyDisabled';
 import { Hint } from '../InfoTip';
 import { useProjectStore, useSpec } from '../../store/projectStore';
 import { useQmkStore } from '../../store/qmkStore';
+import { useBehaviorStore } from '../../store/behaviorStore';
 import { toast, toastError } from '../../store/toastStore';
 import { getLanguage, t } from '../../i18n';
 import { CustomLines } from './CustomLines';
@@ -87,6 +88,7 @@ export function FilesTab() {
         project.firmware.keymap,
         generated.files.map((f) => ({ name: f.name, text: f.text })),
       );
+      void useBehaviorStore.getState().record(project);
       toast(res.backup ? t(`Written. Backup: ${res.backup}`, `Записано. Резервная копия: ${res.backup}`) : t('Written (new keymap folder)', 'Записано (новая папка keymap)'));
       await loadSources(project.firmware.keyboard, project.firmware.keymap);
     } catch (err) {

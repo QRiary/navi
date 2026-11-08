@@ -12,6 +12,7 @@ import { useBuildFlashStore, type BuildFlashPhase } from '../../store/buildFlash
 import { useProjectStore } from '../../store/projectStore';
 import { useQmkStore } from '../../store/qmkStore';
 import { Modal } from '../Modal';
+import { KeymapTestFailures } from './KeymapTestFailures';
 import { TextDiff } from './TextDiff';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
@@ -27,6 +28,8 @@ function label(phase: BuildFlashPhase, since: number): string {
       return t('saving…', 'сохранение…');
     case 'review':
       return t('check the files', 'проверьте файлы');
+    case 'tests-failed':
+      return t('keymap tests failed', 'тесты раскладки не прошли');
     case 'writing':
       return t('writing files…', 'запись файлов…');
     case 'testing':
@@ -95,13 +98,44 @@ export function BuildFlashButton() {
       >
         {phase === 'done' ? <Check {...ICON} /> : <Zap {...ICON} />} {label(phase, since)}
       </button>
-      {running && phase !== 'flashing' && phase !== 'review' && (
+      {running && phase !== 'flashing' && phase !== 'review' && phase !== 'tests-failed' && (
         <button className="icon-btn" aria-label={t('Stop “build + flash”', 'Остановить «собрать и прошить»')} title={t('Stop “build + flash”', 'Остановить «собрать и прошить»')} onClick={cancel}>
           <X {...ICON} />
         </button>
       )}
       {phase === 'review' && <ReviewDialog />}
+      {phase === 'tests-failed' && <TestsFailedDialog />}
     </>
+  );
+}
+
+/** The keymap's own tests failed in the build: their cases, and a way to accept the new results and build on. */
+function TestsFailedDialog() {
+  const failed = useBuildFlashStore((s) => s.testFailures);
+  const answer = useBuildFlashStore((s) => s.answerTests);
+  return (
+    <Modal
+      title={t('the keymap’s tests failed', 'тесты раскладки не прошли')}
+      onClose={() => answer(false)}
+      footer={
+        <>
+          <button className="btn" onClick={() => answer(false)}>
+            {t('stop', 'остановить')}
+          </button>
+          <button className="btn btn--primary" onClick={() => answer(true)}>
+            {t('accept new results and build', 'принять новые результаты и собрать')}
+          </button>
+        </>
+      }
+    >
+      <p className="field-hint">
+        {t(
+          'Your keymap’s own tests expected something else from these keys. If you changed them on purpose, accept the new results: the tests are updated and the build goes on.',
+          'Собственные тесты вашей раскладки ждали от этих клавиш другого. Если вы изменили их намеренно, примите новые результаты: тесты обновятся, и сборка продолжится.',
+        )}
+      </p>
+      {failed && <KeymapTestFailures failures={failed.failures} more={failed.more} />}
+    </Modal>
   );
 }
 

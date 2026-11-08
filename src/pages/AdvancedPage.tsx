@@ -41,6 +41,8 @@ import { Hint, InfoTip } from '../components/InfoTip';
 import { ListFilter } from '../components/ListFilter';
 import { findAttr, matchesQuery, useListFilter } from '../lib/find';
 import { useKeyWords } from '../lib/keyFind';
+import { changesOfItem } from '../core/qmk/behaviorChanges';
+import { BehaviorChangesHere } from '../components/firmware/BehaviorChanges';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
@@ -128,6 +130,7 @@ function OverridesTab({ project }: { project: Project }) {
               >
                 <Trash2 {...ICON} />
               </button>
+              <BehaviorChangesHere style={{ gridColumn: '1 / -1' }} pick={(cs) => changesOfItem(cs, 'key-override', o.id)} />
             </div>
           ))}
         </div>

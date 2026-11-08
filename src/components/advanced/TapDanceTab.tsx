@@ -22,6 +22,8 @@ import { Hint, InfoTip } from '../InfoTip';
 import { useProjectStore, useSpec } from '../../store/projectStore';
 import { MacroSteps } from '../macros/MacroSteps';
 import { FeatureNote, IssueList, KeycodeField } from './common';
+import { changesOfItem } from '../../core/qmk/behaviorChanges';
+import { BehaviorChangesHere } from '../firmware/BehaviorChanges';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 const COLS = '40px minmax(120px,1fr) 150px 100px 32px';
@@ -270,6 +272,7 @@ export function TapDanceTab({ project }: { project: Project }) {
                       )}
                     </p>
                   )}
+                  <BehaviorChangesHere style={{ padding: '0 var(--gap) var(--gap)' }} pick={(cs) => changesOfItem(cs, 'tap-dance', td.id)} />
                 </div>
               );
             })}

@@ -8,13 +8,14 @@
  */
 import { create } from 'zustand';
 import { bootloaderPacket, rawUsageOf } from '../core/qmk/bootloaderReboot';
-import { navi, type FirmwareInfo } from '../desktop/bridge';
+import { navi, type CompileResult, type FirmwareInfo, type KeymapTestFailure } from '../desktop/bridge';
 import { sendRawPacket } from '../device/rawHid';
 import { t } from '../i18n';
 import { generateFiles } from '../lib/firmwareFiles';
 import { testsBlocker, testsResultDetail, testsResultSentence } from '../lib/firmwareTests';
 import { expectedUsb, hasBoardBackup, inBootloader, noBackupAccepted, pickFlashTarget, planKeymapWrite, waitForKeyboardBack, type KeymapWritePlan } from '../lib/flashSteps';
 import { navigate } from '../lib/router';
+import { useBehaviorStore } from './behaviorStore';
 import { useDeviceStore } from './deviceStore';
 import { isDirty, saveProject, useProjectStore } from './projectStore';
 import { loadSpec } from '../core/keycodes/spec';
@@ -22,7 +23,7 @@ import { useQmkStore } from './qmkStore';
 import { useSettingsStore } from './settingsStore';
 import { toast } from './toastStore';
 
-export type BuildFlashPhase = 'idle' | 'saving' | 'review' | 'writing' | 'testing' | 'building' | 'restarting' | 'press' | 'backing-up' | 'flashing' | 'returning' | 'done';
+export type BuildFlashPhase = 'idle' | 'saving' | 'review' | 'tests-failed' | 'writing' | 'testing' | 'building' | 'restarting' | 'press' | 'backing-up' | 'flashing' | 'returning' | 'done';
 
 export interface BuildFlashState {
   phase: BuildFlashPhase;
@@ -30,11 +31,15 @@ export interface BuildFlashState {
   since: number;
   /** Phase `review`: the files edited outside NAVI that the write would overwrite. */
   review: KeymapWritePlan['review'];
+  /** Phase `tests-failed`: the keymap's own tests failed in the build (the cases; `more` = how many are not listed). */
+  testFailures: { failures: KeymapTestFailure[]; more: number } | null;
   /** Phase `press`: why NAVI couldn't restart the keyboard itself (shown as the button's tooltip). */
   pressWhy: string;
   run(): Promise<void>;
   /** The review dialog's answer: true = write them. */
   answerReview(write: boolean): void;
+  /** The tests-failed dialog's answer: true = accept the new results and build again. */
+  answerTests(accept: boolean): void;
   cancel(): void;
 }
 
@@ -49,6 +54,7 @@ class Stopped extends Error {}
 
 let runId = 0;
 let reviewAnswer: ((write: boolean) => void) | null = null;
+let testsAnswer: ((accept: boolean) => void) | null = null;
 
 function stopWith(message: string, opts: { detail?: string; tab?: string } = {}): never {
   toast(message, 'error', {
@@ -111,6 +117,8 @@ export const useBuildFlashStore = create<BuildFlashState>()((set, get) => {
       await qmk().loadSources(kb, km);
       check();
     }
+    // The files on disk are this project's now: the baseline of "behavior changes since the last build".
+    void useBehaviorStore.getState().record(project);
 
     // 3. Firmware tests: a key that types something else stops the run before the keyboard is touched.
     if (project.firmware.runTests) {
@@ -126,9 +134,21 @@ export const useBuildFlashStore = create<BuildFlashState>()((set, get) => {
     // 4. Build.
     phase('building');
     const build = project.firmware.build ?? {};
-    const res = await qmk().compile(kb, km, build.env ?? {}, build.parallel);
+    let res: CompileResult | null = await qmk().compile(kb, km, build.env ?? {}, build.parallel);
     check();
+    // The keymap's own tests failed: ask once whether the new results are meant; accepting rebuilds with the make variable.
+    if (res && res.code !== 0 && res.keymapTests?.failures.length) {
+      phase('tests-failed', { testFailures: res.keymapTests });
+      const accept = await new Promise<boolean>((resolve) => (testsAnswer = resolve));
+      testsAnswer = null;
+      check();
+      if (!accept) throw new Stopped();
+      phase('building', { testFailures: null });
+      res = await qmk().compile(kb, km, build.env ?? {}, build.parallel, { acceptTests: true });
+      check();
+    }
     if (!res) stopWith(qmk().error ?? t('The build didn’t start.', 'Сборка не запустилась.'), { detail: qmk().errorDetail ?? undefined, tab: 'build' });
+    if (res.code !== 0 && res.keymapTests) stopWith(t('The keymap’s own tests failed: see the build log.', 'Собственные тесты раскладки не прошли: смотрите лог сборки.'), { tab: 'build' });
     if (res.code !== 0) stopWith(t(`The build failed (exit code ${res.code}): see the build log.`, `Сборка не удалась (код ${res.code}): смотрите лог сборки.`), { tab: 'build' });
     if (!res.firmware) stopWith(t('The build finished, but NAVI found no firmware file it made.', 'Сборка закончилась, но NAVI не нашёл созданного ею файла прошивки.'), { tab: 'build' });
     const fw: FirmwareInfo = res.firmware;
@@ -236,6 +256,7 @@ export const useBuildFlashStore = create<BuildFlashState>()((set, get) => {
     phase: 'idle',
     since: 0,
     review: [],
+    testFailures: null,
     pressWhy: '',
     async run() {
       const p = get().phase;
@@ -245,11 +266,14 @@ export const useBuildFlashStore = create<BuildFlashState>()((set, get) => {
         await steps(id);
       } catch (err) {
         if (!(err instanceof Stopped)) toast(t('“Build + flash” stopped on an unexpected error.', '«Собрать и прошить» остановилось из-за неожиданной ошибки.'), 'error', { detail: err instanceof Error ? err.message : String(err) });
-        if (id === runId) phase('idle', { review: [], pressWhy: '' });
+        if (id === runId) phase('idle', { review: [], testFailures: null, pressWhy: '' });
       }
     },
     answerReview(write) {
       reviewAnswer?.(write);
+    },
+    answerTests(accept) {
+      testsAnswer?.(accept);
     },
     cancel() {
       const p = get().phase;
@@ -258,7 +282,8 @@ export const useBuildFlashStore = create<BuildFlashState>()((set, get) => {
       if (p === 'flashing') return;
       runId++;
       reviewAnswer?.(false);
-      phase('idle', { review: [], pressWhy: '' });
+      testsAnswer?.(false);
+      phase('idle', { review: [], testFailures: null, pressWhy: '' });
     },
   };
 });
