@@ -15,6 +15,7 @@ import { generateFiles } from '../lib/firmwareFiles';
 import { testsBlocker, testsResultDetail, testsResultSentence } from '../lib/firmwareTests';
 import { expectedUsb, hasBoardBackup, inBootloader, noBackupAccepted, pickFlashTarget, planKeymapWrite, waitForKeyboardBack, type KeymapWritePlan } from '../lib/flashSteps';
 import { navigate } from '../lib/router';
+import { useBehaviorStore } from './behaviorStore';
 import { useDeviceStore } from './deviceStore';
 import { isDirty, saveProject, useProjectStore } from './projectStore';
 import { loadSpec } from '../core/keycodes/spec';
@@ -116,6 +117,8 @@ export const useBuildFlashStore = create<BuildFlashState>()((set, get) => {
       await qmk().loadSources(kb, km);
       check();
     }
+    // The files on disk are this project's now: the baseline of "behavior changes since the last build".
+    void useBehaviorStore.getState().record(project);
 
     // 3. Firmware tests: a key that types something else stops the run before the keyboard is touched.
     if (project.firmware.runTests) {

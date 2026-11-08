@@ -111,6 +111,17 @@ What the computer would get, decoded as a US QWERTY layout types it:
 
 A key held while another is pressed shows once, when it's first pressed (an auto-repeating OS isn't modeled).
 
+## Behavior changes since the last build
+
+The same model also runs without writing the file. Each time NAVI writes the keymap files (Firmware → Files, or
+"Build + flash") it keeps that project as the baseline (`<userData>/projects/<id>/built.json`, never in the
+project file). After every edit it builds the scenarios for the baseline and for the current project and
+compares them by id and by output. A changed scenario is turned into one sentence per cause: Key Lock now
+ignoring a key, a combo no longer firing on a layer, a key override or Caps Word giving something else, a
+layer no longer reachable, a transparent spot showing a change from below. The scenarios go underneath as
+was / now lines. The edited key's own tap and hold on its own layer are left out, since that's the edit itself.
+A changed scenario no sentence covers is listed under "other changes". The full list is on Firmware → Build;
+the key inspector, the Advanced tabs and the Layers page show the lines about what is selected there.
 ## NAVI's runner
 
 Firmware → Flash has the tick "Run the firmware tests before flashing" (`firmware.runTests`) and a "Run firmware

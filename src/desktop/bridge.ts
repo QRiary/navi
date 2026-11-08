@@ -230,6 +230,9 @@ export interface NaviBridge {
     remove(id: string): Promise<void>;
     /** Undo of remove: the project comes back from the trash (not its file link). false when there is nothing to restore. */
     restore(id: string): Promise<boolean>;
+    /** The project as NAVI last wrote its keymap files (null: never). */
+    readBuilt(id: string): Promise<string | null>;
+    saveBuilt(id: string, text: string): Promise<void>;
   };
   qmk: {
     detect(settings: QmkSettings): Promise<QmkEnvironment>;

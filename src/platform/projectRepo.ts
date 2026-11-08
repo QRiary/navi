@@ -17,6 +17,9 @@ export interface ProjectRepo {
   remove(id: string): Promise<void>;
   /** Undo of `remove`: false when there is nothing to restore (or the id is taken again). */
   restore(id: string): Promise<boolean>;
+  /** The project as NAVI last wrote its keymap files (null: never), the baseline of "behavior changes since the last build". */
+  readBuilt(id: string): Promise<string | null>;
+  saveBuilt(id: string, text: string): Promise<void>;
 }
 
 const LS_PREFIX = 'navi.project.';
@@ -87,7 +90,7 @@ function browserRepo(): ProjectRepo {
     },
     async remove(id) {
       const kept: Record<string, string> = {};
-      for (const s of ['saved', 'draft', 'prev']) {
+      for (const s of ['saved', 'draft', 'prev', 'built']) {
         const v = get(`${LS_PREFIX}${id}.${s}`);
         if (v !== null) kept[s] = v;
         localStorage.removeItem(`${LS_PREFIX}${id}.${s}`);
@@ -100,6 +103,12 @@ function browserRepo(): ProjectRepo {
       for (const [s, v] of Object.entries(kept)) set(`${LS_PREFIX}${id}.${s}`, v);
       trash.delete(id);
       return true;
+    },
+    async readBuilt(id) {
+      return get(`${LS_PREFIX}${id}.built`);
+    },
+    async saveBuilt(id, text) {
+      set(`${LS_PREFIX}${id}.built`, text);
     },
   };
 }

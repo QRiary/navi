@@ -16,6 +16,7 @@ import { EmptyState } from '../EmptyState';
 import { ErrorDetails } from '../ErrorDetails';
 import { useProjectStore } from '../../store/projectStore';
 import { autoJobs, useQmkStore } from '../../store/qmkStore';
+import { BehaviorChangesSinceBuild } from './BehaviorChanges';
 import { BuildLog } from './BuildLog';
 import { KeymapTestFailures } from './KeymapTestFailures';
 import { useGenerated } from './FilesTab';
@@ -235,6 +236,7 @@ export function BuildTab() {
           </button>
         </div>
       )}
+      <BehaviorChangesSinceBuild />
       {(job?.kind === 'compile' || last) && <BuildLog />}
     </div>
   );

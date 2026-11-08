@@ -15,6 +15,8 @@ import type { Combo, MatrixPos, Project } from '../../core/project/types';
 import { useActive, useLabelContext } from '../../lib/projectContext';
 import { useProjectStore, useSpec } from '../../store/projectStore';
 import { FeatureNote, IssueList, KeycodeField } from './common';
+import { changesOfItem } from '../../core/qmk/behaviorChanges';
+import { BehaviorChangesHere } from '../firmware/BehaviorChanges';
 import { LayoutPreview } from '../keyboard/LayoutPreview';
 import { anyModalOpen } from '../Modal';
 import { EmptyState } from '../EmptyState';
@@ -485,6 +487,7 @@ function ComboEditor({
           </span>
         )}
       </div>
+      <BehaviorChangesHere className="panel-box-body field" pick={(cs) => changesOfItem(cs, 'combo', combo.id)} />
     </div>
   );
 }

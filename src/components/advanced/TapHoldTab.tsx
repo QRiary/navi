@@ -35,6 +35,8 @@ import { Hint, InfoTip } from '../InfoTip';
 import { useProjectStore, useSpec } from '../../store/projectStore';
 import { IssueList, KeyChips, type KeyChip } from './common';
 import { HoldSpots } from './HoldSpots';
+import { changesOfItem } from '../../core/qmk/behaviorChanges';
+import { BehaviorChangesHere } from '../firmware/BehaviorChanges';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 // The number columns match .input--num (76px); the keys wrap their chips. Hold keys get their own line under the row.
@@ -573,6 +575,7 @@ export function TapHoldTab({ project }: { project: Project }) {
                         </div>
                       );
                     })}
+                    <BehaviorChangesHere style={{ padding: '0 var(--gap) var(--gap)' }} pick={(cs) => changesOfItem(cs, 'tap-hold', s.id)} />
                   </div>
                 );
               })}

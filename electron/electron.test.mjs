@@ -85,6 +85,19 @@ describe('project storage', () => {
     expect(store.revisions('p').length).toBeLessThanOrEqual(50);
   });
 
+  it('the project as last built: beside the project, not a version, gone with it to .trash', () => {
+    const store = createProjectStore(tmp);
+    expect(store.readBuilt('p1')).toBe(null);
+    store.save('p1', text('A', '2026-01-01'));
+    store.saveBuilt('p1', text('A built', '2026-01-01'));
+    expect(store.readBuilt('p1')).toBe(text('A built', '2026-01-01'));
+    expect(store.read('p1').saved).toBe(text('A', '2026-01-01'));
+    expect(store.revisions('p1')).toEqual([]);
+    expect(() => store.saveBuilt('../x', '{}')).toThrow();
+    store.remove('p1');
+    expect(store.readBuilt('p1')).toBe(null);
+  });
+
   it('invalid ids and too large projects are rejected', () => {
     const store = createProjectStore(tmp);
     expect(() => store.saveDraft('../x', '{}')).toThrow();

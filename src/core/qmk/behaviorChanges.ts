@@ -337,10 +337,10 @@ export function behaviorChanges(spec: KeycodeSpec, before: Project, now: Project
         const name = itemName(p.n ? N.project : B.project, s.item);
         if (!p.n) {
           const why = N.model.why.get(s.item!);
-          return t(`Key override ${name} is no longer tested${why ? `: ${why}` : ''}.`, `Замена клавиш ${name} больше не проверяется${why ? `: ${why}` : ''}.`);
+          return t(`Key override ${name} is no longer tested${why ? `: ${why}` : ''}.`, `Подмена сочетания ${name} больше не проверяется${why ? `: ${why}` : ''}.`);
         }
-        if (!p.b) return t(`Key override ${name} is now tested: ${p.n.steps} gives ${p.n.output}.`, `Замена клавиш ${name} теперь проверяется: ${p.n.steps} даёт ${p.n.output}.`);
-        return t(`Key override ${name} now gives ${p.n.output} (before: ${p.b.output}).`, `Замена клавиш ${name} теперь даёт ${p.n.output} (раньше: ${p.b.output}).`);
+        if (!p.b) return t(`Key override ${name} is now tested: ${p.n.steps} gives ${p.n.output}.`, `Подмена сочетания ${name} теперь проверяется: ${p.n.steps} даёт ${p.n.output}.`);
+        return t(`Key override ${name} now gives ${p.n.output} (before: ${p.b.output}).`, `Подмена сочетания ${name} теперь даёт ${p.n.output} (раньше: ${p.b.output}).`);
       }, p);
       continue;
     }

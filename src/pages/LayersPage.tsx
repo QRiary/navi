@@ -26,6 +26,8 @@ import { whyDisabled } from '../lib/whyDisabled';
 import { Hint, InfoTip } from '../components/InfoTip';
 import { ListFilter } from '../components/ListFilter';
 import { findAttr, matchesQuery, useListFilter } from '../lib/find';
+import { changesOfLayers } from '../core/qmk/behaviorChanges';
+import { BehaviorChangesHere } from '../components/firmware/BehaviorChanges';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 const COLORS = ['', '#6ec6ff', '#7fe3a8', '#ffb000', '#ff5d6c', '#c792ea', '#e8e8e8'];
@@ -73,6 +75,7 @@ export function LayersPage() {
       <div className="panel-box rows">
         <LayerKeysOnTopRow project={project} />
       </div>
+      <BehaviorChangesHere className="panel-box panel-box-body field" pick={changesOfLayers} />
       <KeymapManager />
       <div className="toolbar">
         <span className="kicker">

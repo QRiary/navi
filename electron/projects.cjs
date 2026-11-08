@@ -4,6 +4,7 @@
  *   %APPDATA%\NAVI\projects\<id>\project.json      — the saved version (“Save”, Ctrl+S)
  *   %APPDATA%\NAVI\projects\<id>\draft.json        — draft: autosave of every edit
  *   %APPDATA%\NAVI\projects\<id>\history\*.json    — previous saved versions (up to 50)
+ *   %APPDATA%\NAVI\projects\<id>\built.json        — the project as NAVI last wrote its keymap files
  *   %APPDATA%\NAVI\projects\.trash\…              — deleted projects (can be restored by hand)
  *
  * A restart or a crash does not lose edits: the draft is written atomically (temp file + rename).
@@ -155,6 +156,16 @@ function createProjectStore(projectsDir) {
 
     exists(id) {
       return fs.existsSync(dirOf(id));
+    },
+
+    /** The project as NAVI last wrote its keymap files (built.json), the baseline of "behavior changes since the last build". */
+    readBuilt(id) {
+      return readTextIfExists(path.join(dirOf(id), 'built.json'));
+    },
+
+    saveBuilt(id, text) {
+      checkSize(text);
+      writeFileAtomic(path.join(dirOf(id), 'built.json'), text);
     },
   };
 }

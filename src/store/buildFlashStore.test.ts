@@ -117,6 +117,8 @@ describe('build + flash', () => {
     scans = [empty()];
     await runToEnd();
     expect(calls).toEqual([`write ${generatedNow.map((f) => f.name).join(',')}`, 'compile', 'reboot', 'uf2']);
+    // The written project is the baseline of "behavior changes since the last build".
+    expect((await import('./behaviorStore')).useBehaviorStore.getState().baseline).toBe(projectStore.useProjectStore.getState().project);
     expect(toasts.useToastStore.getState().toasts.filter((t) => t.tone === 'error')).toEqual([]);
     expect(store.useBuildFlashStore.getState().phase).toBe('idle');
   });
