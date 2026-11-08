@@ -438,6 +438,21 @@ interface Route {
   leaveAt?: number;
   /** An OSL tap is on the way: the next key press ends that layer. */
   oneShotLayer?: boolean;
+  /** The keys the route presses, in order. */
+  path: RouteStep[];
+}
+
+/** A key of the matrix on one layer: the layer whose keycode is used (transparent keys resolved). */
+export interface Cell {
+  layer: number;
+  pos: MatrixPos;
+}
+
+/** One key a route presses: held (MO / LT / LM / a tap-hold's layer), tapped from power-on, or a TG tapped while a layer is held. */
+export interface RouteStep {
+  cell: Cell;
+  value: number;
+  how: 'hold' | 'tap' | 'tg';
 }
 
 const spotName = ([r, col]: MatrixPos) => `r${r}c${col}`;
@@ -464,11 +479,61 @@ const topLayer = (c: Ctx, s: LayerState) => visibleLayers(c, s)[0];
 
 // ── the file ──
 
+export type ScenarioFeature = 'tap' | 'hold' | 'one-shot' | 'switcher' | 'key-lock' | 'tap-dance' | 'combo' | 'key-override' | 'caps-word' | 'hold-spot';
+
+/**
+ * One line of [tests] with what it is about, so two projects' tests can be compared by meaning (behaviorChanges.ts).
+ * `id` names the scenario the same way in any version of the project (layer ids, item ids, spots), never by its text.
+ */
+export interface Scenario {
+  id: string;
+  feature: ScenarioFeature;
+  /** The layer the test runs on (the top layer of its route). */
+  layer: number;
+  /** The key the test is about, and its keycode. */
+  subject?: Cell;
+  value?: number;
+  /** Other keys whose keycodes the test reads (a lock key, a following letter, combo keys…). */
+  cells: readonly Cell[];
+  /** The project item it tests: `combo:<id>`, `tap-dance:<id>`, `key-override:<id>`, `tap-hold:<id>`. */
+  item?: string;
+  steps: string;
+  output: string;
+  /** Key Lock tests: Key Lock holds the subject (else it ignores it). */
+  keyLockHolds?: boolean;
+  /** Caps Word tests: what Caps Word does with the subject. */
+  capsWord?: 'shift' | 'keep' | 'end';
+}
+
+/** What the model worked out from one project: the file's text and the same tests as data. */
+export interface FirmwareTestModel {
+  text: string;
+  scenarios: Scenario[];
+  /** The route the tests use to reach each layer (by layer index); a layer missing here isn't reachable. */
+  routes: Map<number, { path: RouteStep[] }>;
+  /**
+   * Why something isn't tested, by what it is: `layer:<layerId>`, `key:<layerId>:<spot>`, `hold:<layerId>:<spot>`,
+   * `combo:<id>`, `combo:<id>:<layerId>` (why it isn't tested on that layer), `key-override:<id>`, `tap-dance:<id>`,
+   * `tap-dance:<id>:<slot>`, `caps-word`, `hold-spot:<keycode>`.
+   */
+  why: Map<string, string>;
+}
+
+type ScenarioMeta = Omit<Scenario, 'steps' | 'output' | 'cells' | 'layer'> & { cells?: readonly Cell[] };
+
 interface Section {
   keys: string[];
   notChecked: string[];
-  tests: string[];
+  /** Comment lines and scenarios, in file order. */
+  tests: (string | Scenario)[];
+  why: Map<string, string>;
 }
+
+/** A [not checked] line, its reason remembered by what it is about. */
+const skipLine = (out: Section, key: string, line: string, reason: string): void => {
+  out.notChecked.push(line);
+  if (!out.why.has(key)) out.why.set(key, reason);
+};
 
 /** The matrix positions keys are at (the active geometry's keys, else the whole matrix), row by row. */
 function spotsOf(p: Project): MatrixPos[] {
@@ -495,6 +560,11 @@ const lineText = (s: string) => s.replace(/[\x00-\x1f\x7f]+/g, ' ').slice(0, 200
  * alias it names is left out, since that code can change what the key does.
  */
 export function firmwareTestsFile(project: Project, spec: KeycodeSpec, ownCode?: readonly OwnCodeFile[] | null): string {
+  return firmwareTestModel(project, spec, ownCode).text;
+}
+
+/** The file's text and its tests as data (same arguments as firmwareTestsFile). */
+export function firmwareTestModel(project: Project, spec: KeycodeSpec, ownCode?: readonly OwnCodeFile[] | null): FirmwareTestModel {
   const keymap = activeKeymap(project);
   const { rows, cols } = project.hardware.matrix;
   const names = layerIdentifiers(keymap);
@@ -535,7 +605,9 @@ export function firmwareTestsFile(project: Project, spec: KeycodeSpec, ownCode?:
   };
   const spots = spotsOf(project);
   const layerName = (l: number) => `${l} (${lineText(keymap.layers[l]?.name || names[l] || String(l))})`;
-  const out: Section = { keys: [], notChecked: [], tests: [] };
+  const out: Section = { keys: [], notChecked: [], tests: [], why: new Map() };
+  const lid = (l: number) => keymap.layers[l]?.id ?? String(l);
+  const cellAt = (s: LayerState, pos: MatrixPos): Cell => ({ layer: keyAt(c, s, pos).layer, pos });
   const comboSpots = new Set(project.combos.flatMap((cb) => cb.keys.map(spotName)));
 
   // [keys]
@@ -571,12 +643,12 @@ export function firmwareTestsFile(project: Project, spec: KeycodeSpec, ownCode?:
   // Layers: the power-on state, then routes to every other layer.
   const first = project.languages[0];
   const power: LayerState = { base: 0, on: first?.layer !== undefined ? [first.layer] : [] };
-  const powerRoute: Route = { state: power, before: [], after: [], start: [], end: [], held: [], label: 'at power-on' };
+  const powerRoute: Route = { state: power, before: [], after: [], start: [], end: [], held: [], label: 'at power-on', path: [] };
   const routes = findRoutes(c, power, powerRoute, rawBehaviorOf, comboSpots, (v) => isWhy(behaviorOf(v).tap) && !isWhy(rawBehaviorOf(v).tap));
 
-  /** A test line; `ops` is what the model says the keyboard sends. */
-  const test = (steps: string[], ops: Op[]) => out.tests.push(`${steps.join(' ')} => ${new Typist().run(ops).text()}`);
-  const withRoute = (r: Route, steps: string[], ops: Op[]) => test([...r.before, ...steps, ...r.after], [...r.start, ...ops, ...r.end]);
+  /** A test line on a route; `ops` is what the model says the keyboard sends. */
+  const withRoute: WithRoute = (r, steps, ops, meta) =>
+    out.tests.push({ ...meta, cells: meta.cells ?? [], layer: topLayer(c, r.state), steps: [...r.before, ...steps, ...r.after].join(' '), output: new Typist().run([...r.start, ...ops, ...r.end]).text() });
   // The first language types through its text route: a key that types a character isn't predictable.
   const textRouted = (ops: Op[]) => c.routed && ops.some((o) => o.t === 'down' && printable(o.code));
 
@@ -588,48 +660,51 @@ export function firmwareTestsFile(project: Project, spec: KeycodeSpec, ownCode?:
       const v = own(pos);
       if (v === 1 || decode(spec, v).kind === 'tap-dance') continue;
       const b = behaviorOf(v);
-      if (isWhy(b.tap) && !b.oneShot) out.notChecked.push(`${spotName(pos)} on layer ${layerName(li)}: ${b.tap.why}`);
+      if (isWhy(b.tap) && !b.oneShot) skipLine(out, `key:${lid(li)}:${spotName(pos)}`, `${spotName(pos)} on layer ${layerName(li)}: ${b.tap.why}`, b.tap.why);
     }
     if (!route) {
-      out.notChecked.push(`layer ${layerName(li)}: no key the tests can hold or tap turns it on from the layers on at power-on`);
+      const why = 'no key the tests can hold or tap turns it on from the layers on at power-on';
+      skipLine(out, `layer:${lid(li)}`, `layer ${layerName(li)}: ${why}`, why);
       return;
     }
     out.tests.push(`# Layer ${layerName(li)}: every key tapped, ${route.label}`);
-    const holds: { pos: MatrixPos; b: Behavior }[] = [];
+    const holds: { pos: MatrixPos; b: Behavior; subject: Cell; value: number }[] = [];
     for (const pos of spots) {
       const s = spotName(pos);
       if (route.held.includes(s)) continue;
-      const { value } = keyAt(c, route.state, pos);
+      const { value, layer: from } = keyAt(c, route.state, pos);
       if (decode(spec, value).kind === 'tap-dance') continue;
       const b = behaviorOf(value);
+      const subject: Cell = { layer: from, pos };
       if (b.oneShot) {
         const follow = follower(c, route, spots, behaviorOf);
         if (follow) {
           const p = follow.press;
-          withRoute(route, [s, follow.spot], [{ t: 'weak+', mods: b.oneShot }, ...p.down, { t: 'weak-', mods: b.oneShot }, ...p.up]);
+          const meta = { feature: 'one-shot', subject, value, cells: [follow.cell] } as const;
+          withRoute(route, [s, follow.spot], [{ t: 'weak+', mods: b.oneShot }, ...p.down, { t: 'weak-', mods: b.oneShot }, ...p.up], { ...meta, id: `one-shot:${lid(li)}:${s}` });
           // A second tap lets the one-shot go: the next key is typed plain.
-          if (oneShotCancelActive(project)) withRoute(route, [s, s, follow.spot], tapOps(p));
+          if (oneShotCancelActive(project)) withRoute(route, [s, s, follow.spot], tapOps(p), { ...meta, id: `one-shot-cancel:${lid(li)}:${s}` });
         }
         continue;
       }
       if (isWhy(b.tap)) continue;
       if (b.switcher) {
-        switcherTests(c, route, s, out);
+        switcherTests(c, route, s, out, { feature: 'switcher', subject, value, id: `switcher:${lid(li)}:${s}` });
         continue;
       }
       const ops = tapOps(b.tap);
       if (textRouted(ops)) continue;
-      withRoute(route, [s], ops);
-      if (b.hold) holds.push({ pos, b });
+      withRoute(route, [s], ops, { id: `tap:${lid(li)}:${s}`, feature: 'tap', subject, value });
+      if (b.hold) holds.push({ pos, b, subject, value });
     }
     if (holds.length) {
       out.tests.push(`# Layer ${layerName(li)}: keys with a hold, held past their tapping term`);
-      for (const { pos, b } of holds) {
+      for (const { pos, b, subject, value } of holds) {
         if (isWhy(b.hold!)) {
-          out.notChecked.push(`${spotName(pos)} held on layer ${layerName(li)}: ${b.hold!.why}`);
+          skipLine(out, `hold:${lid(li)}:${spotName(pos)}`, `${spotName(pos)} held on layer ${layerName(li)}: ${b.hold!.why}`, b.hold!.why);
           continue;
         }
-        withRoute(route, [`${spotName(pos)}:${holdTime(b.term)}`], tapOps(b.hold!));
+        withRoute(route, [`${spotName(pos)}:${holdTime(b.term)}`], tapOps(b.hold!), { id: `hold:${lid(li)}:${spotName(pos)}`, feature: 'hold', subject, value });
       }
     }
     // Key Lock (process_key_lock.c): QK_LOCK sets `watching`; the next key down of 0xFF or less (a one-shot mod
@@ -643,33 +718,37 @@ export function firmwareTestsFile(project: Project, spec: KeycodeSpec, ownCode?:
     if (lockPos) {
       const l = spotName(lockPos);
       out.tests.push(`# Layer ${layerName(li)}: Key Lock (QK_LOCK at ${l}), then each key tapped twice, ${route.label}`);
-      withRoute(route, [l, l], []);
+      const lockCell: Cell = { layer: li, pos: lockPos };
+      withRoute(route, [l, l], [], { id: `key-lock:${lid(li)}:on`, feature: 'key-lock', subject: lockCell, value: own(lockPos) });
       let again = false;
       for (const pos of spots) {
         const s = spotName(pos);
         if (!free(pos) || s === l) continue;
-        const { value } = keyAt(c, route.state, pos);
+        const { value, layer: from } = keyAt(c, route.state, pos);
         if (value === 0 || decode(spec, value).kind === 'tap-dance') continue;
         const b = behaviorOf(value);
         if (b.keyLock) continue;
         if (b.oneShot) {
-          out.notChecked.push(`${s} after QK_LOCK on layer ${layerName(li)}: one-shot mods (Key Lock holds their mod bits as a key code)`);
+          const why = 'one-shot mods (Key Lock holds their mod bits as a key code)';
+          skipLine(out, `key-lock:${lid(li)}:${s}`, `${s} after QK_LOCK on layer ${layerName(li)}: ${why}`, why);
           continue;
         }
         if (isWhy(b.tap) || b.tapLayer || b.capsWord || b.switcher) continue;
         const p = b.tap;
         const ops = tapOps(p);
         if (textRouted(ops)) continue;
-        if (!keyLockHolds(spec, value)) {
-          withRoute(route, [l, s, s], [...ops, ...ops]);
+        const holds = keyLockHolds(spec, value);
+        const meta = { feature: 'key-lock', subject: { layer: from, pos }, value, cells: [lockCell], keyLockHolds: holds } as const;
+        if (!holds) {
+          withRoute(route, [l, s, s], [...ops, ...ops], { ...meta, id: `key-lock:${lid(li)}:${s}` });
           continue;
         }
         // Held from the first press to the second release: the same reports as one tap.
-        withRoute(route, [l, s, s], ops);
+        withRoute(route, [l, s, s], ops, { ...meta, id: `key-lock:${lid(li)}:${s}` });
         // QK_LOCK again while it is held: the press goes through, and register_code presses a held key anew
         // (action.c: del_key, then add_key); its release stays masked.
         if (!again && p.down.length === 1 && p.down[0].t === 'down' && p.up.length === 1) {
-          withRoute(route, [l, s, l, s], [...p.down, ...p.up, ...p.down]);
+          withRoute(route, [l, s, l, s], [...p.down, ...p.up, ...p.down], { ...meta, id: `key-lock:${lid(li)}:again` });
           again = true;
         }
       }
@@ -684,10 +763,12 @@ export function firmwareTestsFile(project: Project, spec: KeycodeSpec, ownCode?:
     });
     if (!at) {
       if (!danceSpots.get(td.index)?.length) continue;
-      out.notChecked.push(`dance ${td.name}: ${tapDanceKind(td) === 'own-c' ? 'your own C functions decide it' : 'not on a layer the tests reach'}`);
+      const why = tapDanceKind(td) === 'own-c' ? 'your own C functions decide it' : 'not on a layer the tests reach';
+      skipLine(out, `tap-dance:${td.id}`, `dance ${td.name}: ${why}`, why);
       continue;
     }
-    danceTests(c, td, at, out, withRoute, (pos) => spotName(pos));
+    const meta = { subject: cellAt(at.route.state, at.pos), value: keyAt(c, at.route.state, at.pos).value, item: `tap-dance:${td.id}` };
+    danceTests(c, td, at, out, withRoute, (pos) => spotName(pos), meta);
   }
 
   // Combos: tapped on every layer they work on.
@@ -695,37 +776,55 @@ export function firmwareTestsFile(project: Project, spec: KeycodeSpec, ownCode?:
   const qmk = project.combos.flatMap((cb) => qmkCombos(keymap, cols, cb, stacks));
   for (const cb of project.combos) {
     const result = behaviorOf(cb.result);
+    const skip = (why: string) => skipLine(out, `combo:${cb.id}`, `combo ${cb.name}: ${why}`, why);
     if (result.switcher) {
-      out.notChecked.push(`combo ${cb.name}: the task switcher key (its pick on leaving the layer isn't modeled for combos)`);
+      skip("the task switcher key (its pick on leaving the layer isn't modeled for combos)");
       continue;
     }
     if (isWhy(result.tap) || result.oneShot) {
-      out.notChecked.push(`combo ${cb.name}: ${isWhy(result.tap) ? result.tap.why : 'one-shot mods'}`);
+      skip(isWhy(result.tap) ? result.tap.why : 'one-shot mods');
       continue;
     }
     const ops = tapOps(result.tap);
     if (textRouted(ops)) continue;
-    const lines: string[] = [];
+    const lines: Scenario[] = [];
     const steps = cb.keys.map(spotName).join('+');
     for (const li of allLayers) {
       const route = routes.get(li);
-      if (!route || route.held.some((h) => cb.keys.map(spotName).includes(h))) continue;
+      if (!route) continue;
+      const notHere = (why: string) => void out.why.set(`combo:${cb.id}:${lid(li)}`, why);
+      const heldKey = route.held.find((h) => cb.keys.map(spotName).includes(h));
+      if (heldKey) {
+        notHere(`the way to the layer holds ${heldKey}, one of its keys`);
+        continue;
+      }
       const top = topLayer(c, route.state);
       const works = qmk.some((q) => q.combo === cb && (q.layers === null || q.layers.includes(top)));
-      if (!works || !comboKeysMatch(c, route.state, cb.keys, qmk.filter((q) => q.combo === cb), top)) continue;
-      lines.push(`${[...route.before, steps, ...route.after].join(' ')} => ${new Typist().run([...route.start, ...ops, ...route.end]).text()}`);
+      if (!works) {
+        notHere('it is off on that layer');
+        continue;
+      }
+      if (!comboKeysMatch(c, route.state, cb.keys, qmk.filter((q) => q.combo === cb), top)) {
+        const none = cb.keys.find((pos) => keyAt(c, route.state, pos).value === 0);
+        notHere(none ? `${spotName(none)} is KC_NO there` : "its keys there aren't the keycodes QMK's combo waits for");
+        continue;
+      }
+      lines.push({
+        id: `combo:${cb.id}:${lid(li)}`, feature: 'combo', item: `combo:${cb.id}`, layer: top, cells: cb.keys.map((pos) => cellAt(route.state, pos)), value: cb.result,
+        steps: [...route.before, steps, ...route.after].join(' '), output: new Typist().run([...route.start, ...ops, ...route.end]).text(),
+      });
     }
     if (lines.length) out.tests.push(`# Combo ${cb.name}`, ...lines);
   }
 
   // Key overrides: the trigger with its mods held → the replacement.
-  for (const o of project.keyOverrides) overrideTests(c, o, routes, spots, behaviorOf, out);
+  for (const o of project.keyOverrides) overrideTests(c, o, routes, spots, behaviorOf, out, cellAt);
 
   // Caps Word: the caps word key, then a key, then a letter it shifts.
-  capsWordTests(c, routes, spots, behaviorOf, out);
+  capsWordTests(c, routes, spots, behaviorOf, out, cellAt);
 
   // Hold spots: a tap-hold key held, then a key at one of its spots pressed before the term ends → the hold.
-  holdSpotTests(c, settings, routes, spots, behaviorOf, out, withRoute);
+  holdSpotTests(c, settings, routes, spots, behaviorOf, out, withRoute, cellAt);
 
   const header = [
     `# navi_tests.txt: written by NAVI from "${lineText(project.name).replace(/"/g, "'")}". Don't edit: NAVI rewrites it.`,
@@ -734,12 +833,19 @@ export function firmwareTestsFile(project: Project, spec: KeycodeSpec, ownCode?:
   // The file passes NAVI's own write check (electron/safety.cjs, testsFileProblem): a name or comment is defused, a
   // test whose text would trip it can't be written as it is.
   const tests: string[] = [];
-  for (const line of out.tests) {
-    if (line.startsWith('#') || !testsLineProblem(line)) tests.push(line.startsWith('#') ? defuse(line) : line);
-    else out.notChecked.push(`${line.slice(0, line.indexOf(' => '))}: its text holds a word NAVI's file check refuses (#include, incbin…)`);
+  const scenarios: Scenario[] = [];
+  for (const entry of out.tests) {
+    if (typeof entry === 'string') {
+      tests.push(defuse(entry));
+      continue;
+    }
+    const line = `${entry.steps} => ${entry.output}`;
+    if (!testsLineProblem(line)) tests.push(line), scenarios.push(entry);
+    else out.notChecked.push(`${entry.steps}: its text holds a word NAVI's file check refuses (#include, incbin…)`);
   }
   const lines = [...header, '[keys]', ...out.keys, '[not checked]', ...out.notChecked].map(defuse);
-  return [...lines, '[tests]', ...tests, ''].join('\n');
+  const routeInfo = new Map([...routes].map(([l, r]) => [l, { path: r.path }]));
+  return { text: [...lines, '[tests]', ...tests, ''].join('\n'), scenarios, routes: routeInfo, why: out.why };
 }
 
 // Copies of the checks in electron/safety.cjs (testsFileProblem): navi_tests.txt must never work as a C include.
@@ -811,6 +917,7 @@ function routeInto(c: Ctx, from: Route, target: number, refs: LayerRef[], behavi
   const s = spotName(pos);
   const b = behaviorOf(r.keycode);
   const st = from.state;
+  const step = (how: RouteStep['how']): RouteStep[] => [...from.path, { cell: { layer: keyAt(c, st, pos).layer, pos }, value: r.keycode, how }];
   if (HOLD_HOWS.has(r.how)) {
     const wait = Math.max(b.term ? b.term + 50 : 0, comboSpots.has(s) ? c.comboTerm + 50 : 0);
     const mods = r.mods ? reportMods(r.mods) : 0;
@@ -824,6 +931,7 @@ function routeInto(c: Ctx, from: Route, target: number, refs: LayerRef[], behavi
       label: `${from.label === 'at power-on' ? '' : `${from.label}, then `}holding ${s} (${c.kc(r.keycode)})`,
       leaveAt: mods ? 1 : 0,
       oneShotLayer: from.oneShotLayer,
+      path: step('hold'),
     };
   }
   // TG on a layer reached by a hold: hold, tap TG, let the hold go (`+h wait TG -h`). QMK toggles the layer, then the
@@ -841,6 +949,7 @@ function routeInto(c: Ctx, from: Route, target: number, refs: LayerRef[], behavi
       end: [],
       held: [],
       label: `${from.label}, tapping ${s} (${c.kc(r.keycode)}), then letting ${from.held[0]} go`,
+      path: step('tg'),
     };
   }
   // Other tap-type routes: only from the power-on state with nothing held (the tap must not be mixed with a held key).
@@ -857,19 +966,20 @@ function routeInto(c: Ctx, from: Route, target: number, refs: LayerRef[], behavi
     held: [...from.held, ...(how === 'OSL' ? [] : [])],
     label: `after tapping ${s} (${c.kc(r.keycode)})`,
     oneShotLayer: how === 'OSL',
+    path: step('tap'),
   };
 }
 
 /** A key after a one-shot mod or Caps Word: a plain letter (or any plain key) on the same layers. */
-function follower(c: Ctx, route: Route, spots: MatrixPos[], behaviorOf: (v: number) => Behavior, want?: (v: number) => boolean): { spot: string; press: Press; value: number } | null {
+function follower(c: Ctx, route: Route, spots: MatrixPos[], behaviorOf: (v: number) => Behavior, want?: (v: number) => boolean): { spot: string; press: Press; value: number; cell: Cell } | null {
   for (const pos of spots) {
     const s = spotName(pos);
     if (route.held.includes(s)) continue;
-    const { value } = keyAt(c, route.state, pos);
+    const { value, layer } = keyAt(c, route.state, pos);
     if (!(value >= KC_A && value <= 0x1d) || (want && !want(value))) continue;
     const b = behaviorOf(value);
     if (isWhy(b.tap) || b.hold) continue;
-    return { spot: s, press: b.tap, value };
+    return { spot: s, press: b.tap, value, cell: { layer, pos } };
   }
   return null;
 }
@@ -887,19 +997,20 @@ function findSpot(c: Ctx, routes: Map<number, Route>, spots: MatrixPos[], match:
   return null;
 }
 
-type WithRoute = (r: Route, steps: string[], ops: Op[]) => void;
+type WithRoute = (r: Route, steps: string[], ops: Op[], meta: ScenarioMeta) => void;
 
-function danceTests(c: Ctx, td: TapDance, at: { route: Route; pos: MatrixPos }, out: Section, withRoute: WithRoute, spot: (p: MatrixPos) => string): void {
+function danceTests(c: Ctx, td: TapDance, at: { route: Route; pos: MatrixPos }, out: Section, withRoute: WithRoute, spot: (p: MatrixPos) => string, meta: { subject: Cell; value: number; item: string }): void {
   const kind = tapDanceKind(td);
   if (kind === 'own-c') {
-    out.notChecked.push(`dance ${td.name}: your own C functions decide it`);
+    const why = 'your own C functions decide it';
+    skipLine(out, `tap-dance:${td.id}`, `dance ${td.name}: ${why}`, why);
     return;
   }
   const s = spot(at.pos);
   const term = td.tappingTerm ?? c.term;
   const hold = holdTime(term);
-  const lines: [string[], Op[]][] = [];
-  const skip = (slot: string, why: string): void => void out.notChecked.push(`dance ${td.name} ${slot}: ${why}`);
+  const lines: [string, string[], Op[]][] = [];
+  const skip = (slot: string, why: string): void => skipLine(out, `tap-dance:${td.id}:${slot}`, `dance ${td.name} ${slot}: ${why}`, why);
   if (kind === 'every-tap') {
     const steps = td.steps ?? [];
     const played: Op[] = [];
@@ -909,13 +1020,13 @@ function danceTests(c: Ctx, td: TapDance, at: { route: Route; pos: MatrixPos }, 
       const ops = macroOps(c, st.none, liftSetting(c.project) && st.none.some(isTextStep));
       if (isWhy(ops)) return skip(`tap ${n}`, ops.why);
       played.push(...ops);
-      lines.push([[n === 1 ? s : `${s}*${n}`], [...played]]);
+      lines.push([`tap ${n}`, [n === 1 ? s : `${s}*${n}`], [...played]]);
     }
   } else {
     const press = (v: number) => slotPress(c, v);
     const add = (slot: string, steps: string[], p: Press | Why, held: boolean, times = 1) => {
       if (isWhy(p)) return skip(slot, p.why);
-      lines.push([steps, held ? tapOps(p) : Array.from({ length: times }, () => tapOps(p)).flat()]);
+      lines.push([slot, steps, held ? tapOps(p) : Array.from({ length: times }, () => tapOps(p)).flat()]);
     };
     if (td.tap) add('tap', [s], press(td.tap), false);
     if (td.hold || td.tap) add('hold', [`${s}:${hold}`], press(td.hold || td.tap), true);
@@ -925,32 +1036,36 @@ function danceTests(c: Ctx, td: TapDance, at: { route: Route; pos: MatrixPos }, 
   }
   if (!lines.length) return;
   out.tests.push(`# Tap dance ${td.name}, ${at.route.label}`);
-  for (const [steps, ops] of lines) withRoute(at.route, steps, ops);
+  for (const [slot, steps, ops] of lines) withRoute(at.route, steps, ops, { ...meta, id: `tap-dance:${td.id}:${slot}`, feature: 'tap-dance' });
 }
 
 /**
  * The task switcher key at spot `s`, tapped once and twice on a route. When the route's newest step holds the layer
  * the key is on, letting that key go picks the window: Enter, right after that release (and its own mods' release).
  */
-function switcherTests(c: Ctx, route: Route, s: string, out: Section): void {
+function switcherTests(c: Ctx, route: Route, s: string, out: Section, meta: ScenarioMeta & { subject: Cell }): void {
   const top = topLayer(c, route.state);
   if (c.project.languages.some((l) => l.layer === top)) {
-    out.notChecked.push(`${s} on layer ${top}: the task switcher key on a language's layer (NAVI keeps that layer on)`);
+    const why = "the task switcher key on a language's layer (NAVI keeps that layer on)";
+    skipLine(out, `key:${c.keymap.layers[top]?.id ?? top}:${s}`, `${s} on layer ${top}: ${why}`, why);
     return;
   }
   const leave = route.leaveAt !== undefined && top !== route.state.base ? route.leaveAt : undefined;
   const end = leave === undefined ? route.end : [...route.end.slice(0, leave), ...SWITCHER_PICK, ...route.end.slice(leave)];
-  for (const [steps, ops] of [
-    [[s], SWITCHER_OPEN],
-    [[s, s], [...SWITCHER_OPEN, ...SWITCHER_OPEN]],
+  for (const [n, steps, ops] of [
+    [1, [s], SWITCHER_OPEN],
+    [2, [s, s], [...SWITCHER_OPEN, ...SWITCHER_OPEN]],
   ] as const) {
-    out.tests.push(`${[...route.before, ...steps, ...route.after].join(' ')} => ${new Typist().run([...route.start, ...ops, ...end]).text()}`);
+    out.tests.push({ ...meta, id: `${meta.id}:${n}`, cells: meta.cells ?? [], layer: top, steps: [...route.before, ...steps, ...route.after].join(' '), output: new Typist().run([...route.start, ...ops, ...end]).text() });
   }
 }
 
-function overrideTests(c: Ctx, o: Project['keyOverrides'][number], routes: Map<number, Route>, spots: MatrixPos[], behaviorOf: (v: number) => Behavior, out: Section): void {
+function overrideTests(
+  c: Ctx, o: Project['keyOverrides'][number], routes: Map<number, Route>, spots: MatrixPos[], behaviorOf: (v: number) => Behavior, out: Section,
+  cellAt: (s: LayerState, pos: MatrixPos) => Cell,
+): void {
   const need = o.mods & 0x0f;
-  const why = (reason: string): void => void out.notChecked.push(`key override ${lineText(o.name)}: ${reason}`);
+  const why = (reason: string): void => skipLine(out, `key-override:${o.id}`, `key override ${lineText(o.name)}: ${reason}`, reason);
   if (!need) return why('no modifiers');
   // QMK registers the replacement's key with its mods as weak override mods; only keyboard keys are modeled.
   const d = decode(c.spec, o.replacement);
@@ -966,17 +1081,18 @@ function overrideTests(c: Ctx, o: Project['keyOverrides'][number], routes: Map<n
     const route = routes.get(li);
     if (!route || (o.layers?.length && !o.layers.includes(topLayer(c, route.state)))) continue;
     let trigger: string | null = null;
-    let mod: { spot: string; bits: number; wait: number } | null = null;
+    let triggerPos: MatrixPos | null = null;
+    let mod: { spot: string; bits: number; wait: number; pos: MatrixPos } | null = null;
     for (const pos of spots) {
       const s = spotName(pos);
       if (route.held.includes(s)) continue;
       const { value } = keyAt(c, route.state, pos);
-      if (value === o.trigger && !trigger) trigger = s;
+      if (value === o.trigger && !trigger) (trigger = s), (triggerPos = pos);
       if (mod) continue;
       const b = behaviorOf(value);
-      if (!b.hold && !isWhy(b.tap) && b.tap.down.length === 1 && b.tap.down[0].t === 'mods+' && sameMods(b.tap.down[0].mods, need)) mod = { spot: s, bits: b.tap.down[0].mods, wait: 0 };
+      if (!b.hold && !isWhy(b.tap) && b.tap.down.length === 1 && b.tap.down[0].t === 'mods+' && sameMods(b.tap.down[0].mods, need)) mod = { spot: s, bits: b.tap.down[0].mods, wait: 0, pos };
       else if (b.hold && !isWhy(b.hold) && b.holdLayer === undefined && b.hold.down.length === 1 && b.hold.down[0].t === 'mods+' && sameMods(b.hold.down[0].mods, need))
-        mod = { spot: s, bits: b.hold.down[0].mods, wait: b.term + 50 };
+        mod = { spot: s, bits: b.hold.down[0].mods, wait: b.term + 50, pos };
     }
     if (!trigger || !mod || mod.spot === trigger) continue;
     const steps = [`+${mod.spot}`, ...(mod.wait ? [`wait:${mod.wait}`] : []), trigger, `-${mod.spot}`];
@@ -988,7 +1104,11 @@ function overrideTests(c: Ctx, o: Project['keyOverrides'][number], routes: Map<n
       { t: 'mods-', mods: mod.bits },
     ];
     out.tests.push(`# Key override ${lineText(o.name)}, ${route.label}`);
-    out.tests.push(`${[...route.before, ...steps, ...route.after].join(' ')} => ${new Typist().run([...route.start, ...ops, ...route.end]).text()}`);
+    out.tests.push({
+      id: `key-override:${o.id}`, feature: 'key-override', item: `key-override:${o.id}`, layer: topLayer(c, route.state), value: o.trigger,
+      subject: cellAt(route.state, triggerPos!), cells: [cellAt(route.state, mod.pos)],
+      steps: [...route.before, ...steps, ...route.after].join(' '), output: new Typist().run([...route.start, ...ops, ...route.end]).text(),
+    });
     return;
   }
   why('no layer the tests reach has both the trigger and a key holding its modifiers');
@@ -1003,7 +1123,10 @@ const sameMods = (bits: number, need: number) => ((bits | (bits >> 4)) & 0x0f) =
  * flavor says), so the plain key comes out with the hold's modifiers. Keys whose hold is a layer are left to the
  * hold-past-the-term test (the spot's key would be looked up on another layer).
  */
-function holdSpotTests(c: Ctx, settings: ReturnType<typeof effectiveTapHolds>, routes: Map<number, Route>, spots: MatrixPos[], behaviorOf: (v: number) => Behavior, out: Section, withRoute: WithRoute): void {
+function holdSpotTests(
+  c: Ctx, settings: ReturnType<typeof effectiveTapHolds>, routes: Map<number, Route>, spots: MatrixPos[], behaviorOf: (v: number) => Behavior, out: Section, withRoute: WithRoute,
+  cellAt: (s: LayerState, pos: MatrixPos) => Cell,
+): void {
   for (const s of settings) {
     if (!s.holdOnSpots?.length) continue;
     for (const keycode of s.keycodes) {
@@ -1012,7 +1135,7 @@ function holdSpotTests(c: Ctx, settings: ReturnType<typeof effectiveTapHolds>, r
       const at = findSpot(c, routes, spots, (v) => v === keycode);
       if (!at) continue;
       const th = spotName(at.pos);
-      const cands: { name: string; ops: Op[] }[] = [];
+      const cands: { name: string; ops: Op[]; pos: MatrixPos; value: number }[] = [];
       for (const sp of s.holdOnSpots) {
         const pos: MatrixPos = [sp.row, sp.col];
         const name = spotName(pos);
@@ -1023,18 +1146,26 @@ function holdSpotTests(c: Ctx, settings: ReturnType<typeof effectiveTapHolds>, r
         if (isWhy(f.tap) || f.hold) continue;
         const ops = [...b.hold.down, ...f.tap.down, ...f.tap.up, ...b.hold.up];
         if (c.routed && ops.some((o) => o.t === 'down' && printable(o.code))) continue;
-        cands.push({ name, ops });
+        cands.push({ name, ops, pos, value });
       }
       // The first, the middle and the last spot that qualify (a whole half would be dozens of lines).
       const picked = [...new Set([0, Math.floor((cands.length - 1) / 2), cands.length - 1])].filter((i) => i >= 0 && i < cands.length).map((i) => cands[i]);
       if (picked.length) out.tests.push(`# Hold spots of ${c.kc(keycode)}: held, then a key at one of its spots pressed before the term ends; ${at.route.label}`);
-      for (const p of picked) withRoute(at.route, [`+${th}`, p.name, `-${th}`], p.ops);
-      if (!cands.length) out.notChecked.push(`hold spots of ${c.kc(keycode)}: no plain letter at one of its spots on the layer of the key`);
+      const thCell = cellAt(at.route.state, at.pos);
+      for (const p of picked) {
+        withRoute(at.route, [`+${th}`, p.name, `-${th}`], p.ops, {
+          id: `hold-spot:${s.id}:${keycode}:${p.name}`, feature: 'hold-spot', item: `tap-hold:${s.id}`, subject: cellAt(at.route.state, p.pos), value: p.value, cells: [thCell],
+        });
+      }
+      if (!cands.length) {
+        const why = 'no plain letter at one of its spots on the layer of the key';
+        skipLine(out, `hold-spot:${keycode}`, `hold spots of ${c.kc(keycode)}: ${why}`, why);
+      }
     }
   }
 }
 
-function capsWordTests(c: Ctx, routes: Map<number, Route>, spots: MatrixPos[], behaviorOf: (v: number) => Behavior, out: Section): void {
+function capsWordTests(c: Ctx, routes: Map<number, Route>, spots: MatrixPos[], behaviorOf: (v: number) => Behavior, out: Section, cellAt: (s: LayerState, pos: MatrixPos) => Cell): void {
   const cwValue = c.spec.byName.get('QK_CAPS_WORD_TOGGLE')?.value;
   if (cwValue === undefined) return;
   const at = findSpot(c, routes, spots, (v) => v === cwValue);
@@ -1054,9 +1185,11 @@ function capsWordTests(c: Ctx, routes: Map<number, Route>, spots: MatrixPos[], b
   };
   const letter = follower(c, at.route, spots, behaviorOf, (v) => outcome(v) === true);
   if (!letter) {
-    out.notChecked.push('Caps Word: no letter it shifts on the layer of the caps word key');
+    const why = 'no letter it shifts on the layer of the caps word key';
+    skipLine(out, 'caps-word', `Caps Word: ${why}`, why);
     return;
   }
+  const cwCell = cellAt(at.route.state, at.pos);
   const cw = spotName(at.pos);
   out.tests.push(`# Caps Word: ${cw}, a key, then ${letter.spot}; ${at.route.label}`);
   const shifted = (p: Press): Op[] => [{ t: 'weak+', mods: 0x02 }, ...p.down, { t: 'weak-', mods: 0x02 }, ...p.up];
@@ -1071,7 +1204,10 @@ function capsWordTests(c: Ctx, routes: Map<number, Route>, spots: MatrixPos[], b
     const ops = o === true ? shifted(b.tap) : tapOps(b.tap);
     const after = o === null ? tapOps(letter.press) : shifted(letter.press);
     const r = at.route;
-    out.tests.push(`${[...r.before, cw, s, letter.spot, ...r.after].join(' ')} => ${new Typist().run([...r.start, ...ops, ...after, ...r.end]).text()}`);
+    out.tests.push({
+      id: `caps-word:${s}`, feature: 'caps-word', layer: top, subject: cellAt(r.state, pos), value, cells: [cwCell, letter.cell], capsWord: o === true ? 'shift' : o === false ? 'keep' : 'end',
+      steps: [...r.before, cw, s, letter.spot, ...r.after].join(' '), output: new Typist().run([...r.start, ...ops, ...after, ...r.end]).text(),
+    });
   }
 }
 
