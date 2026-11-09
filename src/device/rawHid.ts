@@ -3,7 +3,7 @@
  * build may change: the owner's is 0xFF71). Used for NAVI's "restart into the bootloader" message, which gets no
  * reply: whether it worked is decided only by the bootloader appearing (src/lib/buildFlash.ts). Key counts on the
  * board are read through a session (openRawSession): a packet out, the keyboard's answer back.
- * Windows opens HID devices shared, so a program keeping its handle open (py_qmk) doesn't block this.
+ * Windows opens HID devices shared, so another program keeping its handle open doesn't block this.
  */
 import { REPORT_SIZE } from '../core/via/protocol';
 import { hidSupported } from './webhid';
