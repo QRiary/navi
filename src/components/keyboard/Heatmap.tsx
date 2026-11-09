@@ -10,7 +10,7 @@ import { InfoTip } from '../InfoTip';
 import { Modal } from '../Modal';
 import { comboCountKey, spotCounts, spotTotal, type KeyCountsFile } from '../../core/project/keyCounts';
 import type { Combo, Keymap } from '../../core/project/types';
-import { comboRows, countAtPosition, heatColor, HEAT_STOPS, inkOn, shortCount } from '../../lib/heatmap';
+import { comboRows, heatFill, heatGradient, inkOn, shortCount, type HeatScale } from '../../lib/heatmap';
 import { navigate } from '../../lib/router';
 import { whyDisabled } from '../../lib/whyDisabled';
 import { useKeyCountsStore } from '../../store/keyCountsStore';
@@ -18,10 +18,11 @@ import { useProjectStore } from '../../store/projectStore';
 import { t } from '../../i18n';
 
 /** Fill, label color and tooltip line of the key at a matrix position on a layer. */
-export function heatForKey(file: KeyCountsFile | null, keymap: Keymap, layer: number, pos: [number, number], max: number) {
+export function heatForKey(file: KeyCountsFile | null, keymap: Keymap, layer: number, pos: [number, number], scale: HeatScale) {
   const c = file ? spotCounts(file, keymap, layer, pos[0], pos[1]) : undefined;
   const n = spotTotal(c);
-  const fill = heatColor(n, max);
+  const at = scale.at(n);
+  const fill = at === null ? null : heatFill(at);
   let title = t('never pressed', 'не нажималась');
   if (n > 0) {
     title = c && (c.tap !== undefined || c.hold !== undefined) ? t(`pressed: ${n} · tap ${c.tap ?? 0} · hold ${c.hold ?? 0}`, `нажатий: ${n} · тап ${c.tap ?? 0} · удержание ${c.hold ?? 0}`) : t(`pressed: ${n}`, `нажатий: ${n}`);
@@ -29,21 +30,21 @@ export function heatForKey(file: KeyCountsFile | null, keymap: Keymap, layer: nu
   return { fill, ink: fill ? inkOn(fill) : 'var(--text-label)', title };
 }
 
-const LEGEND_TICKS = [0, 0.25, 0.5, 0.75, 1];
-
-export function HeatmapStrip({ max }: { max: number }) {
+/** The legend: the ramp with the real least, middle and most used counts at their places on it. */
+export function HeatmapStrip({ scale }: { scale: HeatScale }) {
   const { file, reading, readNow, reset, canRead, canReset } = useKeyCountsStore();
   const [asking, setAsking] = useState(false);
-  const gradient = `linear-gradient(90deg, ${HEAT_STOPS.join(', ')})`;
+  const marks = scale.marks;
+  const most = marks.length ? marks[marks.length - 1].count : 0;
   return (
     <div className="heat-strip">
-      <div className="heat-legend" role="img" aria-label={t(`Presses per key, from 0 to ${max}`, `Нажатия клавиши: от 0 до ${max}`)}>
+      <div className="heat-legend" role="img" aria-label={t(`Presses per key, up to ${most}`, `Нажатия клавиши: до ${most}`)}>
         <div className="heat-legend-scale">
-          <div className="heat-legend-bar" style={{ background: gradient }} />
+          <div className="heat-legend-bar" style={{ background: heatGradient() }} />
           <div className="heat-legend-ticks">
-            {(max > 0 ? LEGEND_TICKS : []).map((p) => (
-              <span key={p} style={{ left: `${p * 100}%` }} title={String(countAtPosition(p, max))}>
-                {shortCount(countAtPosition(p, max), t('k', 'к'))}
+            {marks.map((m) => (
+              <span key={m.count} style={{ left: `${m.t * 100}%` }} title={String(m.count)}>
+                {shortCount(m.count, t('k', 'к'))}
               </span>
             ))}
           </div>
@@ -51,8 +52,8 @@ export function HeatmapStrip({ max }: { max: number }) {
       </div>
       <InfoTip>
         {t(
-          'Color = presses of the key on the shown layer, one scale for all layers (the busiest key of the whole keymap is the lightest). Never pressed = outline only. The scale is stretched toward small counts (square root), so rarely used keys stay visible.',
-          'Цвет — число нажатий клавиши на показанном слое, шкала одна для всех слоёв (самая частая клавиша всей раскладки — самая светлая). Не нажималась — только контур. Шкала растянута в сторону малых чисел (корень), чтобы редкие клавиши были видны.',
+          'Color = presses of the key on the shown layer, one scale for all layers. Half of a key’s shade is how far its count is from the typical one (on a log scale), half is its rank among all used keys, so a key pressed 30 times looks clearly darker than one pressed 300 times. The marks are the real least, middle and most used counts. Never pressed = outline only.',
+          'Цвет — число нажатий клавиши на показанном слое, шкала одна для всех слоёв. Половина оттенка — насколько число далеко от типичного (по логарифмической шкале), половина — место среди всех нажимавшихся клавиш, так что клавиша с 30 нажатиями заметно темнее клавиши с 300. Отметки — реальные наименьшее, среднее и наибольшее числа. Не нажималась — только контур.',
         )}
       </InfoTip>
       {file && <span className="heat-since">{t(`since ${new Date(file.since).toLocaleDateString()}`, `с ${new Date(file.since).toLocaleDateString()}`)}</span>}

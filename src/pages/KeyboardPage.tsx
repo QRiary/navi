@@ -10,7 +10,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Flame, Maximize2, Minus, Plus } from 'lucide-react';
 import { HeatmapOverlay, HeatmapStrip, heatForKey } from '../components/keyboard/Heatmap';
-import { maxSpotTotal } from '../core/project/keyCounts';
+import { spotTotals } from '../core/project/keyCounts';
+import { heatScale } from '../lib/heatmap';
 import { useKeyCountsStore } from '../store/keyCountsStore';
 import { KeyboardCanvas, type KeyView } from '../components/keyboard/KeyboardCanvas';
 import { KeycodePicker } from '../components/keyboard/KeycodePicker';
@@ -88,7 +89,7 @@ export function KeyboardPage() {
   // Heatmap view (step 17): UI state only. Clicks, drops and the catalog keep editing while it is shown.
   const [heat, setHeat] = useState(false);
   const counts = useKeyCountsStore((s) => s.file);
-  const heatMax = useMemo(() => (counts ? maxSpotTotal(counts) : 0), [counts]);
+  const countScale = useMemo(() => heatScale(counts ? spotTotals(counts) : []), [counts]);
   useEffect(() => {
     if (heat) void useKeyCountsStore.getState().load();
   }, [heat]);
@@ -152,7 +153,7 @@ export function KeyboardPage() {
         warn: isWarn(value),
         pressed: editor.pressed.has(mk),
         highlighted: editor.highlight.some((h) => h[0] === pos[0] && h[1] === pos[1]) || hoverKeys.has(mk),
-        heat: heat ? heatForKey(counts, keymap, layer, pos, heatMax) : undefined,
+        heat: heat ? heatForKey(counts, keymap, layer, pos, countScale) : undefined,
       };
     },
     [
@@ -168,7 +169,7 @@ export function KeyboardPage() {
       hoverKeys,
       heat,
       counts,
-      heatMax,
+      countScale,
       spec,
       settings.showTransparentSource,
       savedKeymap,
@@ -288,7 +289,7 @@ export function KeyboardPage() {
             </option>
           ))}
         </select>
-        {heat && <HeatmapStrip max={heatMax} />}
+        {heat && <HeatmapStrip scale={countScale} />}
       </div>
       {/* The layer tabs' panel; `display: contents` keeps the canvas a row of the editor grid. */}
       <SharedTabPanel idBase={LAYER_TABS} current={String(layer)} style={{ display: 'contents' }}>

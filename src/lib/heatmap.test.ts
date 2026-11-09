@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { comboRows, contrastRatio, countAtPosition, heatColor, heatPosition, HEAT_STOPS, inkOn, shortCount } from './heatmap';
+import { comboRows, contrastRatio, heatFill, heatScale, inkOn, shortCount } from './heatmap';
 
 describe('shortCount', () => {
-  it('keeps a legend label at most 4 characters, so 5 ticks on the 200px bar never touch', () => {
+  it('keeps a legend label at most 4 characters, so marks on the 200px bar never touch', () => {
     expect(shortCount(978)).toBe('978');
     expect(shortCount(3910)).toBe('3.9k');
     expect(shortCount(8798)).toBe('8.8k');
@@ -17,29 +17,47 @@ import { emptyKeyCounts } from '../core/project/keyCounts';
 import type { Combo } from '../core/project/types';
 
 describe('heat scale', () => {
-  it('never pressed has no fill; the max is the last step', () => {
-    expect(heatColor(0, 100)).toBeNull();
-    expect(heatColor(5, 0)).toBeNull();
-    expect(heatColor(100, 100)).toBe(HEAT_STOPS[4]);
-    expect(heatColor(500, 100)).toBe(HEAT_STOPS[4]);
+  // Reference positions the formula gives for these counts.
+  const COUNTS = [45, 160, 506, 515, 1607, 9997];
+  const EXPECTED = [0.06500651572820179, 0.25822221797470735, 0.4428293435294869, 0.5441248892337454, 0.727746928788454, 0.962070104745405];
+
+  it('places each count by half its log distance from the geometric mean, half its rank', () => {
+    const s = heatScale([...COUNTS, 0]);
+    COUNTS.forEach((c, i) => expect(s.at(c)).toBeCloseTo(EXPECTED[i], 12));
   });
-  it('maps by square root and counts rise in lightness', () => {
-    expect(heatColor(1, 1_000_000)).toMatch(/^#/);
-    expect(heatPosition(25, 100)).toBeCloseTo(0.5);
-    expect(countAtPosition(0.5, 100)).toBe(25);
-    const a = heatColor(10, 100)!;
-    const b = heatColor(60, 100)!;
-    expect(contrastRatio(b, '#000000')).toBeGreaterThan(contrastRatio(a, '#000000'));
+  it('never pressed has no position, so the key is drawn as an outline', () => {
+    expect(heatScale(COUNTS).at(0)).toBeNull();
+    expect(heatScale([0, 0]).at(5)).toBeNull();
+    expect(heatScale([]).marks).toEqual([]);
   });
-  it('every step has readable ink (4.5:1) and stays visible on the dark key', () => {
-    for (const s of HEAT_STOPS) {
-      expect(contrastRatio(s, inkOn(s))).toBeGreaterThanOrEqual(4.5);
-      expect(contrastRatio(s, '#080808')).toBeGreaterThan(1.3);
+  it('one used key sits in the middle, and a huge outlier can’t flatten the rest', () => {
+    expect(heatScale([7]).at(7)).toBe(0.5);
+    const s = heatScale([1, 2, 3, 4, 1_000_000]);
+    expect(s.at(4)! - s.at(1)!).toBeGreaterThan(0.2);
+  });
+  it('a key pressed a few dozen times looks clearly darker than one pressed a few hundred times', () => {
+    const s = heatScale([30, 40, 300, 400, 3000, 16000]);
+    expect(s.at(300)! - s.at(30)!).toBeGreaterThan(0.3);
+  });
+  it('equal counts share one position, and more presses never get less', () => {
+    const s = heatScale([5, 5, 9, 100]);
+    expect(s.at(5)! < s.at(9)! && s.at(9)! < s.at(100)!).toBe(true);
+  });
+  it('marks the real least, middle and most used counts', () => {
+    expect(heatScale([...COUNTS, 0]).marks.map((m) => m.count)).toEqual([45, 515, 9997]);
+    expect(heatScale([3, 3]).marks.map((m) => m.count)).toEqual([3]);
+  });
+  it('the ramp darkens to light in OKLab, readable ink (4.5:1) all along and visible on the dark key', () => {
+    expect(contrastRatio(heatFill(1), '#000000')).toBeGreaterThan(contrastRatio(heatFill(0.5), '#000000'));
+    expect(contrastRatio(heatFill(0), '#080808')).toBeGreaterThan(1.3);
+    for (let k = 0; k <= 100; k++) {
+      const f = heatFill(k / 100);
+      expect(contrastRatio(f, inkOn(f))).toBeGreaterThanOrEqual(4.5);
     }
   });
   it('ink flips with the fill', () => {
-    expect(inkOn('#ffffff')).toBe('#050505');
-    expect(inkOn('#000000')).toBe('#e8e8e8');
+    expect(inkOn('#ffffff')).toBe('#000000');
+    expect(inkOn('#000000')).toBe('#ffffff');
   });
 });
 

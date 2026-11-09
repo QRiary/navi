@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { layerIdentifiers } from '../qmk/generate';
-import { addKeyCounts, comboCountKey, emptyKeyCounts, KEY_COUNTS_FORMAT, layerCountKeys, maxSpotTotal, parseKeyCounts, spotCounts, spotKey, spotTotal } from './keyCounts';
+import { addKeyCounts, comboCountKey, emptyKeyCounts, KEY_COUNTS_FORMAT, layerCountKeys, parseKeyCounts, spotCounts, spotKey, spotTotal, spotTotals } from './keyCounts';
 import { createBlankProject, KEY_COUNTS_DEFAULT } from './factory';
 import { migrateProject } from './migrate';
 import { activeKeymap } from './ops';
@@ -37,7 +37,7 @@ describe('counts file', () => {
     expect(sum.combos).toEqual({ c: 3, d: 1 });
     expect(sum.since).toBe(a.file.since);
     expect(a.file.layers.L_BASE!['0,0']).toEqual({ press: 1 }); // a is left alone
-    expect(maxSpotTotal(sum)).toBe(5);
+    expect(spotTotals(sum).sort()).toEqual([1, 3, 5]);
     expect(spotTotal(undefined)).toBe(0);
   });
 
