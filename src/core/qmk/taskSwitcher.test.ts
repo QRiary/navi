@@ -93,7 +93,7 @@ describe('task switcher key: the C', () => {
   it('own pipeline: housekeeping_task_navi (a stub when unused), the define in navi.h, a forwarding warning', () => {
     const res = gen(pipe(project()));
     const c = file(res, 'keymap.c');
-    expect(c).toContain('void housekeeping_task_navi(void) {\n    // The key');
+    expect(c).toContain('void housekeeping_task_navi(void) {\n    navi_switcher_pick(false);');
     expect(c).not.toContain('void housekeeping_task_user');
     expect(file(res, 'navi.h')).toContain('#define NAVI_TASK_SWITCH');
     expect(file(res, 'navi.h')).toContain('void housekeeping_task_navi(void);');

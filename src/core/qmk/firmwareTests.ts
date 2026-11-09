@@ -1041,7 +1041,8 @@ function danceTests(c: Ctx, td: TapDance, at: { route: Route; pos: MatrixPos }, 
 
 /**
  * The task switcher key at spot `s`, tapped once and twice on a route. When the route's newest step holds the layer
- * the key is on, letting that key go picks the window: Enter, right after that release (and its own mods' release).
+ * the key is on, letting that key go picks the window: Enter, NAVI_TASK_SWITCH_PICK_MS (150) after the key's press, so
+ * after the route's other releases too (a step takes ~21 ms; no key is pressed meanwhile).
  */
 function switcherTests(c: Ctx, route: Route, s: string, out: Section, meta: ScenarioMeta & { subject: Cell }): void {
   const top = topLayer(c, route.state);
@@ -1051,7 +1052,7 @@ function switcherTests(c: Ctx, route: Route, s: string, out: Section, meta: Scen
     return;
   }
   const leave = route.leaveAt !== undefined && top !== route.state.base ? route.leaveAt : undefined;
-  const end = leave === undefined ? route.end : [...route.end.slice(0, leave), ...SWITCHER_PICK, ...route.end.slice(leave)];
+  const end = leave === undefined ? route.end : [...route.end, ...SWITCHER_PICK];
   for (const [n, steps, ops] of [
     [1, [s], SWITCHER_OPEN],
     [2, [s, s], [...SWITCHER_OPEN, ...SWITCHER_OPEN]],
