@@ -56,3 +56,15 @@ TEST_F(NaviHost, task_switcher_key_holds_ctrl_alt_tab_while_held) {
 TEST_F(NaviHost, task_switcher_pick_with_the_key_still_held_lets_go_of_it_first) {
     EXPECT_EQ(play({"+3", "+6", "-3", "-6"}), "LCTL+LALT LCTL+LALT+0x2B LCTL+LALT - 0x28 -");
 }
+
+// A quick tap: the layer key let go right after the switcher key. Enter waits until 150 ms after the press, since
+// Windows opens the switcher a moment later and an earlier Enter leaves it open
+TEST_F(NaviHost, task_switcher_pick_waits_for_the_switcher_to_open) {
+    EXPECT_EQ(play({"+3", "+6", "-6", "-3", "idle:140"}, false), "LCTL+LALT LCTL+LALT+0x2B LCTL+LALT -");
+    EXPECT_EQ(play({"idle:20"}, false), "LCTL+LALT LCTL+LALT+0x2B LCTL+LALT - 0x28 -");
+}
+
+// A key pressed while the pick waits: Enter goes first, so the key reaches the picked window
+TEST_F(NaviHost, task_switcher_pick_goes_before_a_key_pressed_while_it_waits) {
+    EXPECT_EQ(play({"+3", "+6", "-6", "-3", "+5", "-5"}), "LCTL+LALT LCTL+LALT+0x2B LCTL+LALT - 0x28 - E -");
+}

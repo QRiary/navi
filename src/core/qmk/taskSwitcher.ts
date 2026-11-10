@@ -14,11 +14,17 @@
  * layer, so the layer going off is the release of the key that held it, whatever kind (MO, LT, LM, a tap-hold slot,
  * a tap dance's hold). The default layer never goes off, and a one-shot layer goes off with the key itself: no pick.
  * With “layer keys on top” a layer hidden by a newer one still counts as on (navi_wanted).
+ *
+ * The pick waits until NAVI_TASK_SWITCH_PICK_MS after the key's last press (a config.h define may change it): Windows
+ * opens the switcher a moment after Ctrl+Alt+Tab, and an Enter sent before that goes to the window below, while the
+ * switcher opens after it and stays open. The owner's key log, 2026-11-09: a layer key let go 13-62 ms after the
+ * press left the switcher open, 100 ms and more picked. A key pressed while the pick waits sends it at once, so that
+ * key goes to the picked window and isn't lost in the switcher.
  */
 import type { KeycodeSpec } from '../keycodes/spec';
 import { TASK_SWITCHER_NAME, taskSwitcherKeycode } from '../keycodes/taskSwitcher';
 
-export const TASK_SWITCHER_SYMBOLS = [TASK_SWITCHER_NAME, 'navi_switcher_open', 'navi_switcher_layer', 'navi_switcher_on', 'navi_switcher_closes', 'navi_switcher_key', 'navi_switcher_held'];
+export const TASK_SWITCHER_SYMBOLS = [TASK_SWITCHER_NAME, 'navi_switcher_open', 'navi_switcher_layer', 'navi_switcher_on', 'navi_switcher_closes', 'navi_switcher_key', 'navi_switcher_held', 'navi_switcher_since', 'navi_switcher_pick'];
 
 /** The keycode's define (keymap.c, or navi.h in own pipeline mode). */
 export function taskSwitcherDecl(spec: KeycodeSpec): string[] {
@@ -37,6 +43,12 @@ export function taskSwitcherCode(o: { layersOnTop: boolean }): string[] {
     'static bool          navi_switcher_open  = false;',
     'static bool          navi_switcher_held  = false; // Ctrl+Alt+Tab is down (the key is held)',
     'static layer_state_t navi_switcher_layer = 0; // the layer the key was pressed on, until it goes off (0: none)',
+    'static uint32_t      navi_switcher_since = 0; // the last press',
+    "// Enter waits this long after the last press: sent before Windows has opened the switcher, it goes to the window",
+    '// below, and the switcher stays open.',
+    '#ifndef NAVI_TASK_SWITCH_PICK_MS',
+    '#    define NAVI_TASK_SWITCH_PICK_MS 150',
+    '#endif',
     '',
     `// The layers on${o.layersOnTop ? ' (hidden ones included)' : ''} and the default layer.`,
     'static layer_state_t navi_switcher_on(void) {',
@@ -57,7 +69,22 @@ export function taskSwitcherCode(o: { layersOnTop: boolean }): string[] {
     '    return key == KC_ESCAPE || key == KC_ENTER || key == KC_KP_ENTER;',
     '}',
     '',
+    "// The key's layer went off (its layer key let go): Enter picks the window, once the switcher has had time to open",
+    "// (`now`: a key pressed meanwhile, which then goes to the picked window).",
+    'static void navi_switcher_pick(bool now) {',
+    '    if (!navi_switcher_layer || (navi_switcher_on() & navi_switcher_layer)) return;',
+    '    if (!now && timer_elapsed32(navi_switcher_since) < NAVI_TASK_SWITCH_PICK_MS) return;',
+    '    navi_switcher_layer = 0;',
+    '    if (!navi_switcher_open) return;',
+    '    navi_switcher_open = false;',
+    '    // The key still held: let go of Ctrl+Alt+Tab first, so Enter goes alone.',
+    '    if (navi_switcher_held) unregister_code16(LCTL(LALT(KC_TAB)));',
+    '    navi_switcher_held = false;',
+    '    tap_code(KC_ENTER);',
+    '}',
+    '',
     'static bool navi_switcher_key(uint16_t keycode, keyrecord_t *record) {',
+    '    if (record->event.pressed) navi_switcher_pick(true);',
     `    if (keycode != ${TASK_SWITCHER_NAME}) {`,
     '        if (navi_switcher_open && record->event.pressed && navi_switcher_closes(keycode, record)) {',
     '            navi_switcher_open  = false;',
@@ -75,6 +102,7 @@ export function taskSwitcherCode(o: { layersOnTop: boolean }): string[] {
     '    register_code16(LCTL(LALT(KC_TAB)));',
     '    navi_switcher_held  = true;',
     '    navi_switcher_open  = true;',
+    '    navi_switcher_since = timer_read32();',
     '    uint8_t top         = get_highest_layer(layer_state | default_layer_state);',
     '    navi_switcher_layer = (layer_state_t)1 << top;',
     '    // The default layer never goes off, and a one-shot layer goes off with this very key: no pick then.',
@@ -93,17 +121,5 @@ export const TASK_SWITCHER_RECORD_LINE = '    if (!navi_switcher_key(keycode, re
 
 /** The switcher's lines in housekeeping_task_user (pure QMK) or housekeeping_task_navi (own pipeline); generate.ts writes the function. */
 export function taskSwitcherHousekeeping(): string[] {
-  return [
-    "    // The key's layer went off (its layer key let go): Enter picks the window.",
-    '    if (navi_switcher_layer && !(navi_switcher_on() & navi_switcher_layer)) {',
-    '        navi_switcher_layer = 0;',
-    '        if (navi_switcher_open) {',
-    '            navi_switcher_open = false;',
-    '            // The key still held: let go of Ctrl+Alt+Tab first, so Enter goes alone.',
-    '            if (navi_switcher_held) unregister_code16(LCTL(LALT(KC_TAB)));',
-    '            navi_switcher_held = false;',
-    '            tap_code(KC_ENTER);',
-    '        }',
-    '    }',
-  ];
+  return ["    navi_switcher_pick(false); // the task switcher key's layer went off: Enter picks the window"];
 }

@@ -53,11 +53,9 @@ export function spotCounts(file: KeyCountsFile, keymap: Keymap, layer: number, r
   return name === undefined ? undefined : file.layers[name]?.[spotKey(row, col)];
 }
 
-/** The highest spot total over every layer of the file (for one color scale across the keymap). */
-export function maxSpotTotal(file: KeyCountsFile): number {
-  let max = 0;
-  for (const spots of Object.values(file.layers)) for (const c of Object.values(spots)) max = Math.max(max, spotTotal(c));
-  return max;
+/** Every spot total over every layer of the file (for one color scale across the keymap). */
+export function spotTotals(file: KeyCountsFile): number[] {
+  return Object.values(file.layers).flatMap((spots) => Object.values(spots).map(spotTotal));
 }
 
 /** b added into a (a new object); `since` stays a's. */
