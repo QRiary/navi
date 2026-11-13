@@ -7,6 +7,7 @@ import { TAP_HOLD_TAP_MS_LIMITS } from '../../core/project/factory';
 import type { Project } from '../../core/project/types';
 import { useProjectStore } from '../../store/projectStore';
 import { t } from '../../i18n';
+import { findAttr } from '../../lib/find';
 import { InfoTip } from '../InfoTip';
 
 export function TapLengthRow({ project }: { project: Project }) {
@@ -22,7 +23,7 @@ export function TapLengthRow({ project }: { project: Project }) {
     apply((p) => ({ ...p, firmware: { ...p.firmware, tapHoldTapMs: n } }), t('tap-hold tap length', 'длительность нажатия тап-холд'), { coalesce: 'tapholdtapms' });
   };
   return (
-    <div className="row" style={{ ['--row-cols' as string]: 'minmax(0,1.3fr) minmax(0,1fr) 96px' }}>
+    <div className="row" {...findAttr('setting:firmware.tapHoldTapMs')} style={{ ['--row-cols' as string]: 'minmax(0,1.3fr) minmax(0,1fr) 96px' }}>
       <span>
         {title}
         <span className="field-hint">
