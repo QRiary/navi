@@ -57,9 +57,8 @@ function OverrideLines({ overrides, many }: { overrides: SettingOverride[]; many
         const value = typeof o.value === 'number' ? String(o.value) : flavorTitle(o.value);
         return (
           <div key={`${o.source}:${o.id}`} className="setting-compact-own">
-            <span>
-              {who}: <b>{value}</b>
-            </span>
+            {who}: <b>{value}</b>
+            {' · '}
             <button type="button" className="text-btn" onClick={() => jumpTo(tabRoute('advanced', place.tab), place.prefix + o.id)}>
               {tabTitle(place.tab)} ↗
             </button>
@@ -82,7 +81,6 @@ function SettingRefRow({ project, item, many }: { project: Project; item: KeySet
           project={project}
           param={param}
           compact
-          fieldLabel={item.overrides.length ? t('others', 'остальные') : undefined}
           below={<OverrideLines overrides={item.overrides} many={many} />}
           open={openTab('behavior', 'cfg:' + item.define)}
         />
@@ -98,7 +96,7 @@ function SettingRefRow({ project, item, many }: { project: Project; item: KeySet
             'Нажмите клавишу и снова зажмите её в пределах этого времени: второе нажатие повторит тап, а не станет удержанием. Задаётся для отдельных клавиш на вкладке «Тап-холд».',
           )}
           kicker="get_quick_tap_term()"
-          field={null}
+          field={<span className="setting-compact-static">{t('per key only', 'только для клавиш')}</span>}
           below={<OverrideLines overrides={item.overrides} many={many} />}
         />
       );

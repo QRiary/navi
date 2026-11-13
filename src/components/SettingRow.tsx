@@ -2,11 +2,10 @@
  * One setting's row, in two layouts that share the field, so a setting looks and changes the same everywhere:
  * - wide (the QMK settings and NAVI additions tabs): title — hint, the “?” and docs link, a kicker, the field;
  * - compact (“Settings for this key” in the narrow inspector and at the top of the feature tabs): title with the hint
- *   behind its “?”, a “changed” mark, the field on the same line, then the per-key values and a link to the
- *   setting's own place (`open`). Only the wide row carries the find id, so a jump lands on the canonical one.
+ *   behind its “?” (with the link to the setting's own place, `open`), a bar on the left when changed, the field
+ *   on the same line, then the per-key values. Only the wide row carries the find id, so a jump lands on the canonical one.
  */
 import type { ReactNode } from "react";
-import { ArrowUpRight } from "lucide-react";
 import { t } from "../i18n";
 import { findAttr } from "../lib/find";
 import { openDocs } from "../lib/qmkDocs";
@@ -29,8 +28,6 @@ export interface SettingRowProps {
   compact?: boolean;
   /** Compact: set away from its default. */
   changed?: boolean;
-  /** Compact: a word before the field (“others” when some keys have their own value). */
-  fieldLabel?: string;
   /** Compact: lines under the row (per-key values). */
   below?: ReactNode;
   /** Compact: where the setting lives. */
@@ -41,48 +38,35 @@ export function SettingRow(p: SettingRowProps) {
   if (p.compact) {
     const cut = p.title.lastIndexOf(" ") + 1;
     return (
-      <div className="setting-compact">
+      <div className={p.changed ? "setting-compact is-changed" : "setting-compact"}>
         <div className="setting-compact-line">
           <span className="setting-compact-title">
             {p.title.slice(0, cut)}
-            {/* The last word, the “?” and the jump square never part (like Hint). */}
+            {/* The last word and the “?” never part (like Hint). */}
             <span className="with-tip-tail">
               {p.title.slice(cut)}
+              {p.changed && (
+                <span className="setting-compact-sr">
+                  {t(" (changed)", " (изменено)")}
+                </span>
+              )}
               <InfoTip docs={p.docs} label={p.title}>
                 {p.hint && <p>{p.hint}</p>}
                 {p.tip && <p>{p.tip}</p>}
                 <p>
                   <code>{p.kicker}</code>
                 </p>
+                {p.open && (
+                  <p>
+                    <button type="button" className="text-btn" onClick={p.open.go}>
+                      {t(`Open on “${p.open.label}”`, `Открыть на «${p.open.label}»`)} ↗
+                    </button>
+                  </p>
+                )}
               </InfoTip>
-              {p.open && (
-                <button
-                  type="button"
-                  className="setting-compact-open"
-                  onClick={p.open.go}
-                  title={t(
-                    `Open on “${p.open.label}”`,
-                    `Открыть на «${p.open.label}»`,
-                  )}
-                  aria-label={t(
-                    `${p.title}: open on “${p.open.label}”`,
-                    `${p.title}: открыть на «${p.open.label}»`,
-                  )}
-                >
-                  <ArrowUpRight size={12} strokeWidth={1.5} aria-hidden />
-                </button>
-              )}
             </span>
-            {p.changed && (
-              <span className="badge badge--info">
-                {t("changed", "изменено")}
-              </span>
-            )}
           </span>
-          <span className="setting-compact-field">
-            {p.fieldLabel && <span className="kicker">{p.fieldLabel}</span>}
-            {p.field}
-          </span>
+          <span className="setting-compact-field">{p.field}</span>
         </div>
         {p.below}
       </div>

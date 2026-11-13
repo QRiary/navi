@@ -982,55 +982,68 @@
 }
 
 .setting-compact {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 8px 0;
+  padding: 8px 0 8px 12px;
   border-bottom: var(--panel-border-width) solid color-mix(in srgb, var(--border-color) 55%, transparent);
   font-size: var(--fs-xs);
 }
 
-.setting-compact:first-child {
-  padding-top: 0;
+.setting-compact:last-child {
+  border-bottom: 0;
 }
 
-.setting-compact:last-child {
-  padding-bottom: 0;
-  border-bottom: 0;
+/* Changed from its default: a bar on the left edge (the convention of settings editors), not a badge */
+.setting-compact.is-changed::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--accent-color);
 }
 
 .setting-compact-line {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  min-height: 30px; /* grid-ok: the field's height, so rows without a field line up */
+  gap: 12px;
+  min-height: 32px;
 }
 
-/* Text flow, so the jump square and the mark follow the title's last word and its “?” */
 .setting-compact-title {
   min-width: 0;
-  line-height: 1.55;
+  line-height: 1.5;
 }
 
-.setting-compact-title > .badge {
-  margin-left: 8px;
-  vertical-align: 1px; /* grid-ok: optical centering on the text */
-}
-
+/* One width for every field (number boxes and on / off lists), so the right column lines up */
 .setting-compact-field {
   display: flex;
-  align-items: center;
-  gap: 8px;
   flex: none;
+  justify-content: flex-end;
+  width: 96px;
+}
+
+.setting-compact-field > .input,
+.setting-compact-field > .select {
+  width: 100%;
+}
+
+.setting-compact-static {
+  color: var(--text-label);
+  text-align: right;
 }
 
 .setting-compact-own {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
   color: var(--text-secondary);
+}
+
+.setting-compact-own > .text-btn {
+  flex: none;
+  white-space: nowrap;
 }
 
 .setting-compact-own b {
@@ -1038,23 +1051,13 @@
   font-weight: 500;
 }
 
-/* The jump to the setting's own place: a square the size of the “?” beside it */
-.setting-compact-open {
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-  width: 16px;
-  height: 16px;
-  margin-left: 4px;
-  padding: 0;
-  border: var(--panel-border-width) solid var(--border-color);
-  color: var(--text-label);
-  vertical-align: 1px; /* grid-ok: optical centering on the text, like the “?” */
-}
-
-.setting-compact-open:hover {
-  color: var(--text-primary);
-  border-color: var(--text-label);
+.setting-compact-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* Folder paths in hints (\\wsl.localhost\...) are long and have no spaces. */

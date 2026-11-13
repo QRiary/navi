@@ -31,14 +31,12 @@ export function QmkParamRow({
   compact,
   below,
   open,
-  fieldLabel,
 }: {
   project: Project;
   param: ConfigParam;
   compact?: boolean;
   below?: ReactNode;
   open?: SettingRowProps['open'];
-  fieldLabel?: string;
 }) {
   const setValue = useSetConfigValue();
   const lang = getLanguage();
@@ -48,7 +46,6 @@ export function QmkParamRow({
       compact={compact}
       below={below}
       open={open}
-      fieldLabel={fieldLabel}
       findId={'cfg:' + p.define}
       title={lang === 'ru' ? p.title.ru : p.title.en}
       hint={p.hint && (lang === 'ru' ? p.hint.ru : p.hint.en)}
