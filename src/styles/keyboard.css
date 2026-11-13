@@ -974,6 +974,89 @@
   color: var(--text-secondary);
 }
 
+/* ── Settings for this key (inspector, top of the feature tabs): compact setting rows ── */
+
+.key-settings-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.setting-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+  border-bottom: var(--panel-border-width) solid color-mix(in srgb, var(--border-color) 55%, transparent);
+  font-size: var(--fs-xs);
+}
+
+.setting-compact:first-child {
+  padding-top: 0;
+}
+
+.setting-compact:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.setting-compact-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 30px; /* grid-ok: the field's height, so rows without a field line up */
+}
+
+/* Text flow, so the jump square and the mark follow the title's last word and its “?” */
+.setting-compact-title {
+  min-width: 0;
+  line-height: 1.55;
+}
+
+.setting-compact-title > .badge {
+  margin-left: 8px;
+  vertical-align: 1px; /* grid-ok: optical centering on the text */
+}
+
+.setting-compact-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.setting-compact-own {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
+.setting-compact-own b {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* The jump to the setting's own place: a square the size of the “?” beside it */
+.setting-compact-open {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  padding: 0;
+  border: var(--panel-border-width) solid var(--border-color);
+  color: var(--text-label);
+  vertical-align: 1px; /* grid-ok: optical centering on the text, like the “?” */
+}
+
+.setting-compact-open:hover {
+  color: var(--text-primary);
+  border-color: var(--text-label);
+}
+
 /* Folder paths in hints (\\wsl.localhost\...) are long and have no spaces. */
 .field-hint code {
   overflow-wrap: anywhere;
