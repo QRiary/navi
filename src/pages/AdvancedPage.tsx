@@ -30,6 +30,7 @@ import { LayerKeysOnTopRow } from '../components/advanced/LayerKeysOnTop';
 import { HeldModsSelect, LiftHeldModsRow } from '../components/advanced/HeldModsControls';
 import { OneShotCancelRow } from '../components/advanced/OneShotCancel';
 import { AutoRepeatRows } from '../components/advanced/AutoRepeat';
+import { TapLengthRow } from '../components/advanced/TapLength';
 import { CapsWordRules } from '../components/advanced/CapsWordRules';
 import { ModsInput } from '../components/keyboard/KeycodeComposer';
 import { getLanguage, t } from '../i18n';
@@ -407,6 +408,14 @@ function NaviBehaviorTab({ project }: { project: Project }) {
         </div>
         <div className="panel-box rows">
           <LayerKeysOnTopRow project={project} />
+        </div>
+      </section>
+      <section className="section">
+        <div className="section-head">
+          <h2>{t('Tap-hold keys', 'Тап-холд клавиши')}</h2>
+        </div>
+        <div className="panel-box rows">
+          <TapLengthRow project={project} />
         </div>
       </section>
       <section className="section">
